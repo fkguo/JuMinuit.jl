@@ -28,9 +28,19 @@ using Printf
 
 include("precision.jl")
 include("strategy.jl")
+include("state.jl")
+include("fcn.jl")
 
 # Phase 0 public surface (will grow as files are added).
 export MachinePrecision
 export Strategy
+export CovStatus
+export MnHesseValid, MnHesseFailed, MnMadePosDef, MnInvertFailed, MnNotPosDef
+export MinimumParameters, FunctionGradient, MinimumError, MinimumState
+export CostFunction
+export ncalls, reset_ncalls!, errordef
+export is_valid, has_step_size, is_analytical, is_accurate, is_pos_def
+export is_made_pos_def, hesse_failed, invert_failed, is_available
+export has_parameters, has_covariance, fval, edm, nfcn
 
 end # module JuMinuit
