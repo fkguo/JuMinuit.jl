@@ -1,0 +1,19 @@
+# C++ reference checkout — not part of the Julia package
+/reference/
+
+# Julia
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/Manifest.toml
+/docs/build/
+/docs/site/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local dev
+/scratch/
