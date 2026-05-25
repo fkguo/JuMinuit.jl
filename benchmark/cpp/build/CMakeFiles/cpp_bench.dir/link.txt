@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/cpp_bench.dir/cpp_bench.cxx.o -o cpp_bench  minuit2_build/src/libMinuit2.a minuit2_build/src/math/libMinuit2Math.a

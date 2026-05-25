@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/benchmark/cpp/build/cmake_install.cmake",
+		"/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/benchmark/cpp/build/minuit2_build/cmake_install.cmake",
+		"/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/benchmark/cpp/build/minuit2_build/src/cmake_install.cmake",
+		"/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/benchmark/cpp/build/minuit2_build/src/math/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

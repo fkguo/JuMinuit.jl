@@ -1,0 +1,2 @@
+/usr/bin/ar qc libMinuit2Math.a CMakeFiles/Minuit2Math.dir/GenAlgoOptions.cxx.o CMakeFiles/Minuit2Math.dir/MinimizerOptions.cxx.o
+/usr/bin/ranlib libMinuit2Math.a
