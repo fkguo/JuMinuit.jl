@@ -191,6 +191,15 @@ function hesse(
     # gap is invisible; for FCNs with significant g2 instability the
     # refinement materially improves error-matrix accuracy. Parallel-
     # review #2 C8 — flagged for Phase 1 follow-up.
+    #
+    # Related Phase 1 follow-up (codex parallel-review #3 C-extra):
+    # when an analytical FCN gradient lands (FCNGradAdapter Phase 1.x),
+    # C++ MnHesse.cxx:118-126 refreshes the numerical `gst`, `dirin`,
+    # `g2` triplet via InitialGradientCalculator before the diagonal
+    # pass because the analytical gradient lacks those numerical
+    # companions. Phase 1 first cut assumes purely numerical gradients
+    # (g.analytical == false), so no refresh is needed; revisit when
+    # analytical gradients are supported.
 
     # ── Off-diagonal pass ─────────────────────────────────────────
     # All pairs (i, j) with i < j.

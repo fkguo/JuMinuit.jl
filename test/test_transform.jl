@@ -42,14 +42,20 @@
         @test JuMinuit.sqrtup_int2ext(3.0, U) ≈ U + 1 - sqrt(10)
         @test JuMinuit.sqrtup_int2ext(1000.0, U) < -990
 
-        # Round-trip
-        for ext in (-100.0, 0.0, 4.0, 4.999)
+        # Round-trip (codex parallel-review #3 A4-extra). C++ Ext2int
+        # clamps to 0 only when yy² < 1 ⟺ (upper-ext+1)² < 1 ⟺
+        # ext > upper (out of domain). For ext ≤ upper the round-trip
+        # is exact. Earlier `if ext < U - 1` skip was over-restrictive.
+        for ext in (-100.0, 0.0, 4.0, 4.999, U)
             v = JuMinuit.sqrtup_ext2int(ext, U, prec)
-            # Note: ext2int returns 0 when ext is too close to upper
-            if ext < U - 1
-                @test JuMinuit.sqrtup_int2ext(v, U) ≈ ext atol = 1e-12
-            end
+            @test JuMinuit.sqrtup_int2ext(v, U) ≈ ext atol = 1e-12
         end
+        # At the bound exactly: ext = U → v = 0 (since yy² = 1 hits the
+        # `yy2 < 1` branch via `<` strict → so v = sqrt(0) = 0). Round-trip OK.
+        @test JuMinuit.sqrtup_ext2int(U, U, prec) == 0.0
+        @test JuMinuit.sqrtup_int2ext(0.0, U) == U
+        # Out-of-domain: ext > U clamps to 0
+        @test JuMinuit.sqrtup_ext2int(U + 0.1, U, prec) == 0.0
 
         # Derivative — NEGATIVE for v > 0
         @test JuMinuit.sqrtup_dint2ext(0.0, U) == 0.0
@@ -66,12 +72,18 @@
         @test JuMinuit.sqrtlow_int2ext(3.0, L) ≈ L - 1 + sqrt(10)
         @test JuMinuit.sqrtlow_int2ext(1000.0, L) > 990
 
-        for ext in (-1.999, 0.0, 5.0, 100.0)
+        # Round-trip — symmetric to SqrtUp. Clamp only when ext < L
+        # (yy = ext - L + 1, yy² < 1 ⟺ ext ∈ (L-2, L) actually but
+        # symmetric to upper's case: ext < L out-of-domain).
+        for ext in (-1.999, L, -1.5, 0.0, 5.0, 100.0)
             v = JuMinuit.sqrtlow_ext2int(ext, L, prec)
-            if ext > L + 1
-                @test JuMinuit.sqrtlow_int2ext(v, L) ≈ ext atol = 1e-12
-            end
+            @test JuMinuit.sqrtlow_int2ext(v, L) ≈ ext atol = 1e-12
         end
+        # At the bound: ext = L → v = 0
+        @test JuMinuit.sqrtlow_ext2int(L, L, prec) == 0.0
+        @test JuMinuit.sqrtlow_int2ext(0.0, L) == L
+        # Out-of-domain: ext < L clamps
+        @test JuMinuit.sqrtlow_ext2int(L - 0.1, L, prec) == 0.0
 
         # Derivative — POSITIVE for v > 0 (opposite sign of SqrtUp)
         @test JuMinuit.sqrtlow_dint2ext(0.0, L) == 0.0

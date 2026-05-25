@@ -22,4 +22,5 @@ using Test
     include("test_transform.jl")
     include("test_parameters.jl")
     include("test_hesse.jl")
+    include("test_covariance_squeeze.jl")
 end
