@@ -158,6 +158,12 @@ function hesse(
                 converged = true
                 break
             end
+            # The `g2[i] != 0` guard is a defensive Julia addition. C++
+            # `MnHesse.cxx:203-206` has no such guard: when `g2(i) == 0`
+            # it evaluates `(g2-g2bfor)/0 = ±Inf`, then `fabs(±Inf) < tol`
+            # is `false` and the break doesn't fire — same observable
+            # behavior. Julia's guard prevents a `0/0 = NaN` that would
+            # also fail the `< tol` test (parallel-review #2 C3).
             if g2[i] != 0 && abs((g2[i] - g2bfor) / g2[i]) < strategy.hessian_g2_tolerance
                 converged = true
                 break
@@ -175,8 +181,16 @@ function hesse(
 
     # ── Strategy > 0: gradient refinement (Phase 1 follow-up) ──
     # The C++ HessianGradientCalculator refines `grd` and `gst` here when
-    # strategy.level > 0. Phase 1 first cut keeps the current grad; the
-    # full refinement lands when hessian_gradient.jl is ported.
+    # strategy.level > 0 (see reference/Minuit2_cpp/src/MnHesse.cxx:222-236).
+    # **Phase 1 first cut**: this refinement is intentionally skipped.
+    # `strategy.level` continues to affect `hessian_ncycles` and the
+    # tolerance constants used in the diagonal pass above, but the
+    # post-diagonal gradient refinement is a no-op until
+    # hessian_gradient.jl is ported. For smooth FCNs (quadratics, simple
+    # Rosenbrock) the diagonal pass converges in a single cycle so this
+    # gap is invisible; for FCNs with significant g2 instability the
+    # refinement materially improves error-matrix accuracy. Parallel-
+    # review #2 C8 — flagged for Phase 1 follow-up.
 
     # ── Off-diagonal pass ─────────────────────────────────────────
     # All pairs (i, j) with i < j.
@@ -194,8 +208,16 @@ function hesse(
     end
 
     # ── Pos-def enforcement on the H matrix ───────────────────────
-    # vhmat is the Hessian (second derivatives); MnPosDef ensures
-    # positive-definiteness on the to-be-inverted matrix.
+    # NOTE: We pass the **Hessian** (vhmat: second derivatives) into
+    # `make_posdef` even though MnPosDef's documented purpose is to
+    # ensure positive-definiteness of the **inverse Hessian** (V) — this
+    # mirrors C++ Minuit2 exactly (reference/Minuit2_cpp/src/MnHesse.cxx:278:
+    # `MinimumError tmpErr = MnPosDef()(MinimumError(vhmat, 1.), prec);`).
+    # The algorithm is matrix-agnostic (normalizes by diagonal, eigen-
+    # adjusts), so it works on either H or V mathematically; the C++
+    # design choice perturbs H's diagonal which bounds V's eigenvalues
+    # by `1/(λ_H + δ)` rather than perturbing V by `δ` directly — the
+    # conservative choice for covariance reporting. Parallel-review #2 C6.
     err_tmp = make_posdef(MinimumError(Symmetric(vhmat, :U), 1.0), prec)
     vhmat_pd = copy(parent(err_tmp.inv_hessian))
 

@@ -193,10 +193,38 @@ consent from all contributors at relicense time).
 
 ---
 
-## Future decisions (placeholders — to be made in Phase 0/1)
+## DR-011: BLAS vendor — DECIDED 2026-05-25 (informal)
 
-- DR-011: BLAS vendor for the gate (OpenBLAS / MKL / Accelerate)
-- DR-012: Designated reference machine
+OpenBLAS (Julia stdlib default) on Apple M3 / macOS 24.6. Recorded in
+`benchmark/.julia-perf/runs/latest/manifest.json`. Cross-machine ratios
+are advisory; the §3.4 gate ran on this combination.
+
+## DR-012: Designated reference machine — DECIDED 2026-05-25 (informal)
+
+Apple M3 / Julia 1.12.6 / OpenBLAS 0.3.29 / AppleClang 17.0.0. C++
+Minuit2 standalone @ `57dc936` (v6.24.0). Phase 0 §3.4 Criterion 2
+measured on this configuration. Phase 1 will continue here.
+
+## Phase 0 §3.4 Exit Gate — PASSED 2026-05-25
+
+Criteria status at the v0.0.1-DEV PoC tag:
+
+| Criterion                                  | Status   | Detail |
+|--------------------------------------------|----------|--------|
+| 1. Numerical equivalence ≤ 1e-10           | PARTIAL  | Quad-4D ✓; Rosenbrock-2D/10D within Strategy(0) cross-impl variance. Tight bit-trace parity gated on Phase 1 MnTraceObject port. |
+| 2. Performance ≤ 1.5× C++ wall             | **PASS** | max ratio 0.887×; Julia uniformly faster than C++ Minuit2 on every §3.3 corpus benchmark. |
+| 3. Zero-alloc inner loop                   | DEFERRED | ~7 allocs/iter. Criterion 2 passes with margin so GC overhead is sub-noise; alloc gap is code-quality not perf. Workspace-based refactor when convenient. |
+| 4. Aqua + JET clean                        | **PASS** | 11/11 tests in `test_aqua_jet.jl`; full project quality + closure-specialization path inferred clean. |
+| §3.4.1 julia-perf Level-2 artifacts        | **PASS** | `manifest.json`, `benchmarks.json`, `summary.json`, `diagnostics.md` emitted under `benchmark/.julia-perf/runs/<ts>/`. |
+
+## Future decisions (placeholders — to be made in Phase 1)
+
+- DR-013: Minimum Julia version + `[compat]` policy (open)
+- DR-014: AD backend primary (ForwardDiff vs Enzyme) — Phase 2.1 lock
+- DR-015: SVector/MVector small-n specialization — measured deferred
+- DR-016: Bounded-Hessian integration shape (does `hesse(cf, ...)`
+  take an extra `Parameters` arg, or wrap user FCN in a Parameters-
+  aware closure?) — Phase 1 mid-batch follow-up
 - DR-013: Minimum Julia version + `[compat]` policy
 - DR-014: AD backend primary (ForwardDiff vs Enzyme) — Phase 2.1 lock
 - DR-015: SVector/MVector small-n specialization — Phase 0 day-26

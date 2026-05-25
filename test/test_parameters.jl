@@ -146,7 +146,35 @@
         int_errs = initial_int_errors(P)
         @test length(int_errs) == 2
         @test int_errs[1] == 0.1  # unbounded: identity
-        # For Sin at v=0, dext/dint = 0.5·(U-L) = 1.0; int_err = ext_err/1 = 0.1
-        @test int_errs[2] ≈ 0.1 atol = 1e-12
+        # For Sin at midpoint (v=0, ext=0, werr=0.1), the two-sided C++
+        # formula (parallel-review #2 B4) computes:
+        #   vplu = asin(0.1) - 0  ≈  0.10017
+        #   vmin = asin(-0.1) - 0 ≈ -0.10017
+        #   int_err = 0.5·(|vplu| + |vmin|) ≈ 0.10017
+        # The old Taylor approximation gave exactly 0.1 at the midpoint,
+        # which was a coincidence (the linear limit).
+        @test int_errs[2] ≈ asin(0.1) atol = 1e-12
+    end
+
+    @testset "initial_int_errors C++ parity near a bound" begin
+        # At ext = 0.99 of a [-1, 1] interval, the Taylor approx blows
+        # up but the C++ two-sided formula clamps gracefully.
+        pars = [
+            MinuitParameter("near_upper", 0.99, 0.1; lower = -1.0, upper = 1.0),
+        ]
+        P = Parameters(pars)
+        int_errs = initial_int_errors(P)
+        # Manual C++ trace:
+        #   sav = 0.99
+        #   sav_plus = min(0.99 + 0.1, 1.0) = 1.0  (clamped)
+        #   var_plus = asin(2·(1.0 - (-1.0))/(2) - 1) = asin(1) = π/2 (clamped)
+        #   sav_minus = 0.99 - 0.1 = 0.89
+        #   var_minus = asin(0.89) (≈ 1.0974)
+        #   var = asin(0.99) (≈ 1.4289)
+        #   vplu = π/2 - 1.4289 ≈ 0.1419
+        #   vmin = 1.0974 - 1.4289 ≈ -0.3315
+        #   int_err ≈ 0.5·(0.1419 + 0.3315) ≈ 0.237
+        # Old Taylor at v ≈ 1.4289 would give 0.1/cos(1.4289)·2 ≈ 0.71 — wildly off.
+        @test 0.2 < int_errs[1] < 0.3
     end
 end

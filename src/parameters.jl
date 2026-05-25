@@ -282,25 +282,60 @@ end
 
 Initial step sizes for FREE parameters in internal coordinates.
 
-For unbounded parameters the step is identity. For bounded parameters
-we apply the inverse of the derivative at the initial point as a
-linear approximation:
-`int_err ≈ ext_err / d(ext)/d(int)`.
+For unbounded parameters this is the identity (`int_err = ext_err`).
+For bounded parameters we mirror the C++ two-sided perturbation at
+`reference/Minuit2_cpp/src/InitialGradientCalculator.cxx:43-63`:
 
-This is the C++ Minuit2 strategy. If the derivative is near zero
-(parameter at a bound), fall back to `ext_err` to avoid blow-up.
+1. Compute the external position `sav = int2ext(int_val)`.
+2. Forward step: `sav_plus = min(sav + werr, upper)` clamped to the bound;
+   map back: `var_plus = ext2int(sav_plus)`; `vplu = var_plus - int_val`.
+3. Backward step: `sav_minus = max(sav - werr, lower)` clamped;
+   `vmin = ext2int(sav_minus) - int_val`.
+4. Floor at machine-precision step: `gsmin = 8·eps2·(|int_val| + eps2)`.
+5. `int_err = max(0.5·(|vplu| + |vmin|), gsmin)`.
+
+The v1 of this function used `int_err = ext_err / |dext/dint|` (a
+first-order Taylor expansion). Near a bound that diverged from C++
+because `d(ext)/d(int) → 0` makes the Taylor estimate blow up where
+the C++ two-sided formula clamps gracefully (parallel-review #2 B4).
 """
 function initial_int_errors(p::Parameters)
     int_vals = initial_int_values(p)
     errs = Vector{Float64}(undef, n_free(p))
+    eps2 = p.prec.eps2
     @inbounds for int_idx in 1:n_free(p)
         ext_idx = p.ext_of_int[int_idx]
         par = p.pars[ext_idx]
         if !has_limits(par)
             errs[int_idx] = par.error
         else
-            d = dint2ext_value(p, int_idx, int_vals[int_idx])
-            errs[int_idx] = abs(d) > p.prec.eps2 ? par.error / abs(d) : par.error
+            kind = bound_kind(par.lower, par.upper)
+            var = int_vals[int_idx]
+            sav = int2ext(kind, var, par.lower, par.upper)
+            werr = par.error
+
+            # Forward perturbation, clamped at the upper bound if present
+            sav_plus = sav + werr
+            if kind == BothBounds || kind == UpperOnly
+                if sav_plus > par.upper
+                    sav_plus = par.upper
+                end
+            end
+            var_plus = ext2int(kind, sav_plus, par.lower, par.upper, p.prec)
+            vplu = var_plus - var
+
+            # Backward perturbation, clamped at the lower bound if present
+            sav_minus = sav - werr
+            if kind == BothBounds || kind == LowerOnly
+                if sav_minus < par.lower
+                    sav_minus = par.lower
+                end
+            end
+            var_minus = ext2int(kind, sav_minus, par.lower, par.upper, p.prec)
+            vmin = var_minus - var
+
+            gsmin = 8.0 * eps2 * (abs(var) + eps2)
+            errs[int_idx] = max(0.5 * (abs(vplu) + abs(vmin)), gsmin)
         end
     end
     return errs
