@@ -1,0 +1,7 @@
+# Reference data regen — machine fingerprint
+date_utc:    2026-05-25T01:11:07Z
+uname:       Darwin Mac 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:29:54 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T8122 arm64
+cpu:         Apple M3
+compiler:    Apple clang version 17.0.0 (clang-1700.0.13.5)
+cmake:       cmake version 4.3.2
+minuit2_sha: 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84

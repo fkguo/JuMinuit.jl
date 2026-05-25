@@ -1,0 +1,24 @@
+{
+  "name": "rosenbrock_2d",
+  "_meta": {
+    "source": "GooFit/Minuit2 @ 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84",
+    "version": "6.24.0",
+    "strategy_level": 0,
+    "err_def": 1,
+    "generator": "tools/cpp_trace_harness.cxx"
+  },
+  "x0": [-1.2, 1],
+  "errs0": [0.10000000000000001, 0.10000000000000001],
+  "fval": 3.3538828210364623e-06,
+  "edm":  3.1560776797136182e-06,
+  "nfcn": 194,
+  "is_valid":         true,
+  "has_covariance":   true,
+  "has_pos_def_cov":  true,
+  "hesse_failed":     false,
+  "made_pos_def":     false,
+  "reached_call_limit": false,
+  "params": [0.9995401050740863, 0.99890315407190333],
+  "errors": [0.99495814765229396, 1.9780606467193433],
+  "covariance_upper": [0.98994171557968391, 1.9657867609492736, 3.9127239220997465]
+}

@@ -1,0 +1,266 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// JuMinuit C++ reference-data harness.
+//
+// Runs C++ Minuit2 MIGRAD on a corpus of benchmark FCNs (Rosenbrock,
+// quadratic, Gaussian NLL) and dumps the FunctionMinimum + key state
+// as JSON. The output is committed into test/reference_data/ and
+// loaded by JuMinuit's test suite as the 1e-10 oracle.
+//
+// Phase 0 contract:
+// - Strategy(0) — matches Julia Phase 0 lock (DR-008).
+// - Numerical gradient (no analytical FCN derivative).
+// - Default MachinePrecision (Float64 eps).
+// - No bounds, no fixed params.
+//
+// Linked against the pinned Minuit2 standalone at
+// reference/Minuit2_cpp/ (GooFit/Minuit2 @ 57dc936 = v6.24.0).
+//
+// Usage:
+//   cpp_trace_harness <output_dir>
+// Default output_dir is the cwd.
+
+#include "Minuit2/FCNBase.h"
+#include "Minuit2/MnMigrad.h"
+#include "Minuit2/MnUserParameters.h"
+#include "Minuit2/MnUserCovariance.h"
+#include "Minuit2/MnUserParameterState.h"
+#include "Minuit2/FunctionMinimum.h"
+#include "Minuit2/MnStrategy.h"
+
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <cmath>
+
+using namespace ROOT::Minuit2;
+
+// ─────────────────────────────────────────────────────────────────────
+// Pinned reference metadata — must mirror docs/UPSTREAM.md.
+// ─────────────────────────────────────────────────────────────────────
+constexpr const char *kMinuit2Commit  = "57dc936a2b74d0b4dda1254c3dd63e7c61a97c84";
+constexpr const char *kMinuit2Version = "6.24.0";
+
+// ─────────────────────────────────────────────────────────────────────
+// Benchmark FCNs
+// ─────────────────────────────────────────────────────────────────────
+
+// f(x, y) = (1 - x)^2 + 100 * (y - x^2)^2 — the canonical 2D Rosenbrock
+class Rosenbrock2 final : public FCNBase {
+public:
+    double operator()(const std::vector<double> &par) const override
+    {
+        const double a = par[0];
+        const double b = par[1];
+        return (1.0 - a) * (1.0 - a) + 100.0 * (b - a * a) * (b - a * a);
+    }
+    double Up() const override { return 1.0; }
+};
+
+// f(x) = sum_{i=0..n-1} x_i^2 — a positive-definite quadratic.
+// Minimum at the origin, fval = 0. Eigenvalues of Hessian all 2.
+class QuadNF final : public FCNBase {
+public:
+    explicit QuadNF(unsigned n) : fN(n) {}
+    double operator()(const std::vector<double> &par) const override
+    {
+        double s = 0.0;
+        for (unsigned i = 0; i < fN; ++i) s += par[i] * par[i];
+        return s;
+    }
+    double Up() const override { return 1.0; }
+private:
+    unsigned fN;
+};
+
+// f(x, y) = 100 * (y - x^2)^2 + (1 - x)^2 + ... — n-dim Rosenbrock chain
+// f(x) = sum_{i=0..n-2} [100 * (x_{i+1} - x_i^2)^2 + (1 - x_i)^2]
+class RosenbrockN final : public FCNBase {
+public:
+    explicit RosenbrockN(unsigned n) : fN(n) {}
+    double operator()(const std::vector<double> &par) const override
+    {
+        double s = 0.0;
+        for (unsigned i = 0; i + 1 < fN; ++i) {
+            const double a = par[i];
+            const double b = par[i + 1];
+            s += 100.0 * (b - a * a) * (b - a * a) + (1.0 - a) * (1.0 - a);
+        }
+        return s;
+    }
+    double Up() const override { return 1.0; }
+private:
+    unsigned fN;
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// JSON dump
+// ─────────────────────────────────────────────────────────────────────
+
+// Print a Float64 at full precision: 17 significant digits suffice to
+// round-trip an IEEE 754 double.
+struct Float64Out {
+    double v;
+};
+std::ostream &operator<<(std::ostream &os, Float64Out f)
+{
+    // Handle NaN/Inf explicitly — JSON has no native NaN.
+    if (std::isnan(f.v)) {
+        os << "\"NaN\"";
+    } else if (std::isinf(f.v)) {
+        os << (f.v > 0 ? "\"Inf\"" : "\"-Inf\"");
+    } else {
+        std::ostringstream tmp;
+        tmp << std::setprecision(17) << f.v;
+        os << tmp.str();
+    }
+    return os;
+}
+
+void dump_minimum(std::ostream &out,
+                  const FunctionMinimum &mn,
+                  const std::string &name,
+                  const std::vector<double> &x0,
+                  const std::vector<double> &errs0,
+                  unsigned strategy_level)
+{
+    out << "{\n";
+    out << "  \"name\": \"" << name << "\",\n";
+    out << "  \"_meta\": {\n";
+    out << "    \"source\": \"GooFit/Minuit2 @ " << kMinuit2Commit << "\",\n";
+    out << "    \"version\": \"" << kMinuit2Version << "\",\n";
+    out << "    \"strategy_level\": " << strategy_level << ",\n";
+    out << "    \"err_def\": " << Float64Out{1.0} << ",\n";
+    out << "    \"generator\": \"tools/cpp_trace_harness.cxx\"\n";
+    out << "  },\n";
+
+    // Initial conditions
+    out << "  \"x0\": [";
+    for (size_t i = 0; i < x0.size(); ++i) {
+        if (i) out << ", ";
+        out << Float64Out{x0[i]};
+    }
+    out << "],\n";
+    out << "  \"errs0\": [";
+    for (size_t i = 0; i < errs0.size(); ++i) {
+        if (i) out << ", ";
+        out << Float64Out{errs0[i]};
+    }
+    out << "],\n";
+
+    // Final state
+    out << "  \"fval\": " << Float64Out{mn.Fval()} << ",\n";
+    out << "  \"edm\":  " << Float64Out{mn.Edm()} << ",\n";
+    out << "  \"nfcn\": " << mn.NFcn() << ",\n";
+    out << "  \"is_valid\":         " << (mn.IsValid()         ? "true" : "false") << ",\n";
+    out << "  \"has_covariance\":   " << (mn.HasCovariance()   ? "true" : "false") << ",\n";
+    out << "  \"has_pos_def_cov\":  " << (mn.HasPosDefCovar()  ? "true" : "false") << ",\n";
+    out << "  \"hesse_failed\":     " << (mn.HesseFailed()     ? "true" : "false") << ",\n";
+    out << "  \"made_pos_def\":     " << (mn.HasMadePosDefCovar() ? "true" : "false") << ",\n";
+    out << "  \"reached_call_limit\": " << (mn.HasReachedCallLimit() ? "true" : "false") << ",\n";
+
+    const MnUserParameterState &ust = mn.UserState();
+    const unsigned n = static_cast<unsigned>(ust.VariableParameters());
+    out << "  \"params\": [";
+    for (unsigned i = 0; i < n; ++i) {
+        if (i) out << ", ";
+        out << Float64Out{ust.Value(i)};
+    }
+    out << "],\n";
+    out << "  \"errors\": [";
+    for (unsigned i = 0; i < n; ++i) {
+        if (i) out << ", ";
+        out << Float64Out{ust.Error(i)};
+    }
+    out << "],\n";
+
+    // External covariance — upper triangle row-major, only authoritative
+    // entries (n*(n+1)/2). Use the JuMinuit Symmetric :U convention so
+    // the JSON loads directly into a parent(Symmetric(M, :U)) parent.
+    if (mn.HasCovariance()) {
+        const MnUserCovariance &cov = mn.UserCovariance();
+        out << "  \"covariance_upper\": [";
+        bool first = true;
+        for (unsigned i = 0; i < n; ++i) {
+            for (unsigned j = i; j < n; ++j) {
+                if (!first) out << ", ";
+                out << Float64Out{cov(i, j)};
+                first = false;
+            }
+        }
+        out << "]\n";
+    } else {
+        out << "  \"covariance_upper\": null\n";
+    }
+    out << "}\n";
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Main
+// ─────────────────────────────────────────────────────────────────────
+
+struct Case {
+    std::string name;
+    std::vector<double> x0;
+    std::vector<double> errs0;
+    const FCNBase *fcn;
+};
+
+template <typename Fn>
+void run_case(const std::string &outdir,
+              const std::string &name,
+              const std::vector<double> &x0,
+              const std::vector<double> &errs0,
+              const Fn &fcn,
+              unsigned strategy_level = 0)
+{
+    MnUserParameters upar;
+    for (size_t i = 0; i < x0.size(); ++i) {
+        upar.Add("p" + std::to_string(i), x0[i], errs0[i]);
+    }
+    MnStrategy stra(strategy_level);
+    MnMigrad migrad(fcn, upar, stra);
+    FunctionMinimum mn = migrad();
+
+    const std::string path = outdir + "/" + name + ".json";
+    std::ofstream out(path);
+    if (!out) {
+        std::cerr << "ERROR: could not open " << path << "\n";
+        std::exit(2);
+    }
+    dump_minimum(out, mn, name, x0, errs0, strategy_level);
+    std::cout << "[ok] " << path
+              << "  fval=" << std::setprecision(17) << mn.Fval()
+              << "  nfcn=" << mn.NFcn()
+              << "  valid=" << (mn.IsValid() ? "y" : "n") << "\n";
+}
+
+int main(int argc, char *argv[])
+{
+    const std::string outdir = (argc > 1) ? argv[1] : ".";
+
+    std::cout << "JuMinuit C++ reference-data harness — Minuit2 "
+              << kMinuit2Version << " @ " << kMinuit2Commit << "\n";
+    std::cout << "Output directory: " << outdir << "\n";
+
+    Rosenbrock2 rosen2;
+    run_case(outdir, "rosenbrock_2d", { -1.2, 1.0 }, { 0.1, 0.1 }, rosen2);
+
+    QuadNF quad4(4);
+    run_case(outdir, "quad_4d",
+             { 1.0, 1.0, 1.0, 1.0 },
+             { 0.1, 0.1, 0.1, 0.1 },
+             quad4);
+
+    RosenbrockN rosen10(10);
+    run_case(outdir, "rosenbrock_10d",
+             { -1.2, 1.0, -1.2, 1.0, -1.2, 1.0, -1.2, 1.0, -1.2, 1.0 },
+             { 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 },
+             rosen10);
+
+    return 0;
+}
