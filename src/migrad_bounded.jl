@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+# ─────────────────────────────────────────────────────────────────────────────
+# migrad_bounded.jl — bound-aware MIGRAD wrapper.
+#
+# Mirrors the C++ Minuit2 user-facing flow at
+# reference/Minuit2_cpp/src/MnUserFcn.cxx (int→ext transform at the FCN
+# call boundary) + MnUserParameterState round-tripping.
+#
+# Design:
+#  - Public API: `migrad(cf, params::Parameters; kwargs...) -> BoundedFunctionMinimum`
+#  - User FCN `cf.f` operates on EXTERNAL parameter values (the bounded
+#    physical values they care about).
+#  - The internal MIGRAD optimizer operates on UNBOUNDED INTERNAL values
+#    via sin/sqrt transforms (transform.jl).
+#  - A wrapper FCN converts internal→external before each user FCN call.
+#  - The resulting MinimumState lives in internal coordinates; we
+#    transform back to external for the user-visible result.
+#
+# Phase 1 first cut scope:
+#  - Fixed parameters: respected via the `Parameters.int_of_ext`/`ext_of_int`
+#    maps. The internal optimizer sees only the FREE parameters.
+#  - Bounds: handled via int↔ext transforms.
+#  - Covariance back-conversion: V_ext[i,j] = V_int[i,j] · dint2ext_i · dint2ext_j
+#    (Jacobian product per parameter).
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    BoundedFunctionMinimum
+
+Result of bounded `migrad(cf, params)`. Wraps the internal
+`FunctionMinimum` and exposes user-visible external values.
+
+# Fields
+
+- `internal::FunctionMinimum` — the MIGRAD result in internal coords.
+- `params::Parameters` — the parameter metadata (bounds, fixed flags).
+- `ext_values::Vector{Float64}` — final external parameter values
+  (length = total `n_pars`, including fixed parameters at their
+  initial values).
+- `ext_errors::Vector{Float64}` — final external 1σ errors via
+  Jacobian chain rule (length = `n_pars`; fixed params have 0).
+- `ext_covariance::Union{Nothing,Matrix{Float64}}` — full
+  `n_pars × n_pars` external covariance matrix (or `nothing` if
+  inner MIGRAD did not produce a covariance).
+"""
+struct BoundedFunctionMinimum
+    internal::FunctionMinimum
+    params::Parameters
+    ext_values::Vector{Float64}
+    ext_errors::Vector{Float64}
+    ext_covariance::Union{Nothing,Matrix{Float64}}
+end
+
+# Accessors mirroring iminuit-style
+fval(m::BoundedFunctionMinimum) = m.internal.state.parameters.fval
+edm(m::BoundedFunctionMinimum) = edm(m.internal)
+nfcn(m::BoundedFunctionMinimum) = nfcn(m.internal)
+is_valid(m::BoundedFunctionMinimum) = m.internal.is_valid
+Base.values(m::BoundedFunctionMinimum) = m.ext_values
+
+"""
+    ext_errors(m::BoundedFunctionMinimum) -> Vector{Float64}
+
+External-coordinate 1σ errors via Jacobian chain rule.
+"""
+ext_errors(m::BoundedFunctionMinimum) = m.ext_errors
+
+"""
+    ext_covariance(m::BoundedFunctionMinimum) -> Union{Nothing,Matrix{Float64}}
+
+External-coordinate covariance matrix. Returns `nothing` if no
+covariance was produced.
+"""
+ext_covariance(m::BoundedFunctionMinimum) = m.ext_covariance
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: wrap a user FCN to take internal coords and call user FCN with ext.
+# ─────────────────────────────────────────────────────────────────────────────
+
+function _wrap_fcn_internal_to_external(cf::CostFunction, params::Parameters)
+    f = cf.f
+    up = cf.up
+    p_ref = params
+    wrapped = function (int_vec::AbstractVector{<:Real})
+        ext_full = int_to_ext_vector(p_ref, collect(Float64, int_vec))
+        return f(ext_full)
+    end
+    return CostFunction(wrapped, up)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main: bound-aware migrad
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    migrad(cf::CostFunction, params::Parameters;
+           strategy=Strategy(0), tol=0.1, maxfcn=nothing,
+           prec=MachinePrecision()) -> BoundedFunctionMinimum
+
+Bound- and fixed-parameter-aware MIGRAD. User FCN receives external
+parameter values; internal MIGRAD sees only the free parameters in
+internal (unbounded) coordinates.
+
+Phase 1 first cut. Mirrors the C++ Minuit2 user flow but with the
+Parameters/Transformation wired in.
+
+# Arguments
+
+- `cf::CostFunction` — wraps the user FCN on EXTERNAL parameter values.
+- `params::Parameters` — parameter metadata: values, errors, bounds,
+  fixed flags, names.
+
+# Keyword arguments
+
+- `strategy::Strategy=Strategy(0)` — Phase 1 first cut Phase-0-locked.
+- `tol::Real=0.1` — convergence tolerance.
+- `maxfcn::Union{Integer,Nothing}=nothing` — defaults to the standard
+  `200 + 100·n + 5·n²` where n is the number of free parameters.
+- `prec::MachinePrecision`.
+
+# Returns
+
+[`BoundedFunctionMinimum`](@ref) with `.ext_values` and `.ext_errors`
+in EXTERNAL coordinates.
+"""
+function migrad(
+    cf::CostFunction,
+    params::Parameters;
+    strategy::Strategy = Strategy(0),
+    tol::Real = 0.1,
+    maxfcn::Union{Integer,Nothing} = nothing,
+    prec::MachinePrecision = MachinePrecision(),
+)
+    n_total = n_pars(params)
+    n_active = n_free(params)
+    n_active > 0 ||
+        throw(ArgumentError("migrad needs at least one free parameter"))
+
+    # Initial internal values + errors via the C++-faithful Taylor/
+    # two-sided transformations (parameters.jl initial_int_*).
+    int_vals = initial_int_values(params)
+    int_errs = initial_int_errors(params)
+
+    # Wrap the user FCN to accept internal coords
+    cf_internal = _wrap_fcn_internal_to_external(cf, params)
+
+    # Run internal MIGRAD
+    fmin_int = migrad(cf_internal, int_vals, int_errs;
+                       strategy = strategy, tol = tol, maxfcn = maxfcn,
+                       prec = prec)
+
+    # ── Convert internal results back to external ────────────────
+    ext_values = Vector{Float64}(undef, n_total)
+    ext_errors_vec = zeros(Float64, n_total)
+    ext_cov_mat = nothing
+
+    # Build the full external parameter vector (fixed params keep
+    # their initial values; free params come from MIGRAD).
+    int_x = fmin_int.state.parameters.x
+    @inbounds for ext_idx in 1:n_total
+        par = params.pars[ext_idx]
+        int_idx = params.int_of_ext[ext_idx]
+        if int_idx == 0
+            # Fixed parameter
+            ext_values[ext_idx] = par.value
+        else
+            ext_values[ext_idx] = int_to_ext_value(params, int_idx, int_x[int_idx])
+        end
+    end
+
+    # External errors via Jacobian chain rule + covariance back-conversion.
+    if has_covariance(fmin_int)
+        V_int = parent(fmin_int.state.error.inv_hessian)
+        # covariance = 2·up·V (per C++; see result.jl::covariance)
+        # Build Jacobian d(ext)/d(int) per free parameter
+        dint2ext_diag = Vector{Float64}(undef, n_active)
+        @inbounds for int_idx in 1:n_active
+            dint2ext_diag[int_idx] = dint2ext_value(params, int_idx, int_x[int_idx])
+        end
+
+        # External covariance for the FREE parameters: C_ext = D · C_int · D
+        # where D = diag(dint2ext) and C_int = 2·up·V_int
+        c_int_scale = 2.0 * cf.up
+        n_free_actual = n_active
+        # First, place the FREE-FREE block of external covariance, then
+        # promote to the full n_total × n_total matrix.
+        cov_free = zeros(Float64, n_free_actual, n_free_actual)
+        @inbounds for i in 1:n_free_actual, j in 1:n_free_actual
+            cov_free[i, j] = c_int_scale * V_int[i, j] *
+                              dint2ext_diag[i] * dint2ext_diag[j]
+        end
+
+        # Set diagonal errors (sqrt of cov_free diagonal)
+        @inbounds for int_idx in 1:n_free_actual
+            ext_idx = params.ext_of_int[int_idx]
+            ext_errors_vec[ext_idx] = sqrt(max(cov_free[int_idx, int_idx], 0.0))
+        end
+
+        # Promote to n_total × n_total covariance (fixed params get 0 row/col)
+        cov_full = zeros(Float64, n_total, n_total)
+        @inbounds for i in 1:n_free_actual, j in 1:n_free_actual
+            ei = params.ext_of_int[i]
+            ej = params.ext_of_int[j]
+            cov_full[ei, ej] = cov_free[i, j]
+        end
+        ext_cov_mat = cov_full
+    else
+        # No covariance available — fall back to user's initial errors
+        @inbounds for ext_idx in 1:n_total
+            par = params.pars[ext_idx]
+            ext_errors_vec[ext_idx] = is_fixed(par) ? 0.0 : par.error
+        end
+    end
+
+    return BoundedFunctionMinimum(
+        fmin_int, params, ext_values, ext_errors_vec, ext_cov_mat,
+    )
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pretty printing
+# ─────────────────────────────────────────────────────────────────────────────
+
+function Base.show(io::IO, ::MIME"text/plain", m::BoundedFunctionMinimum)
+    println(io, "JuMinuit BoundedFunctionMinimum")
+    println(io, "  valid:   ", is_valid(m))
+    println(io, "  fval:    ", fval(m))
+    println(io, "  edm:     ", edm(m))
+    println(io, "  nfcn:    ", nfcn(m))
+    println(io, "  parameters (external):")
+    for ext_idx in 1:n_pars(m.params)
+        par = m.params.pars[ext_idx]
+        val = m.ext_values[ext_idx]
+        err = m.ext_errors[ext_idx]
+        fixed_tag = is_fixed(par) ? "  [FIXED]" : ""
+        bounds = if has_limits(par)
+            "  [$(par.lower), $(par.upper)]"
+        elseif has_upper_limit(par)
+            "  (-∞, $(par.upper)]"
+        elseif has_lower_limit(par)
+            "  [$(par.lower), ∞)"
+        else
+            ""
+        end
+        if is_fixed(par)
+            println(io, "    [", ext_idx, "] ", par.name, " = ", val,
+                    fixed_tag, bounds)
+        else
+            println(io, "    [", ext_idx, "] ", par.name, " = ", val,
+                    " ± ", err, bounds)
+        end
+    end
+end
+
+Base.show(io::IO, m::BoundedFunctionMinimum) =
+    print(io, "BoundedFunctionMinimum(fval=", fval(m),
+              ", valid=", is_valid(m), ", n=", n_pars(m.params), ")")

@@ -47,6 +47,7 @@ include("covariance_squeeze.jl")
 include("function_cross.jl")
 include("minos.jl")
 include("contours.jl")
+include("migrad_bounded.jl")
 
 # Phase 0 public surface (will grow as files are added).
 export MachinePrecision
@@ -79,5 +80,6 @@ export hesse
 export squeeze_symmetric, squeeze_error
 export MnCross, MinosError, minos
 export ContoursError, contour
+export BoundedFunctionMinimum, ext_errors, ext_covariance
 
 end # module JuMinuit

@@ -25,4 +25,5 @@ using Test
     include("test_covariance_squeeze.jl")
     include("test_minos.jl")
     include("test_contours.jl")
+    include("test_migrad_bounded.jl")
 end
