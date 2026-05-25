@@ -21,4 +21,5 @@ using Test
     include("test_aqua_jet.jl")
     include("test_transform.jl")
     include("test_parameters.jl")
+    include("test_hesse.jl")
 end

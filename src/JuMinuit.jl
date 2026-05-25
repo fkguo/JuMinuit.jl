@@ -42,6 +42,7 @@ include("result.jl")
 include("migrad.jl")
 include("transform.jl")
 include("parameters.jl")
+include("hesse.jl")
 
 # Phase 0 public surface (will grow as files are added).
 export MachinePrecision
@@ -70,5 +71,6 @@ export n_pars, n_free, ext_index
 export int_to_ext_value, ext_to_int_value, dint2ext_value
 export int_to_ext_vector, ext_to_int_vector
 export initial_int_values, initial_int_errors
+export hesse
 
 end # module JuMinuit
