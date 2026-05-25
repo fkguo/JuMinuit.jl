@@ -29,4 +29,5 @@ using Test
     include("test_minuit.jl")
     include("test_ad_gradient.jl")
     include("test_serialize.jl")
+    include("test_contour_exact.jl")
 end

@@ -101,6 +101,231 @@ function _fix_one_param(cf::CostFunction, i::Integer, v::Float64, n::Integer)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Multi-param fix helper (Phase 1.x — for contour_exact / general
+# MnFunctionCross calls with npar > 1).
+# ─────────────────────────────────────────────────────────────────────────────
+
+function _fix_multi_params(
+    cf::CostFunction,
+    par_idxs::AbstractVector{<:Integer},
+    v::AbstractVector{<:Real},
+    n::Integer,
+)
+    length(par_idxs) == length(v) ||
+        throw(DimensionMismatch("par_idxs / v length mismatch"))
+    f = cf.f
+    up = cf.up
+    n_ = Int(n)
+    is_fixed = falses(n_)
+    fixed_value = zeros(Float64, n_)
+    @inbounds for (idx, k) in enumerate(par_idxs)
+        kk = Int(k)
+        1 <= kk <= n_ || throw(ArgumentError("par_idx $kk out of bounds for n=$n_"))
+        is_fixed[kk] = true
+        fixed_value[kk] = Float64(v[idx])
+    end
+    wrapped = function (y::AbstractVector{<:Real})
+        full = Vector{Float64}(undef, n_)
+        j = 1
+        @inbounds for k in 1:n_
+            if is_fixed[k]
+                full[k] = fixed_value[k]
+            else
+                full[k] = y[j]
+                j += 1
+            end
+        end
+        return f(full)
+    end
+    return CostFunction(wrapped, up)
+end
+
+function _migrad_with_multi_fixed(
+    cf::CostFunction,
+    state::MinimumState,
+    par_idxs::AbstractVector{<:Integer},
+    v::AbstractVector{<:Real};
+    tol::Float64,
+    maxcalls::Integer,
+    prec::MachinePrecision,
+    strategy::Strategy = Strategy(0),
+)
+    n = length(state.parameters)
+    is_fixed = falses(n)
+    @inbounds for k in par_idxs
+        is_fixed[Int(k)] = true
+    end
+    n_free_inner = n - count(is_fixed)
+    if n_free_inner == 0
+        # All parameters fixed — no inner MIGRAD needed, just evaluate FCN
+        # at the fully-fixed point. This is the typical 2D-contour case
+        # (n=2, npar=2).
+        full = Vector{Float64}(undef, n)
+        @inbounds for (idx, k) in enumerate(par_idxs)
+            full[Int(k)] = Float64(v[idx])
+        end
+        @inbounds for k in 1:n
+            if !is_fixed[k]
+                full[k] = state.parameters.x[k]
+            end
+        end
+        f_val = Float64(cf.f(full))
+        # Build a degenerate FunctionMinimum representing this evaluation
+        fake_par = MinimumParameters(full, f_val)
+        fake_err = MinimumError(Symmetric(Matrix{Float64}(undef, 0, 0), :U), MnHesseValid)
+        fake_grad = FunctionGradient(0)
+        fake_state = MinimumState(fake_par, fake_err, fake_grad, 0.0, 1)
+        fake_min = FunctionMinimum(fake_state, fake_state, cf.up;
+                                    is_valid = true)
+        return fake_min, 1
+    end
+
+    y0 = Vector{Float64}(undef, n_free_inner)
+    errs = Vector{Float64}(undef, n_free_inner)
+    V = state.error.inv_hessian
+    scale = 2.0 * cf.up
+    x_min = state.parameters.x
+    j = 1
+    @inbounds for k in 1:n
+        is_fixed[k] && continue
+        y0[j] = x_min[k]
+        errs[j] = sqrt(max(scale * V[k, k], prec.eps2))
+        j += 1
+    end
+
+    cf_fixed = _fix_multi_params(cf, par_idxs, v, n)
+    inner_strategy = Strategy(max(0, strategy.level - 1))
+    inner_min = migrad(cf_fixed, y0, errs;
+                        tol = tol, maxfcn = Int(maxcalls),
+                        strategy = inner_strategy, prec = prec)
+    return inner_min, ncalls(cf_fixed)
+end
+
+function function_cross_multi(
+    fmin::FunctionMinimum,
+    cf::CostFunction,
+    par_idxs::AbstractVector{<:Integer},
+    pmid::AbstractVector{<:Real},
+    pdir::AbstractVector{<:Real};
+    tlr::Real = 0.1,
+    maxcalls::Integer = 1000,
+    strategy::Strategy = Strategy(0),
+    prec::MachinePrecision = MachinePrecision(),
+)
+    state = fmin.state
+    n = length(state.parameters)
+    npar = length(par_idxs)
+    length(pmid) == npar ||
+        throw(DimensionMismatch("pmid length $(length(pmid)) != par_idxs length $npar"))
+    length(pdir) == npar ||
+        throw(DimensionMismatch("pdir length $(length(pdir)) != par_idxs length $npar"))
+    n >= npar ||
+        throw(ArgumentError("function_cross_multi needs n >= npar (got n=$n, npar=$npar)"))
+
+    fmin_val = state.parameters.fval
+    up = cf.up
+    aim = fmin_val + up
+    tlf = tlr * up
+    maxitr = 15
+    nfcn = 0
+
+    v1 = [Float64(pmid[i]) + 1.0 * Float64(pdir[i]) for i in 1:npar]
+    min1, nf1 = _migrad_with_multi_fixed(
+        cf, state, par_idxs, v1;
+        tol = 0.5 * tlr, maxcalls = maxcalls, prec = prec, strategy = strategy)
+    nfcn += nf1
+    fval(min1) < fmin_val - tlf &&
+        return MnCross(min1.state, NaN, nfcn; valid=false, new_min=true)
+    min1.reached_call_limit &&
+        return MnCross(min1.state, NaN, nfcn; valid=false, fcn_limit=true)
+    min1.is_valid || return MnCross(state, NaN, nfcn; valid=false)
+
+    a = [0.0, 1.0, 0.0]
+    f = [fmin_val, max(fval(min1), fmin_val + 0.1 * up), 0.0]
+    aopt = sqrt(up / (f[2] - fmin_val)) - 1.0
+    abs(f[2] - aim) < tlf &&
+        return MnCross(min1.state, 1.0, nfcn; valid=true)
+    aopt = clamp(aopt, -0.5, 1.0)
+
+    v2 = [Float64(pmid[i]) + aopt * Float64(pdir[i]) for i in 1:npar]
+    min2, nf2 = _migrad_with_multi_fixed(
+        cf, state, par_idxs, v2;
+        tol = 0.5 * tlr, maxcalls = maxcalls - nfcn, prec = prec, strategy = strategy)
+    nfcn += nf2
+    fval(min2) < fmin_val - tlf &&
+        return MnCross(min2.state, NaN, nfcn; valid=false, new_min=true)
+    min2.reached_call_limit &&
+        return MnCross(min2.state, NaN, nfcn; valid=false, fcn_limit=true)
+    min2.is_valid || return MnCross(state, NaN, nfcn; valid=false)
+
+    ipt = 2
+    a[2] = aopt; f[2] = fval(min2)
+    dfda = (f[2] - f[1]) / (a[2] - a[1])
+    last_min = min2
+
+    while dfda < 0 && ipt < maxitr
+        a[1] = a[2]; f[1] = f[2]
+        aopt = a[1] + 0.2 * (ipt - 1)
+        v_probe = [Float64(pmid[i]) + aopt * Float64(pdir[i]) for i in 1:npar]
+        m, nf = _migrad_with_multi_fixed(
+            cf, state, par_idxs, v_probe;
+            tol = 0.5 * tlr, maxcalls = maxcalls - nfcn, prec = prec, strategy = strategy)
+        nfcn += nf
+        fval(m) < fmin_val - tlf &&
+            return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
+        m.reached_call_limit &&
+            return MnCross(m.state, NaN, nfcn; valid=false, fcn_limit=true)
+        m.is_valid || return MnCross(state, NaN, nfcn; valid=false)
+        ipt += 1
+        a[2] = aopt; f[2] = fval(m)
+        dfda = (f[2] - f[1]) / (a[2] - a[1])
+        last_min = m
+        dfda > 0 && break
+    end
+    ipt >= maxitr && dfda <= 0 &&
+        return MnCross(state, NaN, nfcn; valid=false)
+
+    while ipt < maxitr
+        aopt = a[2] + (aim - f[2]) / dfda
+        fdist = min(abs(aim - f[1]), abs(aim - f[2]))
+        adist = min(abs(aopt - a[1]), abs(aopt - a[2]))
+        tla_loop = abs(aopt) > 1.0 ? tlr * abs(aopt) : tlr
+        if adist < tla_loop && fdist < tlf
+            return MnCross(last_min.state, aopt, nfcn; valid=true)
+        end
+        bmin = min(a[1], a[2]) - 1.0
+        bmax = max(a[1], a[2]) + 1.0
+        aopt = clamp(aopt, bmin, bmax)
+
+        v_probe = [Float64(pmid[i]) + aopt * Float64(pdir[i]) for i in 1:npar]
+        m, nf = _migrad_with_multi_fixed(
+            cf, state, par_idxs, v_probe;
+            tol = 0.5 * tlr, maxcalls = maxcalls - nfcn, prec = prec, strategy = strategy)
+        nfcn += nf
+        fval(m) < fmin_val - tlf &&
+            return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
+        m.reached_call_limit &&
+            return MnCross(m.state, NaN, nfcn; valid=false, fcn_limit=true)
+        m.is_valid || return MnCross(state, NaN, nfcn; valid=false)
+        ipt += 1
+        f3 = fval(m)
+        if abs(f[1] - aim) > abs(f[2] - aim)
+            a[1] = aopt; f[1] = f3
+        else
+            a[2] = aopt; f[2] = f3
+        end
+        if a[1] > a[2]
+            a[1], a[2] = a[2], a[1]
+            f[1], f[2] = f[2], f[1]
+        end
+        dfda = (f[2] - f[1]) / (a[2] - a[1])
+        dfda <= 0 && return MnCross(m.state, NaN, nfcn; valid=false)
+        last_min = m
+    end
+    return MnCross(last_min.state, aopt, nfcn; valid=false)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Helper: run inner MIGRAD with parameter i fixed at value v.
 # Returns (inner_min, total_inner_nfcn).
 # ─────────────────────────────────────────────────────────────────────────────

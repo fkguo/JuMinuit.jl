@@ -83,7 +83,8 @@ export initial_int_values, initial_int_errors
 export hesse
 export squeeze_symmetric, squeeze_error
 export MnCross, MinosError, minos
-export ContoursError, contour
+export ContoursError, contour, contour_exact
+export function_cross_multi
 export BoundedFunctionMinimum, ext_errors, ext_covariance
 export Minuit, migrad!, minos!
 export CostFunctionWithGradient, analytical_gradient, analytical_gradient!
