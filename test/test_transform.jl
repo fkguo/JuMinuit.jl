@@ -95,6 +95,42 @@
     end
 
     # ──────────────────────────────────────────────────────
+    @testset "int2ext_error — Phase 1.x D5 two-sided" begin
+        # Unbounded: identity
+        @test JuMinuit.int2ext_error(JuMinuit.NoBounds, 1.0, 0.1, NaN, NaN) == 0.1
+
+        # Double-bounded at midpoint v=0, [-1, 1], err=0.1
+        # ui = 0, du1 = sin_int2ext(0.1, -1, 1) - 0 = sin(0.1) ≈ 0.0998
+        # du2 = -du1 by symmetry, avg = |du1| ≈ 0.0998
+        result = JuMinuit.int2ext_error(JuMinuit.BothBounds, 0.0, 0.1, -1.0, 1.0)
+        @test 0.09 < result < 0.11
+
+        # Saturation: err > 1 → du1 clamped to (upper - lower) = 2
+        result_sat = JuMinuit.int2ext_error(JuMinuit.BothBounds, 0.0, 2.0, -1.0, 1.0)
+        @test result_sat > 1.0
+        @test result_sat < 2.0  # 0.5 · (2.0 + |something|)
+
+        # SqrtUp (upper-only) at v=0.5, err=0.3, upper=5
+        result_up = JuMinuit.int2ext_error(JuMinuit.UpperOnly, 0.5, 0.3, NaN, 5.0)
+        @test result_up > 0
+
+        # SqrtLow at v=-0.5, err=0.3, lower=-5
+        result_lo = JuMinuit.int2ext_error(JuMinuit.LowerOnly, -0.5, 0.3, -5.0, NaN)
+        @test result_lo > 0
+
+        # Near-bound case: parameter very close to the upper limit.
+        # The Jacobian-only approach would under-report; two-sided
+        # captures the nonlinear remapping.
+        result_near = JuMinuit.int2ext_error(JuMinuit.BothBounds, 1.4, 0.2, -1.0, 1.0)
+        @test result_near > 0
+        # Jacobian-only would give |dint2ext| · 0.2 = cos(1.4) ≈ 0.17 · 0.2 = 0.034
+        # The two-sided formula gives something larger (the actual range
+        # of external displacement, accounting for one-sided saturation).
+        # Magnitude check only.
+        @test result_near < 1.0  # bounded by the range scaling
+    end
+
+    # ──────────────────────────────────────────────────────
     @testset "bound_kind classifier" begin
         @test JuMinuit.bound_kind(NaN, NaN) == JuMinuit.NoBounds
         @test JuMinuit.bound_kind(-1.0, 1.0) == JuMinuit.BothBounds

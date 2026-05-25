@@ -75,10 +75,32 @@ ext_errors(m::BoundedFunctionMinimum) = m.ext_errors
 """
     ext_covariance(m::BoundedFunctionMinimum) -> Union{Nothing,Matrix{Float64}}
 
-External-coordinate covariance matrix. Returns `nothing` if no
+Full external-coordinate covariance matrix, dimension n_total × n_total
+with zero rows/columns for fixed parameters. Returns `nothing` if no
 covariance was produced.
 """
 ext_covariance(m::BoundedFunctionMinimum) = m.ext_covariance
+
+"""
+    free_covariance(m::BoundedFunctionMinimum) -> Union{Nothing,Matrix{Float64}}
+
+The free-parameter sub-block of the external covariance, dimension
+n_free × n_free. Matches the C++ `MnUserParameterState::Covariance()`
+shape (which omits fixed parameters entirely). Use this when
+interoperating with C++ output or when fixed-parameter zero rows are
+unwanted.
+
+Parallel-review #4 D4 — the design choice was to expose the full
+n_total × n_total matrix as the default for indexing convenience;
+this accessor provides the C++-shape alternative on demand.
+"""
+function free_covariance(m::BoundedFunctionMinimum)
+    cov = m.ext_covariance
+    cov === nothing && return nothing
+    free_idx = [params_i for params_i in 1:n_pars(m.params)
+                if !is_fixed(m.params.pars[params_i])]
+    return cov[free_idx, free_idx]
+end
 
 # Accessor parity with FunctionMinimum (parallel-review #4 E3).
 errors(m::BoundedFunctionMinimum) = m.ext_errors
@@ -208,10 +230,22 @@ function migrad(
                               dint2ext_diag[i] * dint2ext_diag[j]
         end
 
-        # Set diagonal errors (sqrt of cov_free diagonal)
+        # Set diagonal external errors. For unbounded parameters the
+        # Jacobian-diagonal sqrt(cov_free[i,i]) is exact. For bounded
+        # parameters near the boundary the Jacobian shrinks (the sin
+        # transform's derivative goes to 0 at the limit) — use the C++
+        # `Int2extError` two-sided formula instead (parallel-review #4 D5).
         @inbounds for int_idx in 1:n_free_actual
             ext_idx = params.ext_of_int[int_idx]
-            ext_errors_vec[ext_idx] = sqrt(max(cov_free[int_idx, int_idx], 0.0))
+            par = params.pars[ext_idx]
+            if has_limits(par) || has_upper_limit(par) || has_lower_limit(par)
+                kind = bound_kind(par.lower, par.upper)
+                int_err = sqrt(max(V_int[int_idx, int_idx], 0.0))
+                ext_errors_vec[ext_idx] = int2ext_error(
+                    kind, int_x[int_idx], int_err, par.lower, par.upper)
+            else
+                ext_errors_vec[ext_idx] = sqrt(max(cov_free[int_idx, int_idx], 0.0))
+            end
         end
 
         # Promote to n_total × n_total covariance (fixed params get 0 row/col)

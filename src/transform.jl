@@ -249,6 +249,51 @@ kind.
 end
 
 """
+    int2ext_error(kind, val, err, lower, upper) -> Float64
+
+External (asymmetric-averaged) parameter error from the internal error
+`err = sqrt(V_int[i,i])`. Mirrors C++
+`MnUserTransformation::Int2extError`
+(`reference/Minuit2_cpp/src/MnUserTransformation.cxx:115-141`).
+
+For unbounded parameters: returns `err` unchanged.
+
+For bounded parameters: computes the symmetric average of the
+two-sided perturbations through `int2ext`:
+
+    ui = int2ext(val)
+    du1 = int2ext(val + err) - ui
+    du2 = int2ext(val - err) - ui
+    return 0.5 · (|du1| + |du2|)
+
+with a special clamp for double-bounded when `err > 1` (the
+sin-transform saturates, so |du1| is replaced by the full range).
+
+Phase 1.x D5 (codex parallel-review #4) — closes the near-bound
+error mis-reporting gap. The Jacobian-diagonal alternative
+`sqrt(V_ext[i,i]) = D · sqrt(V_int[i,i])` underscores near bounds
+because D = d(ext)/d(int) shrinks toward zero; the two-sided
+formula captures the actual nonlinear remapping.
+"""
+function int2ext_error(
+    kind::BoundKind, val::Float64, err::Float64,
+    lower::Float64, upper::Float64,
+)
+    kind == NoBounds && return err
+
+    ui = int2ext(kind, val, lower, upper)
+    du1 = int2ext(kind, val + err, lower, upper) - ui
+    du2 = int2ext(kind, val - err, lower, upper) - ui
+
+    # Double-bounded saturation clamp (C++ MnUserTransformation.cxx:132-133)
+    if kind == BothBounds && err > 1.0
+        du1 = upper - lower
+    end
+
+    return 0.5 * (abs(du1) + abs(du2))
+end
+
+"""
     dint2ext(kind, v, lower, upper) -> Float64
 
 Dispatch to `d(ext)/d(int)`. For `NoBounds`, returns `1.0`.

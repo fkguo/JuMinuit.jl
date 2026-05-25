@@ -77,6 +77,32 @@
         @test cov[1, 2] == cov[2, 1]
     end
 
+    @testset "free_covariance: C++ MnUserParameterState shape (D4)" begin
+        # 3 params, fix middle one
+        cf = CostFunction(x -> sum(abs2, x .- [1.0, 2.0, 3.0]))
+        params = Parameters([
+            MinuitParameter("a", 0.0, 0.1),
+            MinuitParameter("b", 2.0, 0.1; fixed = true),
+            MinuitParameter("c", 0.0, 0.1),
+        ])
+        m = migrad(cf, params)
+        full = ext_covariance(m)
+        @test full !== nothing
+        @test size(full) == (3, 3)
+        # Fixed parameter's row + col must be zero in the full matrix
+        @test all(full[2, :] .== 0.0)
+        @test all(full[:, 2] .== 0.0)
+
+        free = free_covariance(m)
+        @test free !== nothing
+        @test size(free) == (2, 2)  # only the free parameters
+        # Free-block should match the (a, c) sub-block of full
+        @test free[1, 1] == full[1, 1]
+        @test free[1, 2] == full[1, 3]
+        @test free[2, 1] == full[3, 1]
+        @test free[2, 2] == full[3, 3]
+    end
+
     @testset "Covariance symmetry on correlated quadratic (D3 regression)" begin
         # f(x, y) = x² + y² + x·y has off-diagonal entries in the
         # Hessian, exposing the upper-vs-lower triangle storage bug
