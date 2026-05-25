@@ -133,5 +133,60 @@
         _, _, _, _, _, noless3, _, _ =
             JuMinuit._three_point_classify([0.0, 1.0, 2.0], [-2.0, -1.0, -0.5], 1.0)
         @test noless3 == 3
+
+        # default_ibest tie-break (Opus review IMPORTANT #5): when all three
+        # |f - aim| are equal, the initial classifier uses default_ibest=3.
+        ib_init, _, _, _, _, _, _, _ =
+            JuMinuit._three_point_classify([0.0, 0.5, 1.0], [1.0, 1.0, 1.0], 0.0;
+                                            default_ibest = 3)
+        @test ib_init == 3
+        # L500 classifier uses default_ibest=1
+        ib_l500, _, _, _, _, _, _, _ =
+            JuMinuit._three_point_classify([0.0, 0.5, 1.0], [1.0, 1.0, 1.0], 0.0;
+                                            default_ibest = 1)
+        @test ib_l500 == 1
+    end
+
+    @testset "function_cross — tlr=0.01 crossing tolerance (BLOCKING #1)" begin
+        # Opus review BLOCKING #1 — C++ MnFunctionCross.cxx:38-40 hardcodes
+        # the CROSSING convergence to tlr=0.01 regardless of user-supplied
+        # tlr (which only controls inner-MIGRAD via 0.5·tlr). Earlier the
+        # Julia code propagated user tlr (default 0.1) to the convergence
+        # check too → 10× looser than C++. The fix should give aopt within
+        # ~1% of the analytic answer even at the loose default.
+        cf = CostFunction(x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2)
+        fmin = migrad(cf, [0.0, 0.0], [0.1, 0.1])
+        # The analytic 1σ crossing along x[1] is at α = 1.0 (since
+        # σ_x = sqrt(2·1·0.5) = 1 and the crossing at f=fmin+1 is x = 1+1·σ_x).
+        cr = JuMinuit.function_cross(fmin, cf, 1, +1.0)
+        @test cr.valid
+        # Tight 1% tolerance — without the C++ tlr=0.01 override this
+        # would have a 10× looser allowable error.
+        @test cr.aopt ≈ 1.0 atol = 0.01
+
+        # Even when the user passes a loose tlr=0.5 (deliberately huge),
+        # the crossing tlf=0.01·up should still pin aopt within ~1%
+        # because the override decouples user-tlr from the convergence
+        # check (only inner-MIGRAD sees `tol = 0.5·tlr`).
+        cr_loose = JuMinuit.function_cross(fmin, cf, 1, +1.0; tlr = 0.5)
+        @test cr_loose.valid
+        @test cr_loose.aopt ≈ 1.0 atol = 0.05  # inner-MIGRAD looseness only
+    end
+
+    @testset "function_cross — non-quadratic many-iterations (BLOCKING #2)" begin
+        # Opus review BLOCKING #2 — the C++ fall-through branch
+        # (`alsb[iworst] = alsb[2]; goto L460`) is hit when the third
+        # probe lands closer to aim than the first two but all 3 stay
+        # one-sided. This is common on non-quadratic level surfaces
+        # where the initial linear extrapolation overshoots. Without
+        # the fall-through, the algorithm would have returned invalid.
+        # Verify that on a quartic CF (non-quadratic crossing), the
+        # algorithm DOES converge to a valid crossing.
+        cf = CostFunction(x -> 4.0 * (x[1] - 1.0)^4 + (x[2] - 2.0)^2)
+        fmin = migrad(cf, [0.0, 0.0], [0.1, 0.1])
+        cr = JuMinuit.function_cross(fmin, cf, 1, +1.0)
+        @test cr.valid                # would be false if fall-through missing
+        @test cr.aopt > 0.0
+        @test cr.nfcn < 1500          # bounded call count
     end
 end

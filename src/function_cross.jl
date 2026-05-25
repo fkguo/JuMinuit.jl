@@ -140,12 +140,17 @@ loop). Indices are 1-based.
 """
 @inline function _three_point_classify(a::AbstractVector{<:Real},
                                         f::AbstractVector{<:Real},
-                                        aim::Float64)
+                                        aim::Float64;
+                                        default_ibest::Int = 1)
+    # `default_ibest` controls the tie-break for `ibest`: C++ initial
+    # classifier (lines 303-322) uses `ibest = 2 (0-indexed) = 3 (1-based)`
+    # with `ecarmn = |flsb[2]-aim|`; the L500 classifier (lines 412-443)
+    # uses `ibest = 0 = 1 (1-based)` with `ecarmn = |aim-flsb[0]|`.
     ileft = 0; iright = 0; iout = 0
-    ibest = 1
+    ibest = default_ibest
     iworst = 1
     noless = 0
-    ecarmn = abs(f[1] - aim)
+    ecarmn = abs(f[default_ibest] - aim)
     ecarmx = 0.0
     @inbounds for i in 1:3
         ecart = abs(f[i] - aim)
@@ -210,8 +215,15 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
                      maxcalls::Integer = 1000,
                      prec::MachinePrecision = MachinePrecision()) where {F<:Function}
     aim = fmin_val + up
-    tlf = tlr * up        # function-value tolerance
-    tla = tlr             # α-value tolerance (refined per iteration on |aopt|)
+
+    # **Crossing convergence tolerances are HARDCODED 0.01** per C++
+    # MnFunctionCross.cxx:38-40 (the user-supplied `tlr` is repurposed
+    # only as the inner-MIGRAD tolerance via 0.5·tlr). Without this
+    # override the crossing test would be 10× looser than C++ at the
+    # default user `tlr = 0.1` (Opus review #5 BLOCKING #1).
+    tlf = 0.01 * up        # crossing function-value tolerance
+    tla_base = 0.01        # crossing α-tolerance (scaled per iter)
+
     maxitr = 15
     nfcn = 0
     ipt = 1               # we treat the cached fmin as alsb[1] = 0, flsb[1] = fmin
@@ -220,11 +232,12 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
     a[1] = 0.0
     # f[1] follows C++ line 141: max(min0.Fval(), aminsv + 0.1*up). Since
     # we cache fmin (≡ min0.Fval()), this collapses to fmin + 0.1*up.
+    # We skip the α=0 MIGRAD entirely (perf win; documented deviation).
     f[1] = fmin_val + 0.1 * up
 
     # ── Quadratic seed for α (C++ line 142) ──────────────────────────────
     aopt_seed = sqrt(up / (f[1] - fmin_val)) - 1.0
-    # Convergence at α=0 (extremely rare; only fires if tlr ≥ 1)
+    # Convergence at α=0 (extremely rare; only fires if user tlr ≥ 1)
     if abs(f[1] - aim) < tlf
         return MnCross(state_fallback, aopt_seed, nfcn; valid=true)
     end
@@ -245,13 +258,19 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
     last_min = min1
     aopt = aopt_seed
 
+    # L300 inner-step counter — local to each L300 entry (NOT cumulative
+    # ipt). Opus review IMPORTANT #4: C++ uses `it = 0..maxlk` local on
+    # each `goto L300`, so step size resets to 0.2 on each redo entry.
+    l300_step_count = 0
+
+    @label l300_extend
     # ── L300: while dfda < 0, extend outward ─────────────────────────────
     while dfda < 0.0 && ipt < maxitr
         a[1] = a[2]; f[1] = f[2]
-        # C++ line 199: aopt = alsb[0] + 0.2 * (it + 1). `it` is the local
-        # inner counter; on first entry ipt=2 → use 0.2*1=0.2. On second
-        # iteration ipt=3 → 0.2*2=0.4. Increments by ipt-2 starts at 1.
-        aopt = a[1] + 0.2 * (ipt - 1)
+        # C++ line 199: aopt = alsb[0] + 0.2 * (it + 1). `it` starts at 0
+        # on each L300 re-entry.
+        l300_step_count += 1
+        aopt = a[1] + 0.2 * l300_step_count
         m, nf = _probe(aopt, maxcalls - nfcn)
         nfcn += nf
         fval(m) < fmin_val - tlf &&
@@ -269,11 +288,12 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
         return MnCross(state_fallback, NaN, nfcn; valid=false)
     end
 
+    @label l460_extrapolate
     # ── L460: linear extrapolation to seed point 3 ───────────────────────
     aopt = a[2] + (aim - f[2]) / dfda
     fdist = min(abs(aim - f[1]), abs(aim - f[2]))
     adist = min(abs(aopt - a[1]), abs(aopt - a[2]))
-    tla_loop = abs(aopt) > 1.0 ? tlr * abs(aopt) : tlr
+    tla_loop = abs(aopt) > 1.0 ? tla_base * abs(aopt) : tla_base
     if adist < tla_loop && fdist < tlf
         return MnCross(last_min.state, aopt, nfcn; valid=true)
     end
@@ -295,97 +315,68 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
     a[3] = aopt; f[3] = fval(m)
     last_min = m
 
-    # ── 3-point classifier + L500 dispatch (C++ lines 303-340) ───────────
-    @label l300_redo
+    # ── 3-point classifier + dispatch (C++ lines 303-351) ────────────────
+    # Initial classifier biases `ibest` toward the THIRD point on ties
+    # (C++ initial: `ibest = 2; ecarmn = |flsb[2]-aim|`). This matters
+    # for the all-equal degenerate path (Opus review IMPORTANT #5).
     ibest, iworst, ileft, iright, iout, noless, ecarmn, ecarmx =
-        _three_point_classify(a, f, aim)
+        _three_point_classify(a, f, aim; default_ibest = 3)
 
-    # Dispatch on noless:
+    # Dispatch on noless (C++ lines 327-351):
     if noless == 1 || noless == 2
         @goto l500_enter
     elseif noless == 0 && ibest != 3
+        # All three above aim; third probe not closest → invalid
         return MnCross(state_fallback, NaN, nfcn; valid=false)
     elseif noless == 3 && ibest != 3
-        # All three points below aim; slope went negative again. Move
-        # 3rd point into [2] slot and re-extend outward.
+        # All three below aim; slope went negative again. Move 3rd
+        # point into [2] slot and re-extend outward (re-enter L300).
         a[2] = a[3]; f[2] = f[3]
-        # Repeat the L300 extension with this new anchor.
-        dfda_re = (f[2] - f[1]) / (a[2] - a[1])
-        # If we've burned through maxitr, bail.
-        while dfda_re < 0.0 && ipt < maxitr
-            a[1] = a[2]; f[1] = f[2]
-            aopt = a[1] + 0.2 * (ipt - 1)
-            m, nf = _probe(aopt, maxcalls - nfcn)
-            nfcn += nf
-            fval(m) < fmin_val - tlf &&
-                return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
-            m.reached_call_limit &&
-                return MnCross(m.state, NaN, nfcn; valid=false, fcn_limit=true)
-            m.is_valid || return MnCross(state_fallback, NaN, nfcn; valid=false)
-            ipt += 1
-            a[2] = aopt; f[2] = fval(m)
-            dfda_re = (f[2] - f[1]) / (a[2] - a[1])
-            last_min = m
-            dfda_re > 0.0 && break
-        end
-        if dfda_re <= 0.0
-            return MnCross(state_fallback, NaN, nfcn; valid=false)
-        end
-        # Re-do linear extrapolation → new 3rd point
-        aopt = a[2] + (aim - f[2]) / dfda_re
-        fdist2 = min(abs(aim - f[1]), abs(aim - f[2]))
-        adist2 = min(abs(aopt - a[1]), abs(aopt - a[2]))
-        tla_loop2 = abs(aopt) > 1.0 ? tlr * abs(aopt) : tlr
-        if adist2 < tla_loop2 && fdist2 < tlf
-            return MnCross(last_min.state, aopt, nfcn; valid=true)
-        end
-        if ipt >= maxitr
-            return MnCross(state_fallback, NaN, nfcn; valid=false)
-        end
-        bmin2 = min(a[1], a[2]) - 1.0
-        bmax2 = max(a[1], a[2]) + 1.0
-        aopt = clamp(aopt, bmin2, bmax2)
-        m, nf = _probe(aopt, maxcalls - nfcn)
-        nfcn += nf
-        fval(m) < fmin_val - tlf &&
-            return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
-        m.reached_call_limit &&
-            return MnCross(m.state, NaN, nfcn; valid=false, fcn_limit=true)
-        m.is_valid || return MnCross(state_fallback, NaN, nfcn; valid=false)
-        ipt += 1
-        a[3] = aopt; f[3] = fval(m)
-        last_min = m
-        @goto l300_redo
+        dfda = (f[2] - f[1]) / (a[2] - a[1])
+        l300_step_count = 0   # reset C++ `it` counter on goto L300
+        @goto l300_extend
+    else
+        # ELSE branch (C++ lines 343-351): the "new straight line thru
+        # first two points". Replace iworst with the 3rd probe, recompute
+        # dfda from the kept-two-points, re-enter L460. Covers
+        # noless ∈ {0, 3} with ibest == 3 (the third probe is best).
+        # Opus review BLOCKING #2 — without this branch the algorithm
+        # falls into L500 with all 3 points one-sided and returns invalid.
+        a[iworst] = a[3]
+        f[iworst] = f[3]
+        dfda = (f[2] - f[1]) / (a[2] - a[1])
+        @goto l460_extrapolate
     end
-    # Fall through to L500 (noless==0&&ibest==3 or noless==3&&ibest==3)
 
     @label l500_enter
-
     # ── L500 loop: parabolic root-find with 3-point window ───────────────
     while ipt < maxitr
         A, B, C = _parabola_fit3(a, f)
         sol = _parabola_solve_for_aim(A, B, C, aim, prec)
         sol === nothing &&
-            return MnCross(state_fallback, NaN, nfcn; valid=false)  # curvature negative
+            return MnCross(state_fallback, NaN, nfcn; valid=false)  # curvature wrong sign
         aopt_new, slope = sol
 
         # Convergence at ibest (C++ line 404)
-        tla_l500 = abs(aopt_new) > 1.0 ? tlr * abs(aopt_new) : tlr
+        tla_l500 = abs(aopt_new) > 1.0 ? tla_base * abs(aopt_new) : tla_base
         if abs(aopt_new - a[ibest]) < tla_l500 && abs(f[ibest] - aim) < tlf
             return MnCross(last_min.state, aopt_new, nfcn; valid=true)
         end
 
-        # Re-classify all three points for ileft/iright/iout/ibest
+        # Re-classify (L500 inner-loop classifier: C++ lines 412-443 use
+        # `ibest = 0, ecarmn = |aim - flsb[0]|` — i.e., default ibest=1
+        # in 1-based)
         ibest, _, ileft, iright, iout, _, ecarmn, ecarmx =
-            _three_point_classify(a, f, aim)
+            _three_point_classify(a, f, aim; default_ibest = 1)
 
-        # Defensive: if either anchor missing or iout undefined (single-side
-        # tower), fall back to the conservative window of [min,max] ± smalla.
+        # Defensive: if either anchor missing or iout undefined (e.g. all
+        # three on one side of aim), give up. This should be rare after
+        # the noless-dispatch above filters out all-same-side cases.
         if ileft == 0 || iright == 0 || iout == 0
             return MnCross(state_fallback, NaN, nfcn; valid=false)
         end
 
-        # "Avoid bad point next time" — C++ line 449
+        # "Avoid keeping a bad point next time" — C++ line 449
         if ecarmx > 10.0 * abs(f[iout] - aim)
             aopt_new = 0.5 * (aopt_new + 0.5 * (a[iright] + a[ileft]))
         end
