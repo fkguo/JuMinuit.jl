@@ -65,4 +65,73 @@
         @test cr_lo.valid
         @test cr_lo.aopt > 0.5  # aopt is the magnitude regardless of sign
     end
+
+    @testset "function_cross — parabolic path (A3/A4)" begin
+        # Phase 1.x A3/A4 (parallel-review #4) — non-quadratic CF that
+        # exercises the L500 MnParabola 3-point fit. With a quartic
+        # term in x[1], the crossing surface is f = a·(x-1)⁴ + (y-2)²,
+        # so the level set at f = fmin+1 is x = 1 ± 1/a^(1/4). The
+        # crossing α (relative to the post-fit MIGRAD step σ_x) should
+        # be ~1·σ_x and the parabolic fit converges in one or two L500
+        # iterations vs many for the linear-only path.
+        cf = CostFunction(x -> 4.0 * (x[1] - 1.0)^4 + (x[2] - 2.0)^2)
+        fmin = migrad(cf, [0.0, 0.0], [0.1, 0.1])
+        @test JuMinuit.is_valid(fmin)
+        cr_up = JuMinuit.function_cross(fmin, cf, 1, +1.0)
+        @test cr_up.valid
+        # For x[1], the crossing is at x = 1 + (1/4)^(1/4) ≈ 1.707;
+        # the 1σ post-fit step is also nonquadratic-skewed but the
+        # parabolic search still converges (rough magnitude check
+        # only; exact α depends on σ_x from the converged Hessian).
+        @test cr_up.aopt > 0.0
+        @test cr_up.nfcn < 1500  # parabola fit should NOT explode call count
+    end
+
+    @testset "parabola helpers — direct unit tests" begin
+        # A·x² + B·x + C through (0, 1), (1, 0), (2, 1)
+        # Expected: A=1, B=-2, C=1   (i.e., f(x) = (x-1)²)
+        A, B, C = JuMinuit._parabola_fit3([0.0, 1.0, 2.0], [1.0, 0.0, 1.0])
+        @test A ≈ 1.0
+        @test B ≈ -2.0
+        @test C ≈ 1.0
+
+        # Solve (x-1)² = 2 → roots 1 ± √2. Positive-slope root is 1+√2.
+        prec = JuMinuit.MachinePrecision()
+        sol = JuMinuit._parabola_solve_for_aim(1.0, -2.0, 1.0, 2.0, prec)
+        @test sol !== nothing
+        x_sol, slope = sol
+        @test x_sol ≈ 1.0 + sqrt(2.0)
+        @test slope > 0  # positive-slope root selected
+
+        # Negative-curvature (A < 0) parabola: f(x) = -(x-1)² + 2.
+        # Solve = 1 needs determ = B² - 4A(C-aim) = 4 - 4·(-1)·(2-1-2) = 4 - 4 = 0
+        # → single root x=1. Discriminant ≥ 0 means we still get a result.
+        sol2 = JuMinuit._parabola_solve_for_aim(-1.0, 2.0, 1.0, 1.0, prec)
+        @test sol2 !== nothing
+        # Negative curvature with too-high aim → discriminant < 0
+        sol3 = JuMinuit._parabola_solve_for_aim(-1.0, 2.0, 1.0, 5.0, prec)
+        @test sol3 === nothing
+    end
+
+    @testset "three-point classifier — direct unit tests" begin
+        # 3 points around aim=0: f = (-1, -0.5, +1). noless=2, ibest=2 (closest to 0).
+        ibest, iworst, ileft, iright, iout, noless, ecmn, ecmx =
+            JuMinuit._three_point_classify([0.0, 0.5, 1.0], [-1.0, -0.5, 1.0], 0.0)
+        @test noless == 2
+        @test ibest == 2          # |−0.5−0| = 0.5 is smallest
+        @test iworst == 1         # |−1−0| = 1, |1−0| = 1; first-seen wins iworst
+        @test iright == 3         # f[3] = 1 > 0 → right side
+        @test ileft == 2          # ileft tracks closest-to-aim on left; f[2]=-0.5 > f[1]=-1
+        @test iout == 1           # the farther-left point becomes redundant
+
+        # All three above aim: noless=0
+        _, _, _, _, _, noless0, _, _ =
+            JuMinuit._three_point_classify([0.0, 1.0, 2.0], [2.0, 3.0, 5.0], 1.0)
+        @test noless0 == 0
+
+        # All three below aim: noless=3
+        _, _, _, _, _, noless3, _, _ =
+            JuMinuit._three_point_classify([0.0, 1.0, 2.0], [-2.0, -1.0, -0.5], 1.0)
+        @test noless3 == 3
+    end
 end
