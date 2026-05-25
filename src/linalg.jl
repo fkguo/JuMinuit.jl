@@ -115,11 +115,18 @@ Used at:
 
 # Failure modes
 
-- Singular matrix → `LinearAlgebra.SingularException` (or `(S, :singular)`
-  with `throw_on_fail=false`).
-- Other LAPACK errors propagate.
+- Factorization detects singularity (`sytrf!` returns `info > 0`):
+  - `throw_on_fail=true` (default): throws `LinearAlgebra.SingularException`.
+  - `throw_on_fail=false`: returns `S` unchanged from the partial
+    factorization; caller is responsible for not trusting its
+    contents.
+- `sytri!` inversion failure: always throws via Julia stdlib's
+  internal `chknonsingular`, regardless of `throw_on_fail`.
 
-Returns `S` (mutated to hold the inverse).
+Returns `S` (always — even on soft factorization failure when
+`throw_on_fail=false`; the returned `S` then aliases the partial
+factorization). Not zero-allocation: LAPACK allocates work + ipiv
+buffers internally.
 """
 function sym_invert!(
     S::Symmetric{Float64,Matrix{Float64}};
@@ -166,17 +173,24 @@ sym_eigvals(S::Symmetric{Float64,Matrix{Float64}}) = eigvals(S)
 """
     sum_sym(S) -> Float64
 
-Sum of *unique* elements of a symmetric matrix — the authoritative
-triangle plus diagonal. Equivalent to C++ Minuit2's
-`sum_of_elements(LASymMatrix)` (the packed-lower variant): both sum
-the n(n+1)/2 mathematically-distinct entries.
+Sum of **absolute values** of the unique elements of a symmetric
+matrix — authoritative triangle plus diagonal, summed via `|·|`.
+Mirrors C++ Minuit2's `sum_of_elements(LASymMatrix)`, which
+dispatches to `mndasum` (LINPACK `dasum`) and sums
+absolute values, **not** the signed sum
+(`reference/Minuit2_cpp/src/LaSumOfElements.cxx:26-30`,
+`reference/Minuit2_cpp/src/mndasum.cxx:32-85`).
 
-NOT the same as `sum(parent(S))`, because `parent(S)` may carry
+Critical for `DavidonErrorUpdator` (Phase 0 day 13–18) where the
+quality estimator is
+`dcov = 0.5·(prev + sum_upd / sum_sym(V_new))`. A signed sum here
+would silently diverge from C++ on every iteration with a negative
+entry in the update — essentially every iteration. See parallel-
+review blocking finding A4/C2.
+
+NOT the same as `sum(abs, parent(S))`, because `parent(S)` may carry
 garbage in the non-authoritative triangle after `BLAS.syr!` /
 `sym_rank1_update!` writes.
-
-Used by `DavidonErrorUpdator` (Phase 0 day 13–18) for the
-`dcov = 0.5·(prev + sum_upd/sum_newV)` quality estimator.
 """
 function sum_sym(S::Symmetric{Float64,Matrix{Float64}})
     M = parent(S)
@@ -184,11 +198,11 @@ function sum_sym(S::Symmetric{Float64,Matrix{Float64}})
     s = 0.0
     if S.uplo == 'U'
         @inbounds for j in 1:n, i in 1:j
-            s += M[i, j]
+            s += abs(M[i, j])
         end
     else
         @inbounds for j in 1:n, i in j:n
-            s += M[i, j]
+            s += abs(M[i, j])
         end
     end
     return s

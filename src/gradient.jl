@@ -74,9 +74,15 @@ function initial_gradient!(
         var = par.x[i]
         werr = errs[i]
         gsmin = 8.0 * eps2 * (abs(var) + eps2)
-        # No-limits simplification of `0.5 * (|vplu| + |vmin|)`:
-        dirin = max(werr, gsmin)
+        # No-limits simplification of C++ `0.5 * (|vplu| + |vmin|)`:
+        # in the no-limits case vplu = werr, vmin = -werr, so
+        # 0.5·(|vplu|+|vmin|) = |werr|. The `abs` matters when a
+        # user supplies negative step sizes — without it Julia would
+        # silently differ from C++ (parallel-review B1).
+        dirin = max(abs(werr), gsmin)
         # Safety: never zero (prevents NaN in g2 = 2·up/dirin²).
+        # TODO Phase 1: HasLimits clamp from C++
+        # InitialGradientCalculator.cxx:66-69: `if gstep > 0.5; gstep = 0.5`
         g2 = 2.0 * up_f / (dirin * dirin)
         gstep = max(gsmin, 0.1 * dirin)
         grd = g2 * dirin

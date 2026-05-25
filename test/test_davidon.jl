@@ -151,4 +151,48 @@ using LinearAlgebra
         # Original is untouched (deep-copy semantic)
         @test parent(err0.inv_hessian) == M
     end
+
+    # ─────────────────────────────────────────────────────────
+    # dcov against independent C++-equivalent oracle (parallel-review
+    # D1 — previously missing; the lack of this test let the sum_sym
+    # signed-vs-absolute bug slip through).
+    # ─────────────────────────────────────────────────────────
+    @testset "new_dcov matches C++ sum_of_elements formula (absolute sums)" begin
+        n = 3
+        V0 = Symmetric(Float64[
+            2.0  0.1 -0.05;
+            0.1  3.0  0.2;
+           -0.05 0.2  1.5
+        ], :U)
+        dx = [0.3, -0.4, 0.5]   # mixed signs deliberately
+        dg = [0.1,  0.2, 0.3]
+        prev_dc = 0.7
+
+        # ── Independent oracle: build the update matrix from C++ math ──
+        delgam = dot(dx, dg)
+        vg = parent(V0) * dg  # use parent to ensure plain matvec
+        gvg = dot(dg, vg)
+        # Pure rank-2 base
+        update = (dx * dx') / delgam - (vg * vg') / gvg
+        # Rank-1 additive if applicable
+        if delgam > gvg
+            u = dx ./ delgam .- vg ./ gvg
+            update .+= gvg .* (u * u')
+        end
+        # sum_upd = Σ |update[i,j]| over upper+diagonal (matches mndasum)
+        sum_upd_expected = sum(abs(update[i, j]) for j in 1:n for i in 1:j)
+        # V_new = V0 + update; sum its |entries|
+        V_new_expected = parent(V0) + update
+        sum_V_expected = sum(abs(V_new_expected[i, j]) for j in 1:n for i in 1:j)
+        expected_dcov = 0.5 * (prev_dc + sum_upd_expected / sum_V_expected)
+
+        # ── Actual ──
+        V = Symmetric(copy(parent(V0)), :U)
+        vg_work = zeros(n)
+        vUpd_work = Symmetric(zeros(n, n), :U)
+        new_dc, status = JuMinuit.davidon_update!(
+            V, dx, dg, prev_dc, vg_work, vUpd_work)
+        @test status === :updated
+        @test new_dc ≈ expected_dcov atol = 1e-12
+    end
 end

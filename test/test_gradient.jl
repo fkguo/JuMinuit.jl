@@ -43,6 +43,23 @@
         @test_throws DimensionMismatch initial_gradient!(out_ok, par, [1.0], 1.0)
     end
 
+    # Parallel-review B1: a user passing negative step sizes must
+    # produce the same result as |werr| (matches C++ which uses |vplu|
+    # and |vmin|). Without abs, gradient would silently differ.
+    @testset "initial_gradient! uses |werr| (negative step size)" begin
+        cf = CostFunction(x -> sum(abs2, x))
+        x = [1.0]
+        par = MinimumParameters(x, cf(x))
+        out_pos = FunctionGradient(zeros(1), zeros(1), zeros(1))
+        out_neg = FunctionGradient(zeros(1), zeros(1), zeros(1))
+        initial_gradient!(out_pos, par, [0.5], cf.up)
+        initial_gradient!(out_neg, par, [-0.5], cf.up)  # negative werr
+        # Both should produce identical dirin via |werr|, hence identical results
+        @test out_pos.grad[1] == out_neg.grad[1]
+        @test out_pos.g2[1] == out_neg.g2[1]
+        @test out_pos.gstep[1] == out_neg.gstep[1]
+    end
+
     # ─────────────────────────────────────────────────────────
     @testset "numerical_gradient on quadratic vs analytical ∇f" begin
         # f(x) = Σ xᵢ²; analytical ∇f(x) = 2x; g2 = 2 uniformly.
@@ -96,7 +113,7 @@
     end
 
     # ─────────────────────────────────────────────────────────
-    @testset "numerical_gradient! preserves x_work on exit" begin
+    @testset "numerical_gradient! preserves x_work on exit (bit-exact)" begin
         cf = CostFunction(x -> sum(abs2, x))
         x = [1.0, 2.0, 3.0]
         errs = [0.1, 0.1, 0.1]
@@ -107,8 +124,32 @@
 
         numerical_gradient!(out, x_work, par, prev, cf, Strategy(0))
 
-        # x_work should equal par.x at exit (the algorithm restores)
-        @test x_work ≈ par.x atol = 1e-14
+        # x_work should equal par.x at exit — bit-exact, not just ≈ (the
+        # algorithm assigns xtf back, not (xtf+step)-step). Codex B3.
+        @test x_work == par.x
+    end
+
+    # Parallel-review B7: numerical_gradient! dimension-mismatch tests
+    # (initial_gradient! has them; numerical_gradient! did not).
+    @testset "numerical_gradient! dimension checks" begin
+        cf = CostFunction(x -> sum(abs2, x))
+        par = MinimumParameters([1.0, 2.0], [0.1, 0.1], cf([1.0, 2.0]))
+        prev_ok = initial_gradient(par, [0.1, 0.1], cf)
+        prev_wrong = FunctionGradient(zeros(3), zeros(3), zeros(3))
+        out_ok = FunctionGradient(zeros(2), zeros(2), zeros(2))
+        out_wrong = FunctionGradient(zeros(3), zeros(3), zeros(3))
+        x_ok = zeros(2)
+        x_wrong = zeros(3)
+
+        # out length mismatch
+        @test_throws DimensionMismatch numerical_gradient!(
+            out_wrong, x_ok, par, prev_ok, cf, Strategy(0))
+        # x_work length mismatch
+        @test_throws DimensionMismatch numerical_gradient!(
+            out_ok, x_wrong, par, prev_ok, cf, Strategy(0))
+        # prev length mismatch
+        @test_throws DimensionMismatch numerical_gradient!(
+            out_ok, x_ok, par, prev_wrong, cf, Strategy(0))
     end
 
     # ─────────────────────────────────────────────────────────

@@ -102,7 +102,12 @@ function davidon_update!(
         return (prev_dc_f, :unchanged_delgam_zero)
     end
     if delgam < 0
-        @warn "DFP update: delgam < 0 — first derivatives increasing along search line"
+        # @debug (not @warn) per parallel-review A6: this fires on a
+        # normal mid-fit condition (first derivatives increasing along
+        # search line). C++ uses MnPrint::Warn which is suppressed by
+        # default; Julia @warn prints by default and allocates ~160 B
+        # per fire — too noisy + allocates in the hot path.
+        @debug "DFP update: delgam < 0 — first derivatives increasing along search line"
     end
 
     # ── Step 2: vg = V·dg, γ = dg·vg ─────────────────────────────────

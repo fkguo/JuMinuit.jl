@@ -148,4 +148,37 @@ using LinearAlgebra: BLAS
         @test S[2, 3] == 5.0
         @test S[3, 2] == 5.0
     end
+
+    # ─────────────────────────────────────────────────────────
+    # sum_sym must match C++ sum_of_elements(LASymMatrix) which
+    # dispatches to mndasum / LINPACK dasum = Σ |M[i,j]|.
+    # Parallel-review blocking finding A4/C2 — the test below would
+    # have caught the original signed-sum bug.
+    # ─────────────────────────────────────────────────────────
+    @testset "sum_sym matches C++ Σ|M[i,j]| (mndasum semantics)" begin
+        # Matrix with negative entries: signed sum and absolute sum
+        # produce different results. Authoritative triangle (:U) is
+        # the upper + diagonal: (1, -2, 3, -4, 5, 6).
+        M = Float64[1.0 -2.0  3.0;
+                    99.0 -4.0  5.0;
+                    99.0  99.0 6.0]
+        S = Symmetric(M, :U)
+        # C++ semantics: |1| + |-2| + |3| + |-4| + |5| + |6| = 21
+        @test JuMinuit.sum_sym(S) == 21.0
+        # A signed sum would give 1 - 2 + 3 - 4 + 5 + 6 = 9
+        @test JuMinuit.sum_sym(S) != 9.0
+
+        # All-positive sanity: |·| collapses to identity
+        Mpos = Float64[1.0 2.0; 0.0 3.0]
+        Spos = Symmetric(Mpos, :U)
+        @test JuMinuit.sum_sym(Spos) == 6.0  # 1 + 2 + 3
+
+        # :L convention: authoritative triangle is lower + diagonal
+        M_L = Float64[1.0 99.0 99.0;
+                      -2.0 4.0 99.0;
+                      3.0 -5.0 6.0]
+        S_L = Symmetric(M_L, :L)
+        # |1| + |-2| + |3| + |4| + |-5| + |6| = 21
+        @test JuMinuit.sum_sym(S_L) == 21.0
+    end
 end
