@@ -153,12 +153,38 @@ function _migrad_loop(
     # Initial-state EDM correction (C++ line 229)
     edm_corrected = s0.edm * (1.0 + 3.0 * s0.error.dcovar)
 
-    # Per-iteration scratch (reused across the loop)
+    # ─────────────────────────────────────────────────────────────────────
+    # Per-FIT scratch — allocated ONCE, shared across all iterations.
+    #
+    # • `step`, `ls_work`, `grad_work`, `vg_work`, `vUpd_work` are pure
+    #   in-iteration scratch (overwritten each use; no aliasing risk).
+    # • `dx_buf`, `dg_buf` are DFP-update temporaries (read once per iter,
+    #   consumed by davidon_update!).
+    # • State buffers (x/grad/g2/gstep/V) need **ping-pong** because s0
+    #   wraps one set while the next iteration computes the new state into
+    #   the OTHER set — without ping-pong we'd overwrite s0's data
+    #   mid-iteration. Two sets (A, B) alternate via `use_a` flag.
+    #
+    # Net per-iteration allocations after this refactor: zero vectors,
+    # zero matrices — only four ~48-byte immutable struct wrappers
+    # (MinimumParameters/FunctionGradient/MinimumError/MinimumState).
+    # ─────────────────────────────────────────────────────────────────────
     step      = zeros(Float64, n)
     ls_work   = Vector{Float64}(undef, n)
     grad_work = Vector{Float64}(undef, n)
     vg_work   = Vector{Float64}(undef, n)
     vUpd_work = Symmetric(zeros(Float64, n, n), :U)
+    dx_buf    = Vector{Float64}(undef, n)
+    dg_buf    = Vector{Float64}(undef, n)
+
+    # Ping-pong state buffer sets (A and B)
+    x_a   = Vector{Float64}(undef, n);  x_b   = Vector{Float64}(undef, n)
+    g_a   = Vector{Float64}(undef, n);  g_b   = Vector{Float64}(undef, n)
+    g2_a  = Vector{Float64}(undef, n);  g2_b  = Vector{Float64}(undef, n)
+    gs_a  = Vector{Float64}(undef, n);  gs_b  = Vector{Float64}(undef, n)
+    V_a   = Symmetric(Matrix{Float64}(undef, n, n), :U)
+    V_b   = Symmetric(Matrix{Float64}(undef, n, n), :U)
+    use_a = true   # next iter writes to set A; s0 ends up wrapping A
 
     made_pos_def_flag = false
     hessian_computed = false
@@ -218,11 +244,22 @@ function _migrad_loop(
                 break
             end
 
-            # ── Step 5: accept new point, compute new gradient
-            new_x = Vector{Float64}(undef, n)
-            @inbounds @. new_x = s0.parameters.x + pp.x * step
-            new_par = MinimumParameters(new_x, pp.y)
-            new_grad = FunctionGradient(zeros(Float64, n), zeros(Float64, n), zeros(Float64, n))
+            # ── Step 5: accept new point, compute new gradient.
+            # Select target buffers via ping-pong (s0 currently wraps the
+            # *other* set; we write to `use_a` set here).
+            nx_buf  = use_a ? x_a  : x_b
+            ng_buf  = use_a ? g_a  : g_b
+            ng2_buf = use_a ? g2_a : g2_b
+            ngs_buf = use_a ? gs_a : gs_b
+            nV_buf  = use_a ? V_a  : V_b
+
+            @inbounds @. nx_buf = s0.parameters.x + pp.x * step
+            new_par = MinimumParameters(nx_buf, pp.y)
+            # numerical_gradient! does copyto!(out.*, prev.*) internally,
+            # so we don't need to zero-init ng_*. The ping-pong guarantees
+            # `out` (= new_grad) and `prev` (= s0.gradient) reference
+            # disjoint buffer sets, so the copyto! is well-defined.
+            new_grad = FunctionGradient(ng_buf, ng2_buf, ngs_buf)
             numerical_gradient!(new_grad, grad_work, new_par, s0.gradient,
                                  cf, strategy, prec)
 
@@ -243,24 +280,29 @@ function _migrad_loop(
                 end
             end
 
-            # ── Step 8: DFP update
-            dx = Vector{Float64}(undef, n)
-            dg = Vector{Float64}(undef, n)
-            @inbounds @. dx = new_par.x - s0.parameters.x
-            @inbounds @. dg = new_grad.grad - s0.gradient.grad
+            # ── Step 8: DFP update (reuses pre-allocated dx_buf, dg_buf, nV_buf)
+            @inbounds @. dx_buf = new_par.x - s0.parameters.x
+            @inbounds @. dg_buf = new_grad.grad - s0.gradient.grad
 
-            new_V = Symmetric(copy(parent(s0.error.inv_hessian)), :U)
-            new_dcov, _ = davidon_update!(new_V, dx, dg, s0.error.dcovar,
+            # Copy s0's V into nV_buf's storage, then mutate in place.
+            # `parent(...)` strips the Symmetric wrapper to the underlying
+            # Matrix; we only need to copy the upper triangle but copyto!
+            # on the full storage is faster (no branches) and the lower
+            # half is unused by Symmetric(:U) semantics anyway.
+            copyto!(parent(nV_buf), parent(s0.error.inv_hessian))
+            new_dcov, _ = davidon_update!(nV_buf, dx_buf, dg_buf, s0.error.dcovar,
                                            vg_work, vUpd_work)
             # Reset status to MnHesseValid (matches C++ DavidonErrorUpdator.cxx:67-72
             # which constructs MinimumError(vUpd, dcov) — the regular dcov ctor,
             # not the tag ctor, so status implicitly clears to valid). Without this
             # reset, a transient MnMadePosDef from earlier sticks indefinitely.
-            new_err = MinimumError(new_V, new_dcov, MnHesseValid, true)
+            new_err = MinimumError(nV_buf, new_dcov, MnHesseValid, true)
 
             # ── Step 9: build new state, correct edm
             s0 = MinimumState(new_par, new_err, new_grad, new_edm, ncalls(cf))
             edm_corrected = new_edm * (1.0 + 3.0 * new_err.dcovar)
+
+            use_a = !use_a   # flip so next iter writes to the OTHER set
         end
 
         # ── Strategy ≥ 1 inner-Hesse refinement (C++ lines 138-173) ─────
