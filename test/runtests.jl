@@ -24,4 +24,5 @@ using Test
     include("test_hesse.jl")
     include("test_covariance_squeeze.jl")
     include("test_minos.jl")
+    include("test_contours.jl")
 end
