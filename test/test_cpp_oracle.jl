@@ -72,7 +72,7 @@ const ORACLE_TOL = Dict(
     ),
 )
 
-@testset "C++ JSON oracle parity" begin
+@testset "C++ JSON oracle parity (unbounded MIGRAD)" begin
     for fname in ("quad_4d", "rosenbrock_2d", "rosenbrock_10d")
         path = joinpath(REF_DIR, "$(fname).json")
         if !isfile(path)
@@ -119,6 +119,101 @@ const ORACLE_TOL = Dict(
             # ── NFcn (call count within slack) ─────────────
             ref_nfcn = Int(ref["nfcn"])
             @test abs(nfcn(m) - ref_nfcn) <= tol.nfcn_slack
+        end
+    end
+end
+
+# ═══════════════════════════════════════════════════════════════════
+# Bounded MIGRAD oracle parity (Phase 1.x — closes parallel-review #4
+# E1 test-coverage gap). Each test loads a JSON dumped by the C++
+# tools/cpp_trace_harness with the matching bound configuration and
+# verifies Julia migrad(cf, params) reaches the same external state.
+# ═══════════════════════════════════════════════════════════════════
+
+# Construct the Julia Parameters matching the C++ harness bound config.
+# Tolerances chosen to absorb Strategy(0) cross-impl DFP-approximation
+# variance (the same cross-platform looseness flagged in the unbounded
+# Rosenbrock tolerances above).
+const BOUNDED_FCNS = Dict(
+    "bounded_sin_2d" =>
+        (x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2,
+         () -> [
+             MinuitParameter("p0", 0.3, 0.1; lower = 0.0, upper = 1.0),
+             MinuitParameter("p1", 0.3, 0.1),
+         ]),
+    "bounded_lower_2d" =>
+        (x -> (x[1] - 3.0)^2 + (x[2] - 2.0)^2,
+         () -> [
+             MinuitParameter("p0", 2.0, 0.1; lower = 1.0),
+             MinuitParameter("p1", 1.0, 0.1),
+         ]),
+    "bounded_upper_2d" =>
+        (x -> (x[1] + 1.0)^2 + (x[2] - 0.0)^2,
+         () -> [
+             MinuitParameter("p0", 0.0, 0.1; upper = 5.0),
+             MinuitParameter("p1", 1.0, 0.1),
+         ]),
+    "quad_2d_fixed_y" =>
+        (x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2,
+         () -> [
+             MinuitParameter("p0", 0.0, 0.1),
+             MinuitParameter("p1", 5.0, 0.1; fixed = true),
+         ]),
+)
+
+const BOUNDED_TOL = (
+    rtol_fval = 0.5, atol_fval = 1e-4,
+    rtol_param = 1e-3, atol_param = 1e-3,
+    nfcn_slack = 30,
+)
+
+@testset "C++ JSON oracle parity (bounded MIGRAD)" begin
+    for fname in ("bounded_sin_2d", "bounded_lower_2d", "bounded_upper_2d",
+                   "quad_2d_fixed_y")
+        path = joinpath(REF_DIR, "$(fname).json")
+        if !isfile(path)
+            @info "Skipping bounded oracle test — reference file missing" fname path
+            continue
+        end
+
+        @testset "$fname vs C++ Minuit2 (bounded)" begin
+            ref = JSON.parsefile(path)
+            fcn, params_builder = BOUNDED_FCNS[fname]
+            params = Parameters(params_builder())
+            cf = CostFunction(fcn)
+            m = migrad(cf, params)
+            @test is_valid(m)
+
+            ref_fval = Float64(ref["fval"])
+            @test isapprox(fval(m), ref_fval;
+                            rtol = BOUNDED_TOL.rtol_fval,
+                            atol = BOUNDED_TOL.atol_fval)
+
+            # C++ MnUserParameterState reports only FREE parameters in
+            # `params`/`errors` (matches MnUserParameterState.cxx:151-154).
+            # Julia returns the full external vector including fixed.
+            # Iterate the C++ free-param array, map to Julia free indices.
+            ref_params = Float64.(ref["params"])
+            free_ext_indices = [params.ext_of_int[i] for i in 1:n_free(params)]
+            @test length(free_ext_indices) == length(ref_params)
+            for (k, ext_i) in enumerate(free_ext_indices)
+                @test isapprox(m.ext_values[ext_i], ref_params[k];
+                                rtol = BOUNDED_TOL.rtol_param,
+                                atol = BOUNDED_TOL.atol_param)
+            end
+
+            ref_nfcn = Int(ref["nfcn"])
+            @test abs(nfcn(m) - ref_nfcn) <= BOUNDED_TOL.nfcn_slack
+
+            # Covariance symmetry must hold (parallel-review #4 D3
+            # regression — full external matrix must be symmetric).
+            cov = ext_covariance(m)
+            if cov !== nothing
+                n = size(cov, 1)
+                for i in 1:n, j in 1:n
+                    @test cov[i, j] == cov[j, i]
+                end
+            end
         end
     end
 end

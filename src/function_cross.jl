@@ -120,14 +120,19 @@ function _migrad_with_fixed(
     @inbounds for k in (i + 1):n
         y0[k - 1] = x_min[k]
     end
-    # Initial step sizes from the diagonal of inv_hessian (2·up·V[i,i] = σ²)
+    # Initial step sizes from the post-fit MIGRAD error matrix.
+    # C++ MnUserParameterState constructs free-parameter errors as
+    # sqrt(2·up·V[i,i]) (reference/Minuit2_cpp/src/MnUserParameterState.cxx:151-154).
+    # v1 used sqrt(|V[i,i]|) which under-scaled by √(2·up) — codex
+    # parallel-review #4 A6.
     errs = Vector{Float64}(undef, n - 1)
     V = state.error.inv_hessian
+    scale = 2.0 * cf.up
     @inbounds for k in 1:(i - 1)
-        errs[k] = sqrt(max(abs(V[k, k]), prec.eps2))
+        errs[k] = sqrt(max(scale * V[k, k], prec.eps2))
     end
     @inbounds for k in (i + 1):n
-        errs[k - 1] = sqrt(max(abs(V[k, k]), prec.eps2))
+        errs[k - 1] = sqrt(max(scale * V[k, k], prec.eps2))
     end
 
     cf_fixed = _fix_one_param(cf, i, v, n)

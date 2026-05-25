@@ -210,17 +210,40 @@ struct Case {
     const FCNBase *fcn;
 };
 
+// Encode bounds + fixed flags for a parameter.
+struct ParamMeta {
+    bool has_lower = false;
+    bool has_upper = false;
+    double lower = 0.0;
+    double upper = 0.0;
+    bool fixed = false;
+};
+
 template <typename Fn>
 void run_case(const std::string &outdir,
               const std::string &name,
               const std::vector<double> &x0,
               const std::vector<double> &errs0,
               const Fn &fcn,
-              unsigned strategy_level = 0)
+              unsigned strategy_level = 0,
+              const std::vector<ParamMeta> *meta = nullptr)
 {
     MnUserParameters upar;
     for (size_t i = 0; i < x0.size(); ++i) {
         upar.Add("p" + std::to_string(i), x0[i], errs0[i]);
+        if (meta && i < meta->size()) {
+            const auto &m = (*meta)[i];
+            if (m.has_lower && m.has_upper) {
+                upar.SetLimits(i, m.lower, m.upper);
+            } else if (m.has_upper) {
+                upar.SetUpperLimit(i, m.upper);
+            } else if (m.has_lower) {
+                upar.SetLowerLimit(i, m.lower);
+            }
+            if (m.fixed) {
+                upar.Fix(i);
+            }
+        }
     }
     MnStrategy stra(strategy_level);
     MnMigrad migrad(fcn, upar, stra);
@@ -261,6 +284,65 @@ int main(int argc, char *argv[])
              { -1.2, 1.0, -1.2, 1.0, -1.2, 1.0, -1.2, 1.0, -1.2, 1.0 },
              { 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 },
              rosen10);
+
+    // ── Bounded test cases (Phase 1 §3.4 Criterion 1 oracle) ──
+    // bounded_quad_2d: f = (x - 0.5)² + (y - 0.5)² with x ∈ [0, 1]
+    QuadNF quad2(2);
+    {
+        std::vector<ParamMeta> meta(2);
+        meta[0].has_lower = true; meta[0].lower = 0.0;
+        meta[0].has_upper = true; meta[0].upper = 1.0;
+        // Note: harness FCN is sum(x_i²); to test bounded fit at the
+        // interior optimum we shift in the bounded case via subclass.
+        // Use a direct lambda-wrapper here:
+    }
+    struct CenteredQuad : public FCNBase {
+        explicit CenteredQuad(double cx, double cy) : fCx(cx), fCy(cy) {}
+        double operator()(const std::vector<double> &p) const override {
+            return (p[0] - fCx) * (p[0] - fCx) + (p[1] - fCy) * (p[1] - fCy);
+        }
+        double Up() const override { return 1.0; }
+    private:
+        double fCx, fCy;
+    };
+    CenteredQuad cq(0.5, 0.5);
+    {
+        std::vector<ParamMeta> meta(2);
+        meta[0].has_lower = true; meta[0].lower = 0.0;
+        meta[0].has_upper = true; meta[0].upper = 1.0;
+        run_case(outdir, "bounded_sin_2d",
+                 { 0.3, 0.3 }, { 0.1, 0.1 }, cq, 0, &meta);
+    }
+    // bounded_lower_2d: lower-only bound; minimum well inside the bound
+    CenteredQuad cq2(3.0, 2.0);
+    {
+        std::vector<ParamMeta> meta(2);
+        meta[0].has_lower = true; meta[0].lower = 1.0;
+        run_case(outdir, "bounded_lower_2d",
+                 { 2.0, 1.0 }, { 0.1, 0.1 }, cq2, 0, &meta);
+    }
+    // bounded_upper_2d: upper-only bound
+    CenteredQuad cq3(-1.0, 0.0);
+    {
+        std::vector<ParamMeta> meta(2);
+        meta[0].has_upper = true; meta[0].upper = 5.0;
+        run_case(outdir, "bounded_upper_2d",
+                 { 0.0, 1.0 }, { 0.1, 0.1 }, cq3, 0, &meta);
+    }
+    // quad_2d_fixed: y fixed at 5; x free; minimum of f at x=1, fval=(5-2)²=9
+    struct Shifted2D : public FCNBase {
+        double operator()(const std::vector<double> &p) const override {
+            return (p[0] - 1.0) * (p[0] - 1.0) + (p[1] - 2.0) * (p[1] - 2.0);
+        }
+        double Up() const override { return 1.0; }
+    };
+    Shifted2D sh;
+    {
+        std::vector<ParamMeta> meta(2);
+        meta[1].fixed = true;
+        run_case(outdir, "quad_2d_fixed_y",
+                 { 0.0, 5.0 }, { 0.1, 0.1 }, sh, 0, &meta);
+    }
 
     return 0;
 }

@@ -1,0 +1,24 @@
+{
+  "name": "bounded_sin_2d",
+  "_meta": {
+    "source": "GooFit/Minuit2 @ 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84",
+    "version": "6.24.0",
+    "strategy_level": 0,
+    "err_def": 1,
+    "generator": "tools/cpp_trace_harness.cxx"
+  },
+  "x0": [0.29999999999999999, 0.29999999999999999],
+  "errs0": [0.10000000000000001, 0.10000000000000001],
+  "fval": 1.5014462624461935e-06,
+  "edm":  1.5756089297448381e-06,
+  "nfcn": 21,
+  "is_valid":         true,
+  "has_covariance":   true,
+  "has_pos_def_cov":  true,
+  "hesse_failed":     false,
+  "made_pos_def":     false,
+  "reached_call_limit": false,
+  "params": [0.49918797264648185, 0.49908236290420205],
+  "errors": [0.72441273584997901, 1.0132678525963954],
+  "covariance_upper": [1.0219762700738979, 0.023034761438481911, 1.0267117411053104]
+}

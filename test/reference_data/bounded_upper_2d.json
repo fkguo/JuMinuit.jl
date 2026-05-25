@@ -1,0 +1,24 @@
+{
+  "name": "bounded_upper_2d",
+  "_meta": {
+    "source": "GooFit/Minuit2 @ 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84",
+    "version": "6.24.0",
+    "strategy_level": 0,
+    "err_def": 1,
+    "generator": "tools/cpp_trace_harness.cxx"
+  },
+  "x0": [0, 1],
+  "errs0": [0.10000000000000001, 0.10000000000000001],
+  "fval": 4.683170406932461e-05,
+  "edm":  4.7414403722392638e-05,
+  "nfcn": 10,
+  "is_valid":         true,
+  "has_covariance":   true,
+  "has_pos_def_cov":  true,
+  "hesse_failed":     false,
+  "made_pos_def":     false,
+  "reached_call_limit": false,
+  "params": [-1.0068433693506433, 1.3977663471109736e-10],
+  "errors": [1.003392952243733, 1.000855323780693],
+  "covariance_upper": [1.0072358659079197, -0.0017061677676327817, 1.0017113791401557]
+}
