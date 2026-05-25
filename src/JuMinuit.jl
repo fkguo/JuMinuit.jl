@@ -41,6 +41,7 @@ include("seed.jl")
 include("result.jl")
 include("migrad.jl")
 include("transform.jl")
+include("parameters.jl")
 
 # Phase 0 public surface (will grow as files are added).
 export MachinePrecision
@@ -63,5 +64,11 @@ export seed_state
 export FunctionMinimum, migrad
 export parameters, errors, gradient, covariance
 export reached_call_limit, above_max_edm
+export MinuitParameter, Parameters
+export has_lower_limit, has_upper_limit, has_limits, is_fixed
+export n_pars, n_free, ext_index
+export int_to_ext_value, ext_to_int_value, dint2ext_value
+export int_to_ext_vector, ext_to_int_vector
+export initial_int_values, initial_int_errors
 
 end # module JuMinuit

@@ -20,4 +20,5 @@ using Test
     include("test_cpp_oracle.jl")
     include("test_aqua_jet.jl")
     include("test_transform.jl")
+    include("test_parameters.jl")
 end
