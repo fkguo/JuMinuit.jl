@@ -101,6 +101,20 @@ function seed_state(
         state = negative_g2_line_search(state, cf, strategy, prec)
     end
 
-    # Phase 0: no MnHesse seed-refinement (DR-008).
+    # Strategy(2): seed-time MnHesse bootstrap.
+    # Mirrors C++ `MnSeedGenerator.cxx:88-98`:
+    #     if (stra.Strategy() == 2 && !st.HasCovariance())
+    #         MinimumState tmp = MnHesse(stra)(fcn, state, st.Trafo());
+    # The user-state never carries a pre-computed covariance through
+    # JuMinuit's API (we always start with the diagonal-from-step-sizes
+    # estimate), so `!HasCovariance` collapses to "always when Strategy 2".
+    # The bootstrap gives MIGRAD a full-rank Hessian to start with,
+    # which on hard problems saves a couple of outer-loop iterations
+    # vs. having the inner-Hesse refinement build it up after MIGRAD
+    # converges.
+    if strategy.level == 2
+        state = hesse(cf, state, strategy; prec = prec)
+    end
+
     return state
 end
