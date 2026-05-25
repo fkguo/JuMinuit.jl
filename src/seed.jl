@@ -73,8 +73,16 @@ function seed_state(
     fval = cf(x)
     par = MinimumParameters(x, dirin, fval)
 
-    # Cold-start gradient computation (initial rough + Numerical2P refine).
-    grad = numerical_gradient(par, cf, strategy, prec)
+    # Cold-start gradient computation. Reuse a single FunctionGradient
+    # buffer across the rough initial estimate AND the Numerical2P
+    # refinement (numerical_gradient! does `copyto!(out, prev)` internally,
+    # so out === prev is a safe no-op self-copy followed by in-place refine).
+    # Saves 3 vector allocations vs. the two-stage allocating wrapper.
+    grad = FunctionGradient(zeros(Float64, n), zeros(Float64, n),
+                             zeros(Float64, n))
+    initial_gradient!(grad, par, dirin, cf.up, prec)
+    x_work = Vector{Float64}(undef, n)
+    numerical_gradient!(grad, x_work, par, grad, cf, strategy, prec)
 
     # Diagonal inverse-Hessian (C++ MnSeedGenerator.cxx:69-70).
     mat = zeros(n, n)
@@ -83,7 +91,9 @@ function seed_state(
     end
     err = MinimumError(Symmetric(mat, :U), 1.0)
 
-    edm_val = estimate_edm(grad, err)
+    # Use the in-place EDM variant — x_work is free to reuse (refined
+    # gradient is done, we don't need x_work for it anymore).
+    edm_val = estimate_edm!(x_work, grad, err)
     state = MinimumState(par, err, grad, edm_val, ncalls(cf))
 
     # Unconditional NegativeG2 check (Opus blocking #2).

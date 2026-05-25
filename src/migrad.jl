@@ -263,8 +263,10 @@ function _migrad_loop(
             numerical_gradient!(new_grad, grad_work, new_par, s0.gradient,
                                  cf, strategy, prec)
 
-            # ── Step 6: EDM using OLD error matrix (C++ line 300)
-            new_edm = estimate_edm(new_grad, s0.error)
+            # ── Step 6: EDM using OLD error matrix (C++ line 300).
+            # `estimate_edm!` reuses vg_work; the allocating `estimate_edm`
+            # would let BLAS build an internal temporary each call.
+            new_edm = estimate_edm!(vg_work, new_grad, s0.error)
 
             if isnan(new_edm)
                 break
@@ -274,7 +276,7 @@ function _migrad_loop(
             if new_edm < 0
                 s0 = make_posdef(s0, prec)
                 made_pos_def_flag = true
-                new_edm = estimate_edm(new_grad, s0.error)
+                new_edm = estimate_edm!(vg_work, new_grad, s0.error)
                 if new_edm < 0
                     break
                 end

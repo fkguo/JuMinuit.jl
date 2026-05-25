@@ -183,7 +183,8 @@ function seed_state(
         mat[i, i] = abs(grad.g2[i]) > prec.eps2 ? 1.0 / grad.g2[i] : 1.0
     end
     err = MinimumError(Symmetric(mat, :U), 1.0)
-    edm_val = estimate_edm(grad, err)
+    # In-place EDM avoids the BLAS internal temporary in `dot(g, V, g)`.
+    edm_val = estimate_edm!(Vector{Float64}(undef, n_total), grad, err)
     state = MinimumState(par, err, grad, edm_val, ncalls(cf))
 
     # Unconditional negative_g2 check (Opus blocking #2 from review #1)

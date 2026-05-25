@@ -247,7 +247,9 @@ function hesse(
     new_err_status = is_made_pos_def(err_tmp) ? MnMadePosDef : MnHesseValid
     new_dcov = is_made_pos_def(err_tmp) ? 1.0 : 0.0
     new_err = MinimumError(Symmetric(vhmat_pd, :U), new_dcov, new_err_status, true)
-    new_edm = estimate_edm(refined_grad, new_err)
+    # In-place EDM — reuse `yy` (already length n, contents no longer needed
+    # after the off-diagonal pass completed above).
+    new_edm = estimate_edm!(yy, refined_grad, new_err)
 
     return MinimumState(state.parameters, new_err, refined_grad,
                         new_edm, ncalls(cf))

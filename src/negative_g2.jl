@@ -158,7 +158,10 @@ function negative_g2_line_search(
         M[i, i] = abs(work_g.g2[i]) > eps2 ? 1.0 / work_g.g2[i] : 1.0
     end
     err = MinimumError(Symmetric(M, :U), 1.0)
-    edm_val = estimate_edm(work_g, err)
+    # In-place EDM avoids a BLAS internal temporary in `dot(g, V, g)`.
+    # Reuse the line-search workspace as the EDM scratch — it has the
+    # right size and we no longer need its contents here.
+    edm_val = estimate_edm!(x_work, work_g, err)
 
     if edm_val < 0
         # Re-mark with MnNotPosDef per C++ lines 102-104
