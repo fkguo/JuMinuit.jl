@@ -102,27 +102,79 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Base.show(io::IO, ::MIME"text/plain", m::FunctionMinimum)
-    println(io, "JuMinuit FunctionMinimum")
-    println(io, "  valid:              ", m.is_valid)
-    println(io, "  fval:               ", m.state.parameters.fval)
-    println(io, "  edm:                ", m.state.edm)
-    println(io, "  nfcn:               ", m.state.nfcn)
-    println(io, "  reached_call_limit: ", m.reached_call_limit)
-    println(io, "  above_max_edm:      ", m.above_max_edm)
-    println(io, "  has_covariance:     ", has_covariance(m))
-    println(io, "  parameters:")
+    # iminuit-style two-column box (Phase 3 parity). The table is 71 chars
+    # wide (35 + 1 separator + 35) — matches iminuit's default repr layout.
+    _show_minimum_box(io, m)
+    println(io)
+    _show_parameter_box(io, m)
+end
+
+# Internal: 71-char two-column box with title and status flags
+function _show_minimum_box(io::IO, m::FunctionMinimum)
+    fval = m.state.parameters.fval
+    edm = m.state.edm
+    nfcn = m.state.nfcn
+
+    # Top border + title
+    println(io, "┌", "─"^71, "┐")
+    println(io, "│", _center("Migrad", 71), "│")
+    println(io, "├", "─"^35, "┬", "─"^35, "┤")
+
+    # Row 1: FCN | Nfcn
+    lhs = " FCN = $(_fmt_num(fval))"
+    rhs = _center("Nfcn = $nfcn", 35)
+    println(io, "│", _ljust(lhs, 35), "│", rhs, "│")
+
+    # Row 2: EDM | (blank or strategy hint)
+    edm_str = " EDM = $(_fmt_num(edm)) (Goal: $(_fmt_num(2e-3 * m.up)))"
+    println(io, "│", _ljust(edm_str, 35), "│", " "^35, "│")
+
+    # Status row 1
+    println(io, "├", "─"^35, "┼", "─"^35, "┤")
+    valid_str = m.is_valid ? "Valid Minimum" : "INVALID Minimum"
+    edm_status = m.above_max_edm ? "EDM ABOVE threshold (x 10)" :
+                                     "Below EDM threshold (goal x 10)"
+    println(io, "│", _center(valid_str, 35), "│", _center(edm_status, 35), "│")
+
+    # Status row 2: parameter limits & call limit
+    println(io, "├", "─"^35, "┼", "─"^35, "┤")
+    # FunctionMinimum doesn't track parameter limits (bounded variant has);
+    # report a placeholder. BoundedFunctionMinimum overrides show separately.
+    lim_str = "No parameters at limit"
+    nfcn_str = m.reached_call_limit ? "AT call limit" : "Below call limit"
+    println(io, "│", _center(lim_str, 35), "│", _center(nfcn_str, 35), "│")
+
+    # Status row 3: hesse + covariance
+    println(io, "├", "─"^35, "┼", "─"^35, "┤")
+    hesse_str = m.hesse_failed ? "Hesse FAILED" : "Hesse OK"
+    cov_str = has_covariance(m) ?
+        (m.made_pos_def ? "Covariance forced pos-def" : "Covariance accurate") :
+        "No covariance"
+    println(io, "│", _center(hesse_str, 35), "│", _center(cov_str, 35), "│")
+
+    println(io, "└", "─"^35, "┴", "─"^35, "┘")
+end
+
+# Internal: parameter table
+function _show_parameter_box(io::IO, m::FunctionMinimum)
     x = m.state.parameters.x
     n = length(x)
-    if has_covariance(m)
-        for i in 1:n
-            sig = sqrt(2 * m.up * m.state.error.inv_hessian[i, i])
-            println(io, "    [", i, "] ", x[i], " ± ", sig)
-        end
-    else
-        for i in 1:n
-            println(io, "    [", i, "] ", x[i])
-        end
+    # Column widths: idx(3) name(8) value(15) hesse(15) total = 41 + 3 separators = 44
+    println(io, "┌", "─"^3, "┬", "─"^8, "┬", "─"^15, "┬", "─"^15, "┐")
+    println(io, "│", _center("", 3), "│", _center("Name", 8), "│",
+                 _center("Value", 15), "│", _center("Hesse Err", 15), "│")
+    println(io, "├", "─"^3, "┼", "─"^8, "┼", "─"^15, "┼", "─"^15, "┤")
+    has_cov = has_covariance(m)
+    for i in 1:n
+        idx = _ljust(" $i", 3)
+        name = _ljust(" x$(i-1)", 8)
+        val_s = _center(_fmt_num(x[i]), 15)
+        err_s = has_cov ?
+            _center(_fmt_num(sqrt(max(2 * m.up * m.state.error.inv_hessian[i, i], 0.0))), 15) :
+            _center("—", 15)
+        println(io, "│", idx, "│", name, "│", val_s, "│", err_s, "│")
     end
+    println(io, "└", "─"^3, "┴", "─"^8, "┴", "─"^15, "┴", "─"^15, "┘")
 end
 
 Base.show(io::IO, m::FunctionMinimum) =
@@ -130,3 +182,38 @@ Base.show(io::IO, m::FunctionMinimum) =
               ", edm=", m.state.edm,
               ", nfcn=", m.state.nfcn,
               ", valid=", m.is_valid, ")")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Layout helpers (iminuit-style boxes use these — see `_show_minimum_box`,
+# `_show_parameter_box`, and the bounded/MinosError variants in their own
+# files). String widths use byte counts not visual width — we use only
+# ASCII fillers internally so width math is safe.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@inline function _ljust(s::AbstractString, w::Int)
+    n = length(s)
+    n >= w ? s : s * " "^(w - n)
+end
+
+@inline function _center(s::AbstractString, w::Int)
+    n = length(s)
+    n >= w && return s
+    lpad = (w - n) ÷ 2
+    rpad = w - n - lpad
+    return " "^lpad * s * " "^rpad
+end
+
+# Number formatter: 3-significant-digit scientific for tiny/huge, fixed for moderate
+function _fmt_num(x::Real)
+    isnan(x) && return "NaN"
+    isinf(x) && return string(x)
+    ax = abs(x)
+    if ax == 0.0
+        return "0"
+    elseif ax < 1e-3 || ax >= 1e5
+        # scientific
+        return @sprintf("%.3e", x)
+    else
+        return @sprintf("%.4g", x)
+    end
+end

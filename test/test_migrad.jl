@@ -76,12 +76,16 @@
         @test gradient(m) isa FunctionGradient
         @test has_covariance(m)
         @test covariance(m) isa Symmetric{Float64,Matrix{Float64}}
-        # Pretty-print should work without error
+        # Pretty-print should work without error. Phase 3 ships an
+        # iminuit-style box; the text contains "Migrad" + "Valid Minimum"
+        # for a valid converged result.
         buf = IOBuffer()
         show(buf, MIME"text/plain"(), m)
         s = String(take!(buf))
-        @test occursin("FunctionMinimum", s)
-        @test occursin("valid:", s)
+        @test occursin("Migrad", s)
+        @test occursin("Valid Minimum", s) || occursin("INVALID", s)
+        # Single-line repr still uses the FunctionMinimum prefix
+        @test occursin("FunctionMinimum", repr(m))
     end
 
     @testset "Strategy(1)/(2) inner-Hesse refinement (Phase 1 exit gate)" begin

@@ -146,3 +146,59 @@ function minos(fmin::FunctionMinimum, cf::CostFunction; kwargs...)
     n = length(fmin.state.parameters)
     return [minos(fmin, cf, i; kwargs...) for i in 1:n]
 end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pretty-print (iminuit-style box) — Phase 3 parity polish
+# ─────────────────────────────────────────────────────────────────────────────
+
+function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
+    # iminuit "Minos" box: 71-char width, 3-row status
+    println(io, "┌", "─"^71, "┐")
+    println(io, "│", _center("Minos — par x$(e.par_idx-1)", 71), "│")
+    println(io, "├", "─"^35, "┬", "─"^35, "┤")
+    val_str = " value = $(_fmt_num(e.min_par_value))"
+    nfcn_str = _center("Nfcn = $(e.nfcn)", 35)
+    println(io, "│", _ljust(val_str, 35), "│", nfcn_str, "│")
+    println(io, "├", "─"^35, "┼", "─"^35, "┤")
+    err_str = " error = +$(_fmt_num(e.upper))  −$(_fmt_num(-e.lower))"
+    valid_str = is_valid(e) ? "Valid" : "INVALID"
+    println(io, "│", _ljust(err_str, 35), "│", _center(valid_str, 35), "│")
+    println(io, "├", "─"^35, "┼", "─"^35, "┤")
+    up_status = if e.upper_new_min
+        "Upper: NEW MIN found"
+    elseif e.upper_fcn_limit
+        "Upper: call-limit hit"
+    elseif e.upper_valid
+        "Upper: OK"
+    else
+        "Upper: FAILED"
+    end
+    lo_status = if e.lower_new_min
+        "Lower: NEW MIN found"
+    elseif e.lower_fcn_limit
+        "Lower: call-limit hit"
+    elseif e.lower_valid
+        "Lower: OK"
+    else
+        "Lower: FAILED"
+    end
+    println(io, "│", _center(up_status, 35), "│", _center(lo_status, 35), "│")
+    println(io, "└", "─"^35, "┴", "─"^35, "┘")
+end
+
+Base.show(io::IO, e::MinosError) =
+    print(io, "MinosError(par=", e.par_idx, ", val=", e.min_par_value,
+              ", +", e.upper, " −", -e.lower,
+              ", valid=", is_valid(e), ")")
+
+# Vector{MinosError} — one box per error
+function Base.show(io::IO, mime::MIME"text/plain", es::AbstractVector{MinosError})
+    if isempty(es)
+        println(io, "Empty Vector{MinosError}")
+        return
+    end
+    for (i, e) in enumerate(es)
+        i > 1 && println(io)
+        show(io, mime, e)
+    end
+end
