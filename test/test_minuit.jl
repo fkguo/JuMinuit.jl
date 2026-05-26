@@ -220,13 +220,16 @@
             @test m.values[1] ≈ 10.0 atol = 1e-2   # at upper bound
             minos(m, 1)
             e = m.minos_errors[1]
-            # Upper saturated: ext shift = 0, invalid, par_limit
-            # (NOT fcn_limit — par_limit means "hit a bound", fcn_limit
-            # means "ran out of FCN budget"; round-3 I-4 separates them).
-            @test e.upper == 0.0
+            # Upper saturated: par_limit raised (NOT fcn_limit — round-3
+            # I-4 separates them: par_limit = "hit a bound", fcn_limit =
+            # "exhausted budget"). The published `upper` value equals
+            # the PHYSICAL bound_distance, matching iminuit. For this
+            # at-the-bound case bound_distance is essentially 0.
+            bound_distance = m.params.pars[1].upper - m.values[1]
             @test !e.upper_valid
             @test e.upper_par_limit
             @test !e.upper_fcn_limit
+            @test e.upper ≈ bound_distance atol = 1e-6
             # Lower side: search goes away from bound, finds interior
             # crossing (or also saturates if x has bumped 1σ toward the
             # bound). Sign must be ≤ 0.

@@ -344,14 +344,30 @@ function _minos_external_via_function_cross(
                                      tlr = tlr, maxcalls = maxcalls,
                                      strategy = strategy, prec = prec)
 
-    # External errors = aopt * (truncated ext step). aopt is the alpha
-    # multiplier returned by _cross_core; the step has been truncated
-    # to non-negative magnitude above, with direction encoded by the
-    # ±1 dir argument to function_cross_external. Sign is automatic
-    # by construction (upper_err ≥ 0, lower_err ≤ 0) — no defense-in-
-    # depth needed (round-3 reviewers confirmed unreachable).
-    upper_err = cr_up.valid ? cr_up.aopt * step_up : 0.0
-    lower_err = cr_lo.valid ? -cr_lo.aopt * step_lo : 0.0
+    # External errors = aopt · (truncated ext step). Three cases per
+    # side:
+    #   - search succeeded (valid)    → aopt · step (the asymmetric error)
+    #   - search hit a bound (par_limit) → publish `bound − ext_min` (the
+    #       physical distance from minimum to the constraining bound).
+    #       Matches C++ MinosError::Upper() and iminuit's `m.merrors[].upper`
+    #       semantics: "the parameter can move at most this much in this
+    #       direction before hitting the bound."
+    #   - other failure (fcn_limit, etc.) → 0.0 (no information).
+    # Sign convention: upper_err ≥ 0 by construction; lower_err ≤ 0.
+    upper_err = if cr_up.valid
+        cr_up.aopt * step_up
+    elseif cr_up.par_limit
+        par.upper - ext_min            # bound_distance (positive)
+    else
+        0.0
+    end
+    lower_err = if cr_lo.valid
+        -cr_lo.aopt * step_lo
+    elseif cr_lo.par_limit
+        par.lower - ext_min            # bound_distance (negative)
+    else
+        0.0
+    end
 
     # par_limit and fcn_limit are now PER-SIDE and DISTINGUISHABLE
     # (round-3 I-4). par_limit = "hit a parameter bound during the
