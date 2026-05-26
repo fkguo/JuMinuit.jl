@@ -89,13 +89,88 @@
         @test occursin("not yet minimized", s)
         @test occursin("[-5.0, 5.0]", s)
 
-        # After migrad
+        # After migrad — Phase 3 C1 Unicode table format
         migrad!(m)
         buf2 = IOBuffer()
         show(buf2, MIME"text/plain"(), m)
         s2 = String(take!(buf2))
-        @test occursin("valid:", s2)
-        @test occursin("fval:", s2)
+        # Header line carries fval / edm / nfcn / status
+        @test occursin("fval=", s2)
+        @test occursin("nfcn=", s2)
+        @test occursin("Valid", s2)
+        # Unicode box-drawing characters present
+        @test occursin("┌", s2)
+        @test occursin("┤", s2)
+        @test occursin("└", s2)
+        # Column headers
+        for col in ("Name", "Value", "Hesse ±", "Minos −", "Minos +",
+                    "Limit −", "Limit +", "Fixed")
+            @test occursin(col, s2)
+        end
+    end
+
+    @testset "C1 (a) at-limit warning detection" begin
+        # Force a parameter to sit on a tight lower bound: fit
+        # (x-0.5)² with x ∈ [0.3, 10]. The minimum is at 0.5, the lower
+        # bound is 0.3 away — well within 1σ (Hesse err ≈ 1.0).
+        cf = x -> (x[1] - 0.5)^2
+        m = Minuit(cf, [1.0]; name = ["a"], limit_a = (0.3, 10.0))
+        migrad(m)
+        @test m.is_valid
+        # At-limit detector should flag `a` (lower edge within 1σ)
+        @test 1 in JuMinuit._at_limit_indices(m)
+        # Warning visible in text/plain output
+        buf = IOBuffer()
+        show(buf, MIME"text/plain"(), m)
+        s = String(take!(buf))
+        @test occursin("⚠", s)
+        @test occursin("`a`", s)
+        @test occursin("lower limit", s)
+        @test occursin("unreliable", s)
+
+        # Negative case: parameter NOT at limit
+        cf2 = x -> (x[1] - 5.0)^2
+        m2 = Minuit(cf2, [4.0]; name = ["a"], limit_a = (-100.0, 100.0))
+        migrad(m2)
+        @test isempty(JuMinuit._at_limit_indices(m2))
+        buf2 = IOBuffer()
+        show(buf2, MIME"text/plain"(), m2)
+        s2 = String(take!(buf2))
+        @test !occursin("⚠", s2)
+    end
+
+    @testset "C1 (c) HTML repr (IJulia / Pluto)" begin
+        cf = x -> sum(abs2, x .- [1.0, 2.0])
+        m = Minuit(cf, [0.0, 0.0]; names = ["a", "b"])
+        # Before migrad
+        buf = IOBuffer()
+        show(buf, MIME"text/html"(), m)
+        @test occursin("not yet minimized", String(take!(buf)))
+
+        # After migrad
+        migrad(m)
+        buf = IOBuffer()
+        show(buf, MIME"text/html"(), m)
+        s = String(take!(buf))
+        # HTML structure
+        @test occursin("<table", s)
+        @test occursin("<thead", s)
+        @test occursin("<tbody", s)
+        @test occursin("</table>", s)
+        # Column headers and a status badge
+        @test occursin("Hesse ±", s)
+        @test occursin("Minos −", s)
+        @test occursin("Valid", s)
+
+        # at-limit + HTML: yellow warning div appears
+        m_lim = Minuit(x -> (x[1] - 0.5)^2, [1.0];
+                       name = ["a"], limit_a = (0.3, 10.0))
+        migrad(m_lim)
+        buf = IOBuffer()
+        show(buf, MIME"text/html"(), m_lim)
+        s_lim = String(take!(buf))
+        @test occursin("⚠", s_lim)
+        @test occursin("<code>a</code>", s_lim)
     end
 
     @testset "Argument validation" begin

@@ -656,10 +656,96 @@ end
 # Pretty printing
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Helpers for pretty-print (Phase 3 C1 polish) ─────────────────────────────
+
+"""
+    _at_limit_indices(m::Minuit; n_sigma=1.0) -> Vector{Int}
+
+Return external indices of parameters whose converged value sits
+within `n_sigma · Hesse_err` of one of their explicit limits. That's
+the iminuit-style "the limit is within 1σ of the fit value" test —
+when it's true the Hesse/MINOS error is suspect because the sin/sqrt
+transform's Jacobian collapses near the boundary, and the 1σ
+contour gets cut off by the limit.
+
+If the Hesse error is zero or NaN (e.g., before HESSE has converged),
+falls back to `0.01 × |range|` so the detector still flags clearly
+saturated parameters.
+"""
+function _at_limit_indices(m::Minuit; n_sigma::Real = 1.0)
+    out = Int[]
+    m.fmin === nothing && return out
+    @inbounds for (i, p) in enumerate(m.params.pars)
+        is_fixed(p) && continue
+        v = m.values[i]
+        e = m.errors[i]
+        # Use 1σ if available, else fall back to 1% of the bound range.
+        δ = if isfinite(e) && e > 0
+            n_sigma * e
+        elseif has_limits(p)
+            0.01 * (p.upper - p.lower)
+        else
+            0.01 * max(1.0, abs(v))
+        end
+        hit_lower = (has_limits(p) || has_lower_limit(p)) &&
+                    (v - p.lower) < δ
+        hit_upper = (has_limits(p) || has_upper_limit(p)) &&
+                    (p.upper - v) < δ
+        (hit_lower || hit_upper) && push!(out, i)
+    end
+    return out
+end
+
+# Format a Float64 for the pretty-print table. Uses 4 significant
+# digits by default; "─" placeholder for non-applicable cells (fixed
+# params' error, missing MINOS, etc.).
+_fmt_cell(::Nothing) = "─"
+_fmt_cell(x::Float64) = isnan(x) ? "─" : (@sprintf "%.4g" x)
+_fmt_cell(x::Real) = _fmt_cell(Float64(x))
+
+# Per-parameter row tuple for the table. Shared by text/plain and HTML
+# renderers (Phase 3 C1 (b) + (c)).
+function _param_row_data(m::Minuit, i::Int)
+    p = m.params.pars[i]
+    fixed = is_fixed(p)
+    value = m.values[i]
+    hesse_err = fixed ? nothing : m.errors[i]
+    minos_lo = nothing
+    minos_hi = nothing
+    if haskey(m.minos_errors, i)
+        me = m.minos_errors[i]
+        minos_lo = me.lower_valid ? me.lower : nothing
+        minos_hi = me.upper_valid ? me.upper : nothing
+    end
+    limit_lo = has_lower_limit(p) || has_limits(p) ? p.lower : nothing
+    limit_hi = has_upper_limit(p) || has_limits(p) ? p.upper : nothing
+    return (idx = i, name = p.name, value = value,
+            hesse = hesse_err, minos_lo = minos_lo, minos_hi = minos_hi,
+            limit_lo = limit_lo, limit_hi = limit_hi, fixed = fixed)
+end
+
+# Status line: "Valid ✓" or "INVALID ✗", with key diagnostic bits
+# only when relevant (we don't show "Below call limit ✓" because
+# that's the default; same for hesse-ok).
+function _status_summary(m::Minuit)
+    m.fmin === nothing && return "not yet minimized"
+    bits = String[]
+    push!(bits, m.is_valid ? "Valid ✓" : "INVALID ✗")
+    bfm = m.fmin
+    bfm.internal.reached_call_limit && push!(bits, "call-limit ✗")
+    bfm.internal.above_max_edm        && push!(bits, "EDM-above-max ✗")
+    bfm.internal.hesse_failed         && push!(bits, "Hesse failed ✗")
+    bfm.internal.made_pos_def         && push!(bits, "force-PosDef")
+    return join(bits, "  ")
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# text/plain — Unicode box-drawn table (Phase 3 C1 (b))
+# ─────────────────────────────────────────────────────────────────────────────
+
 function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
-    println(io, "JuMinuit.Minuit (iminuit-style wrapper)")
     if m.fmin === nothing
-        println(io, "  ── not yet minimized; call `migrad!(m)` ──")
+        println(io, "JuMinuit.Minuit  ── not yet minimized; call `migrad(m)` ──")
         println(io, "  parameters (initial):")
         for (i, p) in enumerate(m.params.pars)
             fixed_tag = is_fixed(p) ? "  [FIXED]" : ""
@@ -675,27 +761,139 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
             println(io, "    [", i, "] ", p.name, " = ", p.value,
                     " ± ", p.error, fixed_tag, bounds)
         end
-    else
-        println(io, "  valid:    ", m.valid)
-        println(io, "  fval:     ", m.fval)
-        println(io, "  edm:      ", m.edm)
-        println(io, "  nfcn:     ", m.nfcn)
-        println(io, "  parameters (external):")
-        for (i, p) in enumerate(m.params.pars)
-            val = m.values[i]
-            err = m.errors[i]
-            fixed_tag = is_fixed(p) ? "  [FIXED]" : ""
-            mn_tag = ""
-            if haskey(m.minos_errors, i)
-                me = m.minos_errors[i]
-                mn_tag = "  MINOS: +$(me.upper) -$(-me.lower)"
+        return
+    end
+
+    # Header line
+    @printf(io, "JuMinuit.Minuit  fval=%.6g  edm=%.3g  nfcn=%d  %s\n",
+            m.fval, m.edm, m.nfcn, _status_summary(m))
+
+    # Build rows + compute column widths
+    headers = ["#", "Name", "Value", "Hesse ±", "Minos −", "Minos +",
+               "Limit −", "Limit +", "Fixed"]
+    rows = [_param_row_data(m, i) for i in 1:n_pars(m.params)]
+    cells = [[
+        string(r.idx),
+        r.name,
+        _fmt_cell(r.value),
+        _fmt_cell(r.hesse),
+        _fmt_cell(r.minos_lo),
+        _fmt_cell(r.minos_hi),
+        _fmt_cell(r.limit_lo),
+        _fmt_cell(r.limit_hi),
+        r.fixed ? "yes" : "",
+    ] for r in rows]
+    widths = [maximum(length(c) for c in [headers[k]; [row[k] for row in cells]])
+              for k in 1:length(headers)]
+    pad = w -> w + 2
+
+    # Top / mid / bottom border builders
+    border(left, mid, right) = string(left,
+        join(["─" ^ pad(w) for w in widths], mid), right)
+    top    = border("┌", "┬", "┐")
+    middle = border("├", "┼", "┤")
+    bottom = border("└", "┴", "┘")
+
+    row_str(cs) = string("│",
+        join([" " * rpad(c, widths[k]) * " " for (k, c) in enumerate(cs)], "│"),
+        "│")
+
+    println(io, top)
+    println(io, row_str(headers))
+    println(io, middle)
+    for row in cells
+        println(io, row_str(row))
+    end
+    println(io, bottom)
+
+    # At-limit warnings (Phase 3 C1 (a))
+    al = _at_limit_indices(m)
+    if !isempty(al)
+        for i in al
+            p = m.params.pars[i]
+            print(io, "⚠ Parameter `", p.name, "` is at its ")
+            v = m.values[i]
+            side = if has_limits(p)
+                (v - p.lower) < (p.upper - v) ? "lower" : "upper"
+            elseif has_upper_limit(p)
+                "upper"
+            else
+                "lower"
             end
-            println(io, "    [", i, "] ", p.name, " = ", val,
-                    " ± ", err, fixed_tag, mn_tag)
+            println(io, side, " limit — Hesse/MINOS error is unreliable.")
         end
     end
 end
 
+# ─────────────────────────────────────────────────────────────────────────────
+# text/html — IJulia / Pluto notebook display (Phase 3 C1 (c))
+# ─────────────────────────────────────────────────────────────────────────────
+
+function Base.show(io::IO, ::MIME"text/html", m::Minuit)
+    if m.fmin === nothing
+        print(io, "<div><strong>JuMinuit.Minuit</strong> ",
+              "(not yet minimized; call <code>migrad(m)</code>)</div>")
+        return
+    end
+
+    # Header line with status badge
+    status = _status_summary(m)
+    badge_color = m.is_valid ? "#1a7f37" : "#cf222e"   # GitHub green / red
+    @printf(io, """<div style="font-family:monospace;font-size:0.95em">""")
+    @printf(io,
+        """<strong>JuMinuit.Minuit</strong>  fval=%.6g  edm=%.3g  nfcn=%d  """,
+        m.fval, m.edm, m.nfcn)
+    @printf(io, """<span style="color:%s;font-weight:bold">%s</span><br>""",
+            badge_color, status)
+
+    # Table
+    headers = ["#", "Name", "Value", "Hesse ±", "Minos −", "Minos +",
+               "Limit −", "Limit +", "Fixed"]
+    print(io, """<table style="border-collapse:collapse;margin-top:0.5em">""")
+    print(io, "<thead><tr>")
+    for h in headers
+        print(io, """<th style="border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa">""",
+              h, "</th>")
+    end
+    print(io, "</tr></thead><tbody>")
+    for i in 1:n_pars(m.params)
+        r = _param_row_data(m, i)
+        cells = [string(r.idx), r.name, _fmt_cell(r.value),
+                 _fmt_cell(r.hesse), _fmt_cell(r.minos_lo), _fmt_cell(r.minos_hi),
+                 _fmt_cell(r.limit_lo), _fmt_cell(r.limit_hi),
+                 r.fixed ? "yes" : ""]
+        print(io, "<tr>")
+        for c in cells
+            print(io, """<td style="border:1px solid #d0d7de;padding:2px 8px">""",
+                  c, "</td>")
+        end
+        print(io, "</tr>")
+    end
+    print(io, "</tbody></table>")
+
+    # At-limit warnings
+    al = _at_limit_indices(m)
+    if !isempty(al)
+        print(io, """<div style="color:#bf8700;margin-top:0.5em">""")
+        for i in al
+            p = m.params.pars[i]
+            v = m.values[i]
+            side = if has_limits(p)
+                (v - p.lower) < (p.upper - v) ? "lower" : "upper"
+            elseif has_upper_limit(p)
+                "upper"
+            else
+                "lower"
+            end
+            print(io, "⚠ Parameter <code>", p.name, "</code> is at its ", side,
+                  " limit — Hesse/MINOS error is unreliable.<br>")
+        end
+        print(io, "</div>")
+    end
+    print(io, "</div>")
+end
+
+# Short one-line repr for `print` / inline display in Vector etc.
 Base.show(io::IO, m::Minuit) =
     print(io, "Minuit(", n_pars(m.params), " params, ",
               m.fmin === nothing ? "not minimized" : "fval=$(m.fval)", ")")
