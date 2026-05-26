@@ -139,6 +139,104 @@
         @test !occursin("⚠", s2)
     end
 
+    @testset "_minos_int_to_ext sign correctness (review BLOCKING #1)" begin
+        # Both reviewers (codex + Opus) flagged that the previous
+        # implementation could produce sign-wrong MINOS errors for
+        # one-sided sqrt transforms, because sqrt_int2ext is EVEN in
+        # int. When `int_min + lower_int` lands on the OPPOSITE side
+        # of int=0 from int_min, the MINOS search path crossed
+        # through the parameter bound and the raw ext shift becomes
+        # paradoxical (positive "lower" error). Regression test:
+
+        # UpperOnly param at ext = 8 with upper = 10: synthetic
+        # MinosError with internal err.upper / err.lower large enough
+        # to flip int sign.
+        par = MinuitParameter("x", 0.0, 0.1; upper = 10.0)
+        int_min = JuMinuit.ext2int(JuMinuit.UpperOnly, 8.0, NaN, 10.0,
+                                    MachinePrecision())
+        # err.lower = -0.5, err.upper = +0.5 in int — for UpperOnly
+        # with int_min ≈ -1.73, these flip int's sign at the lower end.
+        err_int = MinosError(1, int_min, 0.2, -0.2,
+                              true, true, false, false, false, false, 50)
+        err_ext = JuMinuit._minos_int_to_ext(err_int, par)
+        # Defense-in-depth: upper must be ≥ 0; lower must be ≤ 0.
+        @test err_ext.upper >= 0 || !err_ext.upper_valid
+        @test err_ext.lower <= 0 || !err_ext.lower_valid
+        # Saturated sides should be marked invalid and flag fcn_limit.
+        if !err_ext.upper_valid || !err_ext.lower_valid
+            @test err_ext.upper_fcn_limit || err_ext.lower_fcn_limit
+        end
+
+        # LowerOnly param at lower bound (σ near 0.1 with limit
+        # [0.1, ∞)): MINOS should detect saturation.
+        par2 = MinuitParameter("σ", 0.1, 0.05; lower = 0.1)
+        # int_min for σ at exactly the bound is 0 — degenerate, so
+        # use σ = 0.105 (very close to bound) where int_min ≈ small.
+        int_min2 = JuMinuit.ext2int(JuMinuit.LowerOnly, 0.105, 0.1, NaN,
+                                     MachinePrecision())
+        err_int2 = MinosError(2, int_min2, 0.3, -0.3,
+                               true, true, false, false, false, false, 50)
+        err_ext2 = JuMinuit._minos_int_to_ext(err_int2, par2)
+        @test err_ext2.upper >= 0 || !err_ext2.upper_valid
+        @test err_ext2.lower <= 0 || !err_ext2.lower_valid
+    end
+
+    @testset "at-limit warning labels lower/upper correctly (review BLOCKING #2)" begin
+        # `has_limits(p) = has_lower_limit(p) || has_upper_limit(p)`,
+        # so the prior `if has_limits(p) ... elseif has_upper_limit(p)`
+        # path made the elseif/else branches unreachable. Regression:
+        # a LowerOnly param sitting at its lower bound must print
+        # "is at its **lower** limit", not "upper".
+        cf = x -> (x[1] - 0.5)^2
+        m_lo = Minuit(cf, [0.6]; name = ["a"], limit_a = (0.45, nothing))
+        migrad(m_lo)
+        @test m_lo.is_valid
+        @test 1 in JuMinuit._at_limit_indices(m_lo)
+        buf = IOBuffer()
+        show(buf, MIME"text/plain"(), m_lo)
+        s = String(take!(buf))
+        @test occursin("lower limit", s)
+        @test !occursin("upper limit", s)
+
+        # Symmetric: UpperOnly at upper bound.
+        cf2 = x -> (x[1] - 5.0)^2
+        m_up = Minuit(cf2, [4.9]; name = ["b"], limit_b = (nothing, 5.05))
+        migrad(m_up)
+        @test 1 in JuMinuit._at_limit_indices(m_up)
+        buf2 = IOBuffer()
+        show(buf2, MIME"text/plain"(), m_up)
+        s2 = String(take!(buf2))
+        @test occursin("upper limit", s2)
+        @test !occursin("lower limit", s2)
+    end
+
+    @testset "hesse(m) clears prior sticky flags (review IMPORTANT)" begin
+        # Both reviewers flagged that previous `hesse(m)` made
+        # `made_pos_def` and `is_valid` sticky across calls. Test:
+        # a fresh successful `hesse(m)` should CLEAR an artificially
+        # injected prior `made_pos_def = true` / `is_valid = false`.
+        f = x -> sum(abs2, x .- [1.0, 2.0])
+        m = Minuit(f, [0.0, 0.0]; errors = [0.1, 0.1])
+        migrad(m)
+        bfm = m.fmin
+        # Inject artificial prior failure flags.
+        fm_bad = JuMinuit.FunctionMinimum(
+            bfm.internal.state, bfm.internal.seed, bfm.internal.up;
+            is_valid = false,           # was failed
+            hesse_failed = true,        # was failed
+            made_pos_def = true,        # was perturbed
+        )
+        m.fmin = JuMinuit.BoundedFunctionMinimum(
+            fm_bad, bfm.params, bfm.ext_values, bfm.ext_errors,
+            bfm.ext_covariance, bfm.internal_cf,
+        )
+        # Now run hesse — should recover.
+        JuMinuit.hesse(m)
+        @test m.fmin.internal.hesse_failed == false   # cleared
+        @test m.fmin.internal.made_pos_def == false   # cleared (new HESSE pos-def)
+        @test m.is_valid == true                       # recovered
+    end
+
     @testset "C1 (c) HTML repr (IJulia / Pluto)" begin
         cf = x -> sum(abs2, x .- [1.0, 2.0])
         m = Minuit(cf, [0.0, 0.0]; names = ["a", "b"])
@@ -171,6 +269,25 @@
         s_lim = String(take!(buf))
         @test occursin("⚠", s_lim)
         @test occursin("<code>a</code>", s_lim)
+
+        # HTML escape — parameter name with `<`, `&`, `"` must be
+        # entity-encoded (review IMPORTANT). Without this, IJulia /
+        # Pluto would render injected markup. Realistic for HEP users
+        # naming params with operators like "a<b" for slicing categories.
+        m_unsafe = Minuit(x -> (x[1] - 1.0)^2, [0.0];
+                          name = ["a<b&\"q"])
+        migrad(m_unsafe)
+        buf = IOBuffer()
+        show(buf, MIME"text/html"(), m_unsafe)
+        s_unsafe = String(take!(buf))
+        # Raw special characters must NOT appear in the HTML output.
+        @test !occursin("a<b", s_unsafe)
+        @test !occursin("a&q", s_unsafe)
+        @test !occursin("a\"q", s_unsafe)
+        # The escaped versions DO.
+        @test occursin("a&lt;b", s_unsafe)
+        @test occursin("&amp;", s_unsafe)
+        @test occursin("&quot;", s_unsafe)
     end
 
     @testset "Argument validation" begin

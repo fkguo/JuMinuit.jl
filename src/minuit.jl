@@ -299,34 +299,90 @@ JuMinuit's `minos` returns when called on the bounded fit's internal
 state) into EXTERNAL coordinates — the form users expect, matching
 C++ MnMinos and iminuit.
 
-For unbounded parameters this is a no-op. For bounded:
-  - `min_par_value` ← `int2ext(int_min)`
-  - `upper` ← `int2ext(int_min + upper_int) - ext_min` (the EXT shift
-     at the upper crossing point)
-  - `lower` ← `int2ext(int_min + lower_int) - ext_min` (similarly;
-     note `lower_int` is negative)
+For unbounded parameters this is a no-op. For Sin-bounded (BothBounds),
+`int2ext` is monotonic on `(-π/2, π/2)`, so `int2ext(int_min + δ_int)
+- ext_min` is a faithful signed shift.
 
-The shift is exact in external coordinates — there is no Jacobian
-approximation. This is what C++ `MnMinos::Minos` returns at the end
-(`MnMinos.cxx:120-126`).
+For one-sided sqrt transforms (SqrtUp / SqrtLow), `int2ext` is EVEN
+in `int` — the bound itself sits at `int=0`. If `int_min + δ_int`
+crosses 0 (signs differ from `int_min`), the MINOS search path went
+through the bound and emerged on the other side; the raw ext shift
+loses physical meaning. We detect this and:
+  - clamp the shift to "the boundary itself" (`par.lower - ext_min`
+    or `par.upper - ext_min`),
+  - invalidate the side (`upper_valid = false` / `lower_valid = false`),
+  - flag `par_limit` on the resulting MinosError.
+
+Defensively, we also invalidate a side whose final ext shift has the
+wrong sign (`upper < 0` or `lower > 0`) — the proper "fix the bug at
+the source" is to make `function_cross` bound-aware (raise
+`MnCross.par_limit` per C++ `MnFunctionCross.cxx:67-104`), which is
+listed in src/function_cross.jl as a known limitation; this guard
+ensures published asymmetric errors are never silently sign-wrong.
 """
 function _minos_int_to_ext(err::MinosError, par::MinuitParameter)
-    has_limits(par) || has_lower_limit(par) || has_upper_limit(par) ||
+    has_lower_limit(par) || has_upper_limit(par) ||
         return err  # unbounded: int == ext
     kind = bound_kind(par.lower, par.upper)
     int_min = err.min_par_value
     ext_min = int2ext(kind, int_min, par.lower, par.upper)
+
+    # Boundary value in external space (for clamping invalid sides).
+    bound_ext = (kind == LowerOnly) ? par.lower :
+                (kind == UpperOnly) ? par.upper :
+                # BothBounds — fall back to the side currently being hit.
+                (int_min < 0 ? par.lower : par.upper)
+
+    # Compute raw upper / lower ext shifts.
     upper_ext = err.upper_valid ?
         int2ext(kind, int_min + err.upper, par.lower, par.upper) - ext_min :
         err.upper
     lower_ext = err.lower_valid ?
         int2ext(kind, int_min + err.lower, par.lower, par.upper) - ext_min :
         err.lower
+
+    upper_valid = err.upper_valid
+    lower_valid = err.lower_valid
+    saturated_at_bound = false
+
+    # For one-sided sqrt: detect sign-cross of int_min through 0.
+    # When MINOS lower_int = -k flips int onto the OTHER side of the
+    # bound, the path crossed through the parameter limit — the
+    # corresponding ext shift is physically saturated.
+    if kind == LowerOnly || kind == UpperOnly
+        if upper_valid && int_min != 0 &&
+           sign(int_min + err.upper) != sign(int_min)
+            upper_ext = bound_ext - ext_min
+            upper_valid = false
+            saturated_at_bound = true
+        end
+        if lower_valid && int_min != 0 &&
+           sign(int_min + err.lower) != sign(int_min)
+            lower_ext = bound_ext - ext_min
+            lower_valid = false
+            saturated_at_bound = true
+        end
+    end
+
+    # Sign-sanity defense in depth (even if the above checks pass).
+    # MINOS upper must be ≥ 0; lower must be ≤ 0 in EXT space.
+    if upper_valid && upper_ext < 0
+        upper_ext = bound_ext - ext_min
+        upper_valid = false
+        saturated_at_bound = true
+    end
+    if lower_valid && lower_ext > 0
+        lower_ext = bound_ext - ext_min
+        lower_valid = false
+        saturated_at_bound = true
+    end
+
     return MinosError(err.par_idx, ext_min,
                        upper_ext, lower_ext,
-                       err.upper_valid, err.lower_valid,
+                       upper_valid, lower_valid,
                        err.upper_new_min, err.lower_new_min,
-                       err.upper_fcn_limit, err.lower_fcn_limit,
+                       err.upper_fcn_limit || saturated_at_bound,
+                       err.lower_fcn_limit || saturated_at_bound,
                        err.nfcn)
 end
 
@@ -522,25 +578,44 @@ function hesse(m::Minuit; strategy::Strategy = Strategy(1),
     new_state = JuMinuit.hesse(bfm.internal_cf, bfm.internal.state, strategy;
                                  prec = m.prec)
 
-    # Wrap into a fresh FunctionMinimum keeping the same convergence
-    # flags from MIGRAD; HESSE can flip `hesse_failed` (via the
-    # MnHesseFailed / MnInvertFailed status) — propagate that.
+    # Wrap into a fresh FunctionMinimum reflecting the CURRENT covariance
+    # state, not the union of historical states. iminuit's semantics is
+    # "the cov is whatever HESSE just produced" — a successful HESSE
+    # MUST be able to clear an earlier `made_pos_def` / `hesse_failed` /
+    # `is_valid=false` flag, otherwise users can never recover state
+    # after a transient setback without re-migrad'ing.
+    #
+    # `reached_call_limit` and `above_max_edm` ARE genuinely sticky
+    # (they describe the MIGRAD convergence run that led to this state)
+    # — keep them.
     hesse_now_failed = JuMinuit.hesse_failed(new_state.error) ||
                         JuMinuit.invert_failed(new_state.error)
-    made_pos_def = bfm.internal.made_pos_def ||
-                    JuMinuit.is_made_pos_def(new_state.error)
+    made_pos_def_now = JuMinuit.is_made_pos_def(new_state.error)
+    # `is_valid` is recomputed from the new HESSE outcome (covariance
+    # validity per `is_valid(error)`) AND the genuinely sticky MIGRAD
+    # convergence flags (`reached_call_limit`, `above_max_edm` describe
+    # how MIGRAD ran, not the current covariance — those don't change
+    # under hesse).
+    new_err_valid = JuMinuit.is_valid(new_state.error)
+    new_is_valid  = new_err_valid &&
+                    !bfm.internal.reached_call_limit &&
+                    !bfm.internal.above_max_edm
     new_fmin_int = FunctionMinimum(new_state, bfm.internal.seed,
                                      bfm.internal.up;
-                                     is_valid = bfm.internal.is_valid && !hesse_now_failed,
+                                     is_valid = new_is_valid,
                                      reached_call_limit = bfm.internal.reached_call_limit,
                                      above_max_edm = bfm.internal.above_max_edm,
                                      hesse_failed = hesse_now_failed,
-                                     made_pos_def = made_pos_def)
+                                     made_pos_def = made_pos_def_now)
 
-    # Rebuild external view via the shared helper.
+    # Rebuild external view via the shared helper. Use bfm.internal.up
+    # (the value attached to the internal-coord FM, set at migrad time)
+    # rather than m.fcn.up — these are normally equal but m.fcn is
+    # mutable in principle; bfm.internal.up is the value the internal
+    # state actually corresponds to.
     ext_values, ext_errors_vec, ext_cov_mat =
         JuMinuit._internal_to_external_results(new_fmin_int, bfm.params,
-                                                m.fcn.up)
+                                                bfm.internal.up)
 
     m.fmin = BoundedFunctionMinimum(
         new_fmin_int, bfm.params, ext_values, ext_errors_vec, ext_cov_mat,
@@ -813,7 +888,10 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
             p = m.params.pars[i]
             print(io, "⚠ Parameter `", p.name, "` is at its ")
             v = m.values[i]
-            side = if has_limits(p)
+            # has_limits(p) is true for one-sided too (it's
+            # `has_lower_limit || has_upper_limit`), so the
+            # two-sided case must be tested with the explicit AND.
+            side = if has_lower_limit(p) && has_upper_limit(p)
                 (v - p.lower) < (p.upper - v) ? "lower" : "upper"
             elseif has_upper_limit(p)
                 "upper"
@@ -828,6 +906,24 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 # text/html — IJulia / Pluto notebook display (Phase 3 C1 (c))
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Minimal HTML escaping. We don't pull a dep for this; the entity
+# set below is what protects against parameter names containing
+# `<`, `>`, `&`, `"`, or `'` from breaking the table markup (or
+# enabling code injection in IJulia/Pluto notebook output).
+function _html_escape(s::AbstractString)
+    out = IOBuffer()
+    @inbounds for c in s
+        if     c == '&'  print(out, "&amp;")
+        elseif c == '<'  print(out, "&lt;")
+        elseif c == '>'  print(out, "&gt;")
+        elseif c == '"'  print(out, "&quot;")
+        elseif c == '\'' print(out, "&#39;")
+        else             print(out, c)
+        end
+    end
+    return String(take!(out))
+end
 
 function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     if m.fmin === nothing
@@ -844,7 +940,7 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
         """<strong>JuMinuit.Minuit</strong>  fval=%.6g  edm=%.3g  nfcn=%d  """,
         m.fval, m.edm, m.nfcn)
     @printf(io, """<span style="color:%s;font-weight:bold">%s</span><br>""",
-            badge_color, status)
+            badge_color, _html_escape(status))
 
     # Table
     headers = ["#", "Name", "Value", "Hesse ±", "Minos −", "Minos +",
@@ -858,7 +954,10 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     print(io, "</tr></thead><tbody>")
     for i in 1:n_pars(m.params)
         r = _param_row_data(m, i)
-        cells = [string(r.idx), r.name, _fmt_cell(r.value),
+        # Parameter `r.name` is user-controlled; escape it before
+        # interpolating into the HTML cell. Other cells (numbers,
+        # "yes"/"") are safe.
+        cells = [string(r.idx), _html_escape(r.name), _fmt_cell(r.value),
                  _fmt_cell(r.hesse), _fmt_cell(r.minos_lo), _fmt_cell(r.minos_hi),
                  _fmt_cell(r.limit_lo), _fmt_cell(r.limit_hi),
                  r.fixed ? "yes" : ""]
@@ -878,14 +977,18 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
         for i in al
             p = m.params.pars[i]
             v = m.values[i]
-            side = if has_limits(p)
+            # has_limits(p) is true for one-sided too (it's
+            # `has_lower_limit || has_upper_limit`), so the
+            # two-sided case must be tested with the explicit AND.
+            side = if has_lower_limit(p) && has_upper_limit(p)
                 (v - p.lower) < (p.upper - v) ? "lower" : "upper"
             elseif has_upper_limit(p)
                 "upper"
             else
                 "lower"
             end
-            print(io, "⚠ Parameter <code>", p.name, "</code> is at its ", side,
+            print(io, "⚠ Parameter <code>", _html_escape(p.name),
+                  "</code> is at its ", side,
                   " limit — Hesse/MINOS error is unreliable.<br>")
         end
         print(io, "</div>")
