@@ -500,6 +500,7 @@ function _migrad_with_multi_fixed(
     maxcalls::Integer,
     prec::MachinePrecision,
     strategy::Strategy = Strategy(0),
+    warm_x::Union{Nothing,AbstractVector{Float64}} = nothing,
 )
     n = length(state.parameters)
     is_fixed = falses(n)
@@ -536,10 +537,24 @@ function _migrad_with_multi_fixed(
     V = state.error.inv_hessian
     scale = 2.0 * cf.up
     x_min = state.parameters.x
+    # WARM-START: when `warm_x` is supplied (typically the previous
+    # parabolic-fit probe's converged inner state, in FULL-coord
+    # length n), seed the inner MIGRAD from THAT instead of the
+    # outer-minimum x_min. Mirrors C++ MnFunctionCross.cxx:106-216,
+    # where a single MnMigrad instance is reused across the 3-15
+    # parabolic iterations within one cross() call → the inner free
+    # params start from the previous probe's converged values, not
+    # from the OUTER converged minimum every time. C++ default cuts
+    # nfcn 3-4× on 10D contours (rosenbrock_10d benchmark, 2026-05).
+    seed_full = warm_x === nothing ? x_min : warm_x
     j = 1
     @inbounds for k in 1:n
         is_fixed[k] && continue
-        y0[j] = x_min[k]
+        y0[j] = seed_full[k]
+        # Step size always derives from the OUTER inv_hessian
+        # (not from the warm-start) — the inner curvature at the
+        # converged minimum is a better step estimate than whatever
+        # the previous probe happened to land at.
         errs[j] = sqrt(max(scale * V[k, k], prec.eps2))
         j += 1
     end
@@ -550,6 +565,31 @@ function _migrad_with_multi_fixed(
                         tol = tol, maxfcn = Int(maxcalls),
                         strategy = inner_strategy, prec = prec)
     return inner_min, ncalls(cf_fixed)
+end
+
+# Helper: build a length-n "full" vector from the inner MIGRAD's
+# free-only state, splicing the fixed-param values back in. Used
+# to thread the warm-start across probes inside _cross_core.
+function _full_x_from_inner(inner_min::FunctionMinimum,
+                              n_total::Integer,
+                              par_idxs::AbstractVector{<:Integer},
+                              fixed_vals::AbstractVector{<:Real})
+    full = Vector{Float64}(undef, Int(n_total))
+    is_fixed = falses(Int(n_total))
+    @inbounds for (idx, k) in enumerate(par_idxs)
+        kk = Int(k)
+        is_fixed[kk] = true
+        full[kk] = Float64(fixed_vals[idx])
+    end
+    inner_x = inner_min.state.parameters.x
+    j = 1
+    @inbounds for k in 1:Int(n_total)
+        if !is_fixed[k]
+            full[k] = inner_x[j]
+            j += 1
+        end
+    end
+    return full
 end
 
 function function_cross_multi(
@@ -579,17 +619,36 @@ function function_cross_multi(
     pdir_f = Float64[Float64(pdir[i]) for i in 1:npar]
 
     # Probe closure: builds the multi-fix vector for a given α and runs
-    # the inner MIGRAD. Used by `_cross_core` for all probe points.
-    let pmid_f = pmid_f, pdir_f = pdir_f, npar = npar
+    # the inner MIGRAD. THREADS THE WARM-START forward across probes:
+    # within one MnFunctionCross call, C++ keeps a single MnMigrad
+    # instance whose internal MnUserParameterState is mutated by each
+    # `migrad()` invocation, so the (n-npar) free params start from
+    # the PREVIOUS probe's converged values, not from the OUTER
+    # minimum. JuMinuit mirrors this via `warm_x_ref` (Ref{Vector{Float64}}).
+    # Without this, JuMinuit uses ~4× more nfcn on 10D contours.
+    warm_x_ref = Ref{Vector{Float64}}(collect(Float64, state.parameters.x))
+    n_total = length(state.parameters)
+    let pmid_f = pmid_f, pdir_f = pdir_f, npar = npar,
+        warm_x_ref = warm_x_ref, n_total = n_total
         probe = function (aopt::Float64, budget::Integer)
             v_probe = Vector{Float64}(undef, npar)
             @inbounds for i in 1:npar
                 v_probe[i] = pmid_f[i] + aopt * pdir_f[i]
             end
-            _migrad_with_multi_fixed(
+            inner_min, nf = _migrad_with_multi_fixed(
                 cf, state, par_idxs, v_probe;
                 tol = 0.5 * tlr, maxcalls = budget,
-                prec = prec, strategy = strategy)
+                prec = prec, strategy = strategy,
+                warm_x = warm_x_ref[])
+            # On successful inner-MIGRAD, update the warm-start for
+            # the next probe. On failure keep the previous warm-start
+            # (could be x_min or a prior valid probe) — safer than
+            # corrupting future probes with a non-converged state.
+            if inner_min.is_valid
+                warm_x_ref[] = _full_x_from_inner(inner_min, n_total,
+                                                    par_idxs, v_probe)
+            end
+            return inner_min, nf
         end
         return _cross_core(probe, fmin_val, up, state;
                             tlr = Float64(tlr),
@@ -606,16 +665,25 @@ function _migrad_with_fixed(
     cf::CostFunction, state::MinimumState, i::Integer, v::Float64;
     tol::Float64, maxcalls::Integer, prec::MachinePrecision,
     strategy::Strategy = Strategy(0),
+    warm_x::Union{Nothing,AbstractVector{Float64}} = nothing,
 )
     n = length(state.parameters)
     # Build initial point + errors with parameter i removed
     x_min = state.parameters.x
+    # WARM-START: when `warm_x` is supplied (full-length n vector,
+    # typically the previous parabolic-fit probe's converged full
+    # state), use that for the n-1 free params instead of x_min.
+    # Matches C++ MnFunctionCross's single-MnMigrad-instance pattern;
+    # cuts inner-MIGRAD nfcn 3-4× when the contour-point or MINOS-
+    # alpha sequence moves the inner optimum significantly away from
+    # the outer minimum.
+    seed_full = warm_x === nothing ? x_min : warm_x
     y0 = Vector{Float64}(undef, n - 1)
     @inbounds for k in 1:(i - 1)
-        y0[k] = x_min[k]
+        y0[k] = seed_full[k]
     end
     @inbounds for k in (i + 1):n
-        y0[k - 1] = x_min[k]
+        y0[k - 1] = seed_full[k]
     end
     # Initial step sizes from the post-fit MIGRAD error matrix.
     # C++ MnUserParameterState constructs free-parameter errors as
@@ -712,14 +780,35 @@ function function_cross(
     step = Float64(dir) * sigma_i
     x_pivot = x_min[par_idx]
 
-    # Probe closure: runs inner MIGRAD at α along par_idx. Used by
-    # `_cross_core` for every probe in the C++ 3-point parabolic loop.
-    let x_pivot = x_pivot, step = step
+    # Probe closure: runs inner MIGRAD at α along par_idx. Threads
+    # the warm-start across probes (mirrors C++ MnFunctionCross's
+    # single-MnMigrad-instance pattern — see _migrad_with_multi_fixed
+    # for the explanation; same fix on the single-parameter path).
+    warm_x_ref = Ref{Vector{Float64}}(collect(Float64, x_min))
+    n_total = length(state.parameters)
+    let x_pivot = x_pivot, step = step,
+        warm_x_ref = warm_x_ref, n_total = n_total
         probe = function (aopt::Float64, budget::Integer)
             v = x_pivot + aopt * step
-            _migrad_with_fixed(cf, state, par_idx, v;
+            inner_min, nf = _migrad_with_fixed(cf, state, par_idx, v;
                                 tol = 0.5 * tlr, maxcalls = budget,
-                                prec = prec, strategy = strategy)
+                                prec = prec, strategy = strategy,
+                                warm_x = warm_x_ref[])
+            if inner_min.is_valid
+                # Build full-length state with the fixed par at `v` and
+                # the others from inner_min for the next probe seed.
+                full = Vector{Float64}(undef, n_total)
+                inner_x = inner_min.state.parameters.x
+                @inbounds for k in 1:(par_idx - 1)
+                    full[k] = inner_x[k]
+                end
+                full[par_idx] = v
+                @inbounds for k in (par_idx + 1):n_total
+                    full[k] = inner_x[k - 1]
+                end
+                warm_x_ref[] = full
+            end
+            return inner_min, nf
         end
         return _cross_core(probe, fmin_val, up, state;
                             tlr = Float64(tlr),
