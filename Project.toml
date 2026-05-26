@@ -1,8 +1,8 @@
 name = "JuMinuit"
 uuid = "5523a57a-07f4-4aae-a9fd-d526bcb5d194"
-authors = ["fkg <huyarthurcamilleMJ@consultant.com>"]
-version = "0.2.0-alpha"
 license = "LGPL-2.1-or-later"
+version = "0.2.0-alpha"
+authors = ["fkg <huyarthurcamilleMJ@consultant.com>"]
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -14,7 +14,6 @@ RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 [compat]
 Aqua = "0.8"
 ForwardDiff = "0.10, 1"
-JET = "0.9, 0.10"
 JSON = "0.21, 1"
 LinearAlgebra = "1"
 Logging = "1"
@@ -27,9 +26,8 @@ julia = "1.10"
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "ForwardDiff", "JET", "JSON", "Test"]
+test = ["Aqua", "ForwardDiff", "JSON", "Test"]
