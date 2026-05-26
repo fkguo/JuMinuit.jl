@@ -20,3 +20,16 @@
 
 # C++ harness build artifacts (regenerable via tools/regen_reference.sh)
 /tools/build/
+
+# CMake build artifacts for the benchmark C++ harness
+# (regenerable via `cd benchmark/cpp/build && cmake .. && make`)
+/benchmark/cpp/build/
+
+# Local benchmark cache (BenchmarkTools per-run timings)
+/benchmark/.julia-perf/runs/
+
+# scripts/ dev environment Manifest (host-specific Julia versions)
+/scripts/Manifest.toml
+
+# research-harness anchor marker (host-machine state, not project content)
+/.autoresearch/
