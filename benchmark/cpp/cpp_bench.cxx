@@ -8,6 +8,10 @@
 #include "Minuit2/MnUserParameters.h"
 #include "Minuit2/FunctionMinimum.h"
 #include "Minuit2/MnStrategy.h"
+#include "Minuit2/MnMinos.h"
+#include "Minuit2/MinosError.h"
+#include "Minuit2/MnContours.h"
+#include "Minuit2/ContoursError.h"
 
 #include <algorithm>
 #include <chrono>
@@ -246,6 +250,116 @@ int main() {
         FunctionMinimum mn = migrad();
         return std::make_pair(mn.Fval(), int(mn.NFcn()));
     }));
+
+    // ── MINOS + MNCONTOUR benchmarks ──────────────────────────────
+    // Each entry: (name, bench-closure). Closure runs setup + MIGRAD
+    // (untimed) then the timed op (MINOS on par 0, or MNCONTOUR on
+    // par 0 × par 1). Strategy(0); for these the dominant cost is the
+    // inner-MIGRAD chain inside MINOS / MnContours.
+
+    auto setup_rosen2 = []() {
+        Rosenbrock2 fcn;
+        MnUserParameters upar;
+        upar.Add("p0", -1.2, 0.1);
+        upar.Add("p1", 1.0, 0.1);
+        return std::make_pair(fcn, upar);
+    };
+    auto setup_rosenN = [](unsigned N) {
+        RosenbrockN fcn(N);
+        MnUserParameters upar;
+        for (unsigned i = 0; i < N; ++i)
+            upar.Add(("p" + std::to_string(i)).c_str(),
+                     (i % 2 == 0 ? -1.2 : 1.0), 0.1);
+        return std::make_pair(fcn, upar);
+    };
+    auto setup_quad = [](unsigned N) {
+        QuadNF fcn(N);
+        MnUserParameters upar;
+        for (unsigned i = 0; i < N; ++i)
+            upar.Add(("p" + std::to_string(i)).c_str(), 1.0, 0.1);
+        return std::make_pair(fcn, upar);
+    };
+    auto setup_gauss2 = []() {
+        GaussNLL fcn(100, 2.0, 1.0);
+        MnUserParameters upar;
+        upar.Add("mu", 1.0, 0.1);
+        upar.Add("sigma", 2.0, 0.1);
+        return std::make_pair(fcn, upar);
+    };
+    auto setup_gauss10 = []() {
+        GaussNLLNDim fcn(10, 1000);
+        MnUserParameters upar;
+        for (int i = 0; i < 10; ++i)
+            upar.Add(("p" + std::to_string(i)).c_str(), 0.0, 0.1);
+        return std::make_pair(fcn, upar);
+    };
+
+    // MINOS bench template — runs MIGRAD ONCE per outer sample (we
+    // restore the MnUserParameterState from MIGRAD to a fresh MnMinos
+    // each iteration), times only the MnMinos call.
+    auto minos_bench = [](const std::string& name, auto setup_fn,
+                           unsigned par_idx, int n_samples = 20) {
+        std::vector<double> times;
+        times.reserve(n_samples);
+        double upper = 0.0;
+        int nfcn_total = 0;
+        for (int s = 0; s < n_samples; ++s) {
+            auto [fcn, upar] = setup_fn();
+            MnMigrad migrad(fcn, upar, MnStrategy(0));
+            FunctionMinimum mn = migrad();
+            // Re-build MnMinos from the converged minimum
+            MnMinos minos(fcn, mn, MnStrategy(0));
+            auto t0 = std::chrono::high_resolution_clock::now();
+            MinosError me = minos.Minos(par_idx);
+            auto t1 = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration<double, std::nano>(t1 - t0).count());
+            upper = me.Upper();
+            nfcn_total = me.NFcn();
+        }
+        std::sort(times.begin(), times.end());
+        return BenchResult{name, times[n_samples / 2], n_samples, upper, nfcn_total};
+    };
+
+    auto mncontour_bench = [](const std::string& name, auto setup_fn,
+                               unsigned par_x, unsigned par_y,
+                               unsigned npts = 30, int n_samples = 10) {
+        std::vector<double> times;
+        times.reserve(n_samples);
+        int nfcn_total = 0;
+        double last_pt = 0.0;
+        for (int s = 0; s < n_samples; ++s) {
+            auto [fcn, upar] = setup_fn();
+            MnMigrad migrad(fcn, upar, MnStrategy(0));
+            FunctionMinimum mn = migrad();
+            MnContours contours(fcn, mn, MnStrategy(0));
+            auto t0 = std::chrono::high_resolution_clock::now();
+            ContoursError ce = contours.Contour(par_x, par_y, npts);
+            auto t1 = std::chrono::high_resolution_clock::now();
+            times.push_back(std::chrono::duration<double, std::nano>(t1 - t0).count());
+            nfcn_total = ce.NFcn();
+            if (!ce().empty()) last_pt = ce()[0].first;
+        }
+        std::sort(times.begin(), times.end());
+        return BenchResult{name, times[n_samples / 2], n_samples, last_pt, nfcn_total};
+    };
+
+    // MINOS on each FCN, parameter 0
+    results.push_back(minos_bench("rosenbrock_2d_minos", setup_rosen2, 0));
+    results.push_back(minos_bench("rosenbrock_10d_minos",
+                                   [&]{ return setup_rosenN(10); }, 0));
+    results.push_back(minos_bench("quad_4d_minos",
+                                   [&]{ return setup_quad(4); }, 0));
+    results.push_back(minos_bench("gauss_ll_2_100_minos", setup_gauss2, 0));
+    results.push_back(minos_bench("gauss_ll_10_1000_minos", setup_gauss10, 0));
+
+    // MNCONTOUR on (par 0, par 1), 30 points
+    results.push_back(mncontour_bench("rosenbrock_2d_mncontour", setup_rosen2, 0, 1));
+    results.push_back(mncontour_bench("rosenbrock_10d_mncontour",
+                                       [&]{ return setup_rosenN(10); }, 0, 1));
+    results.push_back(mncontour_bench("quad_4d_mncontour",
+                                       [&]{ return setup_quad(4); }, 0, 1));
+    results.push_back(mncontour_bench("gauss_ll_2_100_mncontour", setup_gauss2, 0, 1));
+    results.push_back(mncontour_bench("gauss_ll_10_1000_mncontour", setup_gauss10, 0, 1));
 
     // Emit JSON
     std::cout << "[\n";
