@@ -14,8 +14,15 @@ License: **LGPL 2.1 or later** (mirrors upstream Minuit2).
 For functions defined, click
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://fkguo.github.io/JuMinuit.jl/dev)
 
+<!-- Binder badge — activates once the repo is public on GitHub.
+     mybinder.org needs to clone the repo (currently private → 503).
+     Restore by un-commenting the line below when fkguo/JuMinuit.jl
+     is made public; the `.binder/` config is already in place.
+
 For interactive examples, click
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/fkguo/JuMinuit.jl/main?urlpath=lab%2Ftree%2Fdocs%2Fexample.ipynb)
+-->
+
 
 ## Quick start
 
