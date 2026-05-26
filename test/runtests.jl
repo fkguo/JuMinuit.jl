@@ -26,6 +26,8 @@ using Test
     include("test_minos.jl")
     include("test_minos_oracle.jl")
     include("test_bounded_gauss_minos.jl")
+    include("test_contour_oracle.jl")
+    include("test_hesse_oracle.jl")
     include("test_contours.jl")
     include("test_migrad_bounded.jl")
     include("test_minuit.jl")

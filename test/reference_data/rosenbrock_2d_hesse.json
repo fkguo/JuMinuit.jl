@@ -1,0 +1,14 @@
+{
+  "name": "rosenbrock_2d",
+  "_meta": {
+    "source": "GooFit/Minuit2 @ 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84",
+    "version": "6.24.0",
+    "strategy_level": 1,
+    "err_def": 1,
+    "generator": "tools/cpp_trace_harness.cxx :: run_hesse_case"
+  },
+  "x0": [-1.2, 1],
+  "params": [0.9995401050740863, 0.99890315407190333],
+  "fval": 3.3538828210364623e-06,
+  "covariance_upper": [1.0043453069117965, 2.0078667553566687, 4.0240864695856775]
+}

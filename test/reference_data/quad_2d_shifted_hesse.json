@@ -1,0 +1,14 @@
+{
+  "name": "quad_2d_shifted",
+  "_meta": {
+    "source": "GooFit/Minuit2 @ 57dc936a2b74d0b4dda1254c3dd63e7c61a97c84",
+    "version": "6.24.0",
+    "strategy_level": 1,
+    "err_def": 1,
+    "generator": "tools/cpp_trace_harness.cxx :: run_hesse_case"
+  },
+  "x0": [0, 0],
+  "params": [0.99999999986011212, 1.9999999997202242],
+  "fval": 9.7843093536958709e-20,
+  "covariance_upper": [0.99999999999999789, -1.0587911841416922e-16, 0.99999999999988676]
+}

@@ -26,6 +26,7 @@
 #include "Minuit2/MinosError.h"
 #include "Minuit2/MnContours.h"
 #include "Minuit2/ContoursError.h"
+#include "Minuit2/MnHesse.h"
 #include "Minuit2/MnUserParameters.h"
 #include "Minuit2/MnUserCovariance.h"
 #include "Minuit2/MnUserParameterState.h"
@@ -449,6 +450,88 @@ void run_contour_case(const std::string &outdir,
               << "  fval=" << std::setprecision(17) << mn.Fval() << "\n";
 }
 
+// Independent HESSE oracle: run Strategy(0) MIGRAD then a STANDALONE
+// MnHesse call to refine the inverse Hessian via numerical 2nd
+// derivatives. Dumps the refined V (= cov / (2·up)) inverse Hessian
+// matrix elements so JuMinuit's `hesse(cf, state)` can be checked
+// directly without the Strategy(1+) inner-loop path.
+void run_hesse_case(const std::string &outdir,
+                    const std::string &name,
+                    const std::vector<double> &x0,
+                    const std::vector<double> &errs0,
+                    const FCNBase &fcn,
+                    unsigned strategy_level = 1)
+{
+    MnUserParameters upar;
+    for (size_t i = 0; i < x0.size(); ++i) {
+        upar.Add("p" + std::to_string(i), x0[i], errs0[i]);
+    }
+    MnStrategy stra(strategy_level);
+
+    // Strategy(0) MIGRAD: leaves V as the DFP approximation.
+    MnMigrad migrad(fcn, upar, MnStrategy(0));
+    FunctionMinimum mn = migrad();
+    if (!mn.IsValid()) {
+        std::cerr << "WARN: " << name << " MIGRAD invalid; skipping standalone HESSE\n";
+        return;
+    }
+
+    // Standalone HESSE refinement at the converged state, using the
+    // MnUserParameterState-input overload (the public-API path that
+    // mirrors what JuMinuit's `hesse(cf, state)` does).
+    MnHesse hesse(stra);
+    MnUserParameterState hessed_user = hesse(fcn, mn.UserState());
+
+    const std::string path = outdir + "/" + name + "_hesse.json";
+    std::ofstream out(path);
+    if (!out) {
+        std::cerr << "ERROR: could not open " << path << "\n";
+        std::exit(2);
+    }
+
+    const unsigned n = static_cast<unsigned>(mn.UserState().VariableParameters());
+
+    // The user-state covariance is the EXTERNAL covariance matrix
+    // (2·up·V). Dump that — JuMinuit's hesse() returns a MinimumState
+    // whose state.error.inv_hessian × 2·up is the same thing.
+    const auto &cov_hessed = hessed_user.Covariance();
+
+    out << "{\n";
+    out << "  \"name\": \"" << name << "\",\n";
+    out << "  \"_meta\": {\n";
+    out << "    \"source\": \"GooFit/Minuit2 @ " << kMinuit2Commit << "\",\n";
+    out << "    \"version\": \"" << kMinuit2Version << "\",\n";
+    out << "    \"strategy_level\": " << strategy_level << ",\n";
+    out << "    \"err_def\": " << Float64Out{fcn.Up()} << ",\n";
+    out << "    \"generator\": \"tools/cpp_trace_harness.cxx :: run_hesse_case\"\n";
+    out << "  },\n";
+    out << "  \"x0\": [";
+    for (size_t i = 0; i < x0.size(); ++i) { if (i) out << ", "; out << Float64Out{x0[i]}; }
+    out << "],\n";
+    out << "  \"params\": [";
+    for (unsigned i = 0; i < n; ++i) {
+        if (i) out << ", ";
+        out << Float64Out{mn.UserState().Value(i)};
+    }
+    out << "],\n";
+    out << "  \"fval\": " << Float64Out{mn.Fval()} << ",\n";
+    out << "  \"covariance_upper\": [";
+    bool first = true;
+    for (unsigned i = 0; i < n; ++i) {
+        for (unsigned j = i; j < n; ++j) {
+            if (!first) out << ", ";
+            out << Float64Out{cov_hessed(i, j)};
+            first = false;
+        }
+    }
+    out << "]\n";
+    out << "}\n";
+
+    std::cout << "[ok] " << path
+              << "  fval=" << std::setprecision(17) << mn.Fval()
+              << "  npar=" << n << "\n";
+}
+
 int main(int argc, char *argv[])
 {
     const std::string outdir = (argc > 1) ? argv[1] : ".";
@@ -591,6 +674,24 @@ int main(int argc, char *argv[])
         Shifted2D sh2;
         run_contour_case(outdir, "quad_2d_shifted",
                          { 0.0, 0.0 }, { 0.1, 0.1 }, sh2, 0, 1, 24);
+    }
+
+    // ── Standalone HESSE oracle (task #35) — verifies the
+    //    "Strategy(0) MIGRAD then hesse(cf, state)" path matches C++.
+    {
+        Rosenbrock2 r2;
+        run_hesse_case(outdir, "rosenbrock_2d",
+                       { -1.2, 1.0 }, { 0.1, 0.1 }, r2);
+    }
+    {
+        QuadNF q4(4);
+        run_hesse_case(outdir, "quad_4d",
+                       { 1.0, 1.0, 1.0, 1.0 }, { 0.1, 0.1, 0.1, 0.1 }, q4);
+    }
+    {
+        Shifted2D sh2;
+        run_hesse_case(outdir, "quad_2d_shifted",
+                       { 0.0, 0.0 }, { 0.1, 0.1 }, sh2);
     }
 
     return 0;
