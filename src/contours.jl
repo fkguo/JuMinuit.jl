@@ -62,8 +62,8 @@ ellipse approximation** from MINOS errors + off-diagonal covariance.
 
 For a symmetric quadratic, this reduces to the exact ellipse from
 the inverse Hessian. For non-quadratic FCNs it's a fast first-pass
-approximation; the true contour curve requires the multi-parameter
-MnFunctionCross root-find (deferred to Phase 1.x).
+approximation; the true contour curve (multi-parameter MnFunctionCross
+root-find) is available as [`contour_exact`](@ref).
 
 # Arguments
 

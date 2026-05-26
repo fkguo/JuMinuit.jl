@@ -59,12 +59,10 @@ function seed_state(
     n = length(x0)
     length(errs) == n ||
         throw(DimensionMismatch("errs length $(length(errs)) != x0 length $n"))
-    # Strategy ≥ 1 is now supported via the inner-Hesse refinement in the
-    # MIGRAD outer loop (`_migrad_loop` post-DFP block). The seed-stage
-    # MnHesse bootstrap (C++ MnSeedGenerator.cxx — Strategy==2 && !HasCov
-    # branch) is intentionally deferred; the inner-Hesse path at the
-    # MIGRAD level catches up after the first DFP pass, so the final
-    # state matches C++ within the documented tolerance.
+    # Strategy ≥ 1 is supported via the inner-Hesse refinement in the
+    # MIGRAD outer loop (`_migrad_loop` post-DFP block). Strategy(2)
+    # additionally runs the seed-stage MnHesse bootstrap at the bottom
+    # of this function (mirrors C++ MnSeedGenerator.cxx:88-98).
 
     # MinimumParameters with explicit step sizes (so the cold-start
     # numerical_gradient can use them via has_step_size).

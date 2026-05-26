@@ -6,11 +6,13 @@
 # Mirrors reference/Minuit2_cpp/src/InitialGradientCalculator.cxx and
 # reference/Minuit2_cpp/src/Numerical2PGradientCalculator.cxx.
 #
-# Phase 0 ports the **no-limits code path only**. HasLimits() branches at
-# InitialGradientCalculator.cxx:47-58,66-69 and
-# Numerical2PGradientCalculator.cxx:136-139 carry "# TODO Phase 1"
-# markers inline; the transform.jl module will reintroduce them in
-# Phase 1 alongside the sin/sqrt parameter transformations.
+# Bounded fits go through `migrad_bounded.jl`, which wraps the user
+# FCN to take internal coords; the int↔ext transformation is in
+# `transform.jl`. The C++ `if HasLimits; step ≤ 0.5` clamps at
+# InitialGradientCalculator.cxx:66-69 and Numerical2PGradientCalculator
+# .cxx:136-139 are not implemented (they'd require threading
+# `has_limits[]` through `seed_state`); the inline "NOTE — known
+# limitation" comments below document why they're dormant in practice.
 #
 # Per ROADMAP §2.1, the Numerical2P gradient is the dominant cost in
 # MIGRAD for cheap FCNs: 2·n FCN calls per cycle × up to Ncycle cycles
@@ -81,8 +83,14 @@ function initial_gradient!(
         # silently differ from C++ (parallel-review B1).
         dirin = max(abs(werr), gsmin)
         # Safety: never zero (prevents NaN in g2 = 2·up/dirin²).
-        # TODO Phase 1: HasLimits clamp from C++
-        # InitialGradientCalculator.cxx:66-69: `if gstep > 0.5; gstep = 0.5`
+        # NOTE — known limitation: C++ InitialGradientCalculator.cxx:66-69
+        # clamps `gstep > 0.5` for parameters with limits, to keep the
+        # finite-difference step inside the sin/sqrt transform's locally
+        # linear region. JuMinuit doesn't thread `has_limits[]` through
+        # `seed_state`, so the clamp isn't applied. Dormant for typical
+        # use because `gstep = 0.1·dirin` with `dirin ≤ 5` keeps gstep
+        # under the threshold; would matter if a user supplied huge
+        # initial step sizes (`errs ≫ 5`) on a bounded parameter.
         g2 = 2.0 * up_f / (dirin * dirin)
         gstep = max(gsmin, 0.1 * dirin)
         grd = g2 * dirin
@@ -152,11 +160,14 @@ per-coordinate iterative step refinement. Mirrors
   `grad_tolerance`.
 - `prec::MachinePrecision`.
 
-# Phase 0 / Phase 1 boundary
+# Bounded parameters
 
-The `HasLimits()` branch at C++ line 136-139 (clamp `step > 0.5` for
-bounded parameters) is **not ported in Phase 0**. Marked with a
-`# TODO Phase 1` inline comment.
+The C++ `HasLimits()` clamp at lines 136-139 (`step > 0.5 → step = 0.5`
+when the parameter has limits) is intentionally not implemented in
+JuMinuit. See the inline "NOTE — known limitation" comment in the
+body for the rationale. Dormant for typical fits because `step` is
+bounded by `10·gstep` and our `gstep ≈ 0.1·dirin` keeps it under the
+0.5 threshold for reasonable user-supplied step sizes.
 
 # Performance
 
@@ -258,9 +269,13 @@ function numerical_gradient!(
         for _ in 1:ncycle
             optstp = sqrt(dfmin / (abs(out.g2[i]) + epspri))
             step = max(optstp, abs(0.1 * out.gstep[i]))
-            # TODO Phase 1: HasLimits branch at
-            # reference/Minuit2_cpp/src/Numerical2PGradientCalculator.cxx:136-139
-            # if HasLimits(i) && step > 0.5; step = 0.5; end
+            # NOTE — known limitation: C++ Numerical2PGradientCalculator
+            # .cxx:136-139 clamps `if HasLimits(i) && step > 0.5; step = 0.5`
+            # for the same reason as `initial_gradient!` above (sin/sqrt
+            # transform linearity floor). Not implemented because we
+            # don't thread `has_limits[]` through to this function;
+            # dormant for current tests because `step ≤ stpmax = 10·gstep`
+            # and typical gstep is well below 0.05.
             stpmax = 10.0 * abs(out.gstep[i])
             if step > stpmax
                 step = stpmax

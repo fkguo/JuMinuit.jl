@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # ─────────────────────────────────────────────────────────────────────────────
-# function_cross.jl — MnFunctionCross (Phase 1 first cut).
+# function_cross.jl — MnFunctionCross.
 #
-# Mirrors reference/Minuit2_cpp/src/MnFunctionCross.cxx:25-512.
+# Mirrors reference/Minuit2_cpp/src/MnFunctionCross.cxx:25-512, including
+# the L300/L460/L500 control-flow (extension, linear extrapolation,
+# parabolic root-find) — see Phase 1.x A3/A4 work.
 #
 # Given a converged minimum (state, fmin), a parameter index i, and a
 # scan direction, find the value `α` such that:
@@ -22,12 +24,13 @@
 #   3. Iterate: MIGRAD at new α, parabolic update, until either
 #      (a) `|f - aim| < tlf AND |Δα| < tla` → converged,
 #      (b) iteration cap or call cap hit,
-#      (c) new lower minimum discovered,
-#      (d) (Phase 1+) parameter bound hit.
+#      (c) new lower minimum discovered.
 #
-# Phase 1 first cut: NO BOUNDS (the bounded path requires the
-# Parameters-aware MIGRAD wiring in `migrad.jl` D3 follow-up). The
-# `par_limit` flag is reserved but not raised here.
+# Bounded fits are supported via the internal-coord CF wrap in
+# `migrad_bounded.jl` / `Minuit.minos!`; this file works in whatever
+# coordinate frame the caller provides. The `par_limit` flag in
+# `MnCross` is reserved but not raised — see the docstring of
+# `function_cross` below for the known-limitation note.
 # ─────────────────────────────────────────────────────────────────────────────
 
 """
@@ -672,11 +675,14 @@ constrained-minimum (other params re-optimized) satisfies
 
 [`MnCross`](@ref). Check `.valid`, `.new_min`, `.fcn_limit` to interpret.
 
-# Phase 1 first cut limitations
+# Known limitations
 
-- No parameter bounds (par_limit always `false`).
-- Inner MIGRAD does not propagate Strategy ≥ 1 HESSE refinement
-  (cf. hesse.jl C8 deferral).
+- `par_limit` is never raised. Bounded MINOS works correctly (via the
+  internal-coord CF wrap in `Minuit.minos!` and `migrad_bounded.jl`),
+  but the boundary-saturation flag isn't surfaced. Equivalent C++ flag:
+  `MnCross::CrossParLimit()`.
+- Inner MIGRAD strategy is `max(0, strategy.level - 1)`, matching C++
+  `MnFunctionCross.cxx:106`.
 """
 function function_cross(
     fmin::FunctionMinimum,
