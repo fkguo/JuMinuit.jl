@@ -299,26 +299,62 @@ JuMinuit's `minos` returns when called on the bounded fit's internal
 state) into EXTERNAL coordinates — the form users expect, matching
 C++ MnMinos and iminuit.
 
-For unbounded parameters this is a no-op. For Sin-bounded (BothBounds),
-`int2ext` is monotonic on `(-π/2, π/2)`, so `int2ext(int_min + δ_int)
-- ext_min` is a faithful signed shift.
+For unbounded parameters this is a no-op.
 
-For one-sided sqrt transforms (SqrtUp / SqrtLow), `int2ext` is EVEN
-in `int` — the bound itself sits at `int=0`. If `int_min + δ_int`
-crosses 0 (signs differ from `int_min`), the MINOS search path went
-through the bound and emerged on the other side; the raw ext shift
-loses physical meaning. We detect this and:
-  - clamp the shift to "the boundary itself" (`par.lower - ext_min`
-    or `par.upper - ext_min`),
-  - invalidate the side (`upper_valid = false` / `lower_valid = false`),
-  - flag `par_limit` on the resulting MinosError.
+# Jacobian-sign reversal for UpperOnly (round-2 review fix)
 
-Defensively, we also invalidate a side whose final ext shift has the
-wrong sign (`upper < 0` or `lower > 0`) — the proper "fix the bug at
-the source" is to make `function_cross` bound-aware (raise
-`MnCross.par_limit` per C++ `MnFunctionCross.cxx:67-104`), which is
-listed in src/function_cross.jl as a known limitation; this guard
-ensures published asymmetric errors are never silently sign-wrong.
+The three bounded transforms in `src/transform.jl` have different
+Jacobian signs in the operating regime:
+
+  - **BothBounds (Sin)**: `d(ext)/d(int) = 0.5·(U-L)·cos(int)`.
+    Positive on `(-π/2, π/2)`; the transform is monotonic and
+    standard mapping holds (`err.upper → upper_ext`).
+  - **LowerOnly (SqrtLow)**: `d(ext)/d(int) = +v/√(v²+1)`. Positive
+    for `v > 0` (the operating regime — `sqrtlow_ext2int` returns ≥ 0).
+    Standard mapping.
+  - **UpperOnly (SqrtUp)**: `d(ext)/d(int) = -v/√(v²+1)`. **Negative**
+    throughout. A POSITIVE internal step (`err.upper > 0`) maps to a
+    NEGATIVE ext shift — i.e., to the LOWER ext side. The two MINOS
+    "sides" are swapped between int and ext.
+
+So for `UpperOnly` we swap the input MINOS steps before conversion:
+`err.lower` (which moves int down toward the bound at int=0) is the
+step that maps to the UPPER ext side; `err.upper` (moving int away
+from the bound) maps to the LOWER ext side.
+
+# Sign-cross saturation detection (sqrt only)
+
+For SqrtLow/SqrtUp, `int2ext` is EVEN in int (the bound sits at
+int=0). If the int search step `int_min + step` flips sign relative
+to `int_min`, the MINOS path crossed through the parameter limit
+and emerged in a non-physical region. That side is saturated:
+  - the corresponding ext side snaps to 0 (no movement past the
+    bound — equivalent semantics to iminuit's at-limit MINOS),
+  - the side is invalidated (`upper_valid = false` / `lower_valid = false`),
+  - `*_fcn_limit` is raised for *that side only*.
+
+Sin (BothBounds) is monotonic on `(-π/2, π/2)`, so no sign-cross
+check is needed — the defense-in-depth at the end catches any
+non-physical region wandering.
+
+# Defense in depth
+
+The `MinosError` contract requires `upper ≥ 0` and `lower ≤ 0`. After
+all conversions, a residual sign violation indicates the conversion
+itself or the upstream MINOS produced a degenerate result. Such
+sides are zeroed and invalidated — never publish a sign-wrong number.
+
+# Round-2 review history
+
+The original (round-1) fix only had the sign-sanity defense, which
+mistook the legitimate Jacobian-sign inversion for a saturation
+event and invalidated normal UpperOnly fits. Both codex and Opus
+caught this; the per-kind swap above is the proper fix.
+
+A deeper architectural fix would make `function_cross` bound-aware
+(searching in EXTERNAL coords like C++ `MnMinos::FindCrossValue` at
+reference/Minuit2_cpp/src/MnMinos.cxx:119-131); that's a known
+limitation in `src/function_cross.jl` and a future-milestone item.
 """
 function _minos_int_to_ext(err::MinosError, par::MinuitParameter)
     has_lower_limit(par) || has_upper_limit(par) ||
@@ -327,62 +363,77 @@ function _minos_int_to_ext(err::MinosError, par::MinuitParameter)
     int_min = err.min_par_value
     ext_min = int2ext(kind, int_min, par.lower, par.upper)
 
-    # Boundary value in external space (for clamping invalid sides).
-    bound_ext = (kind == LowerOnly) ? par.lower :
-                (kind == UpperOnly) ? par.upper :
-                # BothBounds — fall back to the side currently being hit.
-                (int_min < 0 ? par.lower : par.upper)
+    # ── Per-kind step assignment (Jacobian-sign-aware) ──────────────
+    if kind == UpperOnly
+        # SqrtUp's Jacobian is negative; +int step ⇒ -ext shift.
+        # MINOS's err.upper maps to the LOWER ext side and vice versa.
+        upper_step  = err.lower
+        lower_step  = err.upper
+        upper_valid = err.lower_valid
+        lower_valid = err.upper_valid
+        upper_fcn   = err.lower_fcn_limit
+        lower_fcn   = err.upper_fcn_limit
+        upper_new   = err.lower_new_min
+        lower_new   = err.upper_new_min
+    else
+        # LowerOnly (positive Jacobian) and BothBounds (monotonic Sin):
+        # standard mapping.
+        upper_step  = err.upper
+        lower_step  = err.lower
+        upper_valid = err.upper_valid
+        lower_valid = err.lower_valid
+        upper_fcn   = err.upper_fcn_limit
+        lower_fcn   = err.lower_fcn_limit
+        upper_new   = err.upper_new_min
+        lower_new   = err.lower_new_min
+    end
 
-    # Compute raw upper / lower ext shifts.
-    upper_ext = err.upper_valid ?
-        int2ext(kind, int_min + err.upper, par.lower, par.upper) - ext_min :
-        err.upper
-    lower_ext = err.lower_valid ?
-        int2ext(kind, int_min + err.lower, par.lower, par.upper) - ext_min :
-        err.lower
+    # ── Raw ext shifts ─────────────────────────────────────────────
+    upper_ext = upper_valid ?
+        int2ext(kind, int_min + upper_step, par.lower, par.upper) - ext_min :
+        upper_step
+    lower_ext = lower_valid ?
+        int2ext(kind, int_min + lower_step, par.lower, par.upper) - ext_min :
+        lower_step
 
-    upper_valid = err.upper_valid
-    lower_valid = err.lower_valid
-    saturated_at_bound = false
-
-    # For one-sided sqrt: detect sign-cross of int_min through 0.
-    # When MINOS lower_int = -k flips int onto the OTHER side of the
-    # bound, the path crossed through the parameter limit — the
-    # corresponding ext shift is physically saturated.
+    # ── Sign-cross detection for sqrt transforms ───────────────────
+    # int=0 corresponds to ext == bound. A step that flips sign of
+    # `int_min + step` relative to `int_min` means the MINOS search
+    # crossed through the parameter limit. Snap that side to 0 ext
+    # shift, invalidate, raise its OWN fcn_limit (per-side, not
+    # shared with the other side — codex round-2 catch).
     if kind == LowerOnly || kind == UpperOnly
-        if upper_valid && int_min != 0 &&
-           sign(int_min + err.upper) != sign(int_min)
-            upper_ext = bound_ext - ext_min
+        if upper_valid && int_min != 0.0 &&
+           sign(int_min + upper_step) != sign(int_min)
+            upper_ext   = 0.0
             upper_valid = false
-            saturated_at_bound = true
+            upper_fcn   = true
         end
-        if lower_valid && int_min != 0 &&
-           sign(int_min + err.lower) != sign(int_min)
-            lower_ext = bound_ext - ext_min
+        if lower_valid && int_min != 0.0 &&
+           sign(int_min + lower_step) != sign(int_min)
+            lower_ext   = 0.0
             lower_valid = false
-            saturated_at_bound = true
+            lower_fcn   = true
         end
     end
 
-    # Sign-sanity defense in depth (even if the above checks pass).
-    # MINOS upper must be ≥ 0; lower must be ≤ 0 in EXT space.
+    # ── Defense in depth: enforce upper ≥ 0, lower ≤ 0 contract ───
     if upper_valid && upper_ext < 0
-        upper_ext = bound_ext - ext_min
+        upper_ext   = 0.0
         upper_valid = false
-        saturated_at_bound = true
+        upper_fcn   = true
     end
     if lower_valid && lower_ext > 0
-        lower_ext = bound_ext - ext_min
+        lower_ext   = 0.0
         lower_valid = false
-        saturated_at_bound = true
+        lower_fcn   = true
     end
 
     return MinosError(err.par_idx, ext_min,
                        upper_ext, lower_ext,
                        upper_valid, lower_valid,
-                       err.upper_new_min, err.lower_new_min,
-                       err.upper_fcn_limit || saturated_at_bound,
-                       err.lower_fcn_limit || saturated_at_bound,
+                       upper_new, lower_new,
+                       upper_fcn, lower_fcn,
                        err.nfcn)
 end
 

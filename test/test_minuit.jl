@@ -139,46 +139,99 @@
         @test !occursin("⚠", s2)
     end
 
-    @testset "_minos_int_to_ext sign correctness (review BLOCKING #1)" begin
-        # Both reviewers (codex + Opus) flagged that the previous
-        # implementation could produce sign-wrong MINOS errors for
-        # one-sided sqrt transforms, because sqrt_int2ext is EVEN in
-        # int. When `int_min + lower_int` lands on the OPPOSITE side
-        # of int=0 from int_min, the MINOS search path crossed
-        # through the parameter bound and the raw ext shift becomes
-        # paradoxical (positive "lower" error). Regression test:
+    @testset "MINOS sign + magnitude on real bounded fits (review round-2)" begin
+        # Round-2 review (both codex + Opus) caught that the round-1
+        # fix mistook Jacobian-sign inversion (intrinsic for UpperOnly
+        # — sqrtup's d(ext)/d(int) is negative throughout) for
+        # saturation. The proper fix is a per-kind swap of upper/lower
+        # int steps before conversion. These tests assert the FIX is
+        # correct (not just "wrong-signed values aren't published"),
+        # using real migrad + minos on interior-optimum bounded fits
+        # — the basic HEP use case (one-sided positivity constraint).
 
-        # UpperOnly param at ext = 8 with upper = 10: synthetic
-        # MinosError with internal err.upper / err.lower large enough
-        # to flip int sign.
-        par = MinuitParameter("x", 0.0, 0.1; upper = 10.0)
-        int_min = JuMinuit.ext2int(JuMinuit.UpperOnly, 8.0, NaN, 10.0,
-                                    MachinePrecision())
-        # err.lower = -0.5, err.upper = +0.5 in int — for UpperOnly
-        # with int_min ≈ -1.73, these flip int's sign at the lower end.
-        err_int = MinosError(1, int_min, 0.2, -0.2,
-                              true, true, false, false, false, false, 50)
-        err_ext = JuMinuit._minos_int_to_ext(err_int, par)
-        # Defense-in-depth: upper must be ≥ 0; lower must be ≤ 0.
-        @test err_ext.upper >= 0 || !err_ext.upper_valid
-        @test err_ext.lower <= 0 || !err_ext.lower_valid
-        # Saturated sides should be marked invalid and flag fcn_limit.
-        if !err_ext.upper_valid || !err_ext.lower_valid
-            @test err_ext.upper_fcn_limit || err_ext.lower_fcn_limit
+        @testset "UpperOnly interior optimum: real fit" begin
+            # f(x, y) = (x - 8)² + (y - 2)²; x ∈ (-∞, 10], optimum
+            # at x=8 well-interior to upper bound. Hesse σ_x = 1.
+            # MINOS at 1σ should give upper ≈ +1 (toward x=9), lower
+            # ≈ −1 (toward x=7); both must be valid.
+            m = Minuit(x -> (x[1] - 8.0)^2 + (x[2] - 2.0)^2, [5.0, 0.0];
+                        name = ["x", "y"],
+                        limits = [(nothing, 10.0), nothing])
+            migrad(m)
+            @test m.is_valid
+            @test m.values[1] ≈ 8.0 atol = 1e-3
+            minos(m, 1)
+            e = m.minos_errors[1]
+            @test e.upper_valid
+            @test e.lower_valid
+            @test e.upper > 0           # sign convention
+            @test e.lower < 0
+            @test e.upper ≈ 1.0 atol = 0.05   # magnitude
+            @test e.lower ≈ -1.0 atol = 0.05
+            @test !e.upper_fcn_limit
+            @test !e.lower_fcn_limit
         end
 
-        # LowerOnly param at lower bound (σ near 0.1 with limit
-        # [0.1, ∞)): MINOS should detect saturation.
-        par2 = MinuitParameter("σ", 0.1, 0.05; lower = 0.1)
-        # int_min for σ at exactly the bound is 0 — degenerate, so
-        # use σ = 0.105 (very close to bound) where int_min ≈ small.
-        int_min2 = JuMinuit.ext2int(JuMinuit.LowerOnly, 0.105, 0.1, NaN,
-                                     MachinePrecision())
-        err_int2 = MinosError(2, int_min2, 0.3, -0.3,
-                               true, true, false, false, false, false, 50)
-        err_ext2 = JuMinuit._minos_int_to_ext(err_int2, par2)
-        @test err_ext2.upper >= 0 || !err_ext2.upper_valid
-        @test err_ext2.lower <= 0 || !err_ext2.lower_valid
+        @testset "LowerOnly interior optimum: real fit" begin
+            # Mirror: x ∈ [0, ∞), optimum at x=8 well-interior to
+            # lower bound. Same expected MINOS errors.
+            m = Minuit(x -> (x[1] - 8.0)^2 + (x[2] - 2.0)^2, [5.0, 0.0];
+                        name = ["x", "y"],
+                        limits = [(0.0, nothing), nothing])
+            migrad(m)
+            @test m.is_valid
+            minos(m, 1)
+            e = m.minos_errors[1]
+            @test e.upper_valid
+            @test e.lower_valid
+            @test e.upper > 0
+            @test e.lower < 0
+            @test e.upper ≈ 1.0 atol = 0.05
+            @test e.lower ≈ -1.0 atol = 0.05
+        end
+
+        @testset "BothBounds interior optimum: real fit" begin
+            # x ∈ [-100, 100]. Standard Sin transform; should match
+            # unbounded MINOS within EDM noise.
+            m = Minuit(x -> (x[1] - 8.0)^2 + (x[2] - 2.0)^2, [5.0, 0.0];
+                        name = ["x", "y"],
+                        limits = [(-100.0, 100.0), nothing])
+            migrad(m)
+            @test m.is_valid
+            minos(m, 1)
+            e = m.minos_errors[1]
+            @test e.upper_valid
+            @test e.lower_valid
+            @test e.upper > 0
+            @test e.lower < 0
+            @test e.upper ≈ 1.0 atol = 0.05
+            @test e.lower ≈ -1.0 atol = 0.05
+        end
+
+        @testset "UpperOnly saturated: param near upper bound" begin
+            # Fit pushes x toward upper bound: optimum is at x=12 but
+            # upper=10. MINOS upper side will saturate at the bound;
+            # lower side stays valid (search goes interior). Two-param
+            # form (MINOS requires n > 1 free).
+            m = Minuit(x -> (x[1] - 12.0)^2 + (x[2] - 2.0)^2, [5.0, 0.0];
+                        name = ["x", "y"],
+                        limits = [(nothing, 10.0), nothing])
+            migrad(m)
+            @test m.is_valid
+            @test m.values[1] ≈ 10.0 atol = 1e-2   # at upper bound
+            minos(m, 1)
+            e = m.minos_errors[1]
+            # Upper saturated: ext shift = 0, invalid, per-side
+            # fcn_limit (NOT shared with lower).
+            @test e.upper == 0.0
+            @test !e.upper_valid
+            @test e.upper_fcn_limit
+            # Lower side should still be valid and negative (search
+            # goes away from bound, toward x=12-1=11... but x is
+            # capped at 10, so the lower MINOS finds the crossing
+            # somewhere interior). At minimum, sign should be right.
+            @test e.lower <= 0
+        end
     end
 
     @testset "at-limit warning labels lower/upper correctly (review BLOCKING #2)" begin
