@@ -163,8 +163,7 @@ libraries, etc.), use option 2 below.
 Start Julia with multiple threads (`julia -t N`) and pass
 `threaded_gradient=true`. The per-coordinate `for i in 1:n` loop inside
 `numerical_gradient!` runs in parallel across `N` threads. Works on
-**any** FCN — no type-genericity required, no AD library to wrestle
-with type-locked buffers / C callbacks.
+**any FCN that is thread-safe** (see ⚠ warning below).
 
 ```julia
 # Start: julia -t 8
@@ -174,9 +173,48 @@ migrad!(m)
 mncontour(m, 1, 2)   # threading propagates through MINOS / contour too
 ```
 
-Measured **~2× speedup** on `julia -t 8` for IAM-style FCN (9 params,
-85 μs/call); see `benchmark/IAM_2Pformfactor` for the realistic
-benchmark.
+Measured speedups depend on FCN cost:
+- X3872 dip fit (n=3, 38 μs/call): no win (n too small)
+- IAM-style FCN (n=9, 85 μs/call): ~2× on `julia -t 8`
+- **Real IAM 2π form-factor fit (n=9, 9.5 ms/call): 10.2× on `julia -t 8`** — near-ideal scaling
+
+> **⚠ THREAD-SAFETY CONTRACT — read before opting in.**
+>
+> Your FCN must NOT share mutable state across threads. The single most
+> common HEP-fit pattern that violates this:
+>
+> ```julia
+> # ✗ ANTI-PATTERN — module-level mutable scratch buffer
+> const T_BUF = zeros(ComplexF64, 3, 3)
+>
+> function chi2(par)
+>     fill_T_matrix!(T_BUF, par)     # ← multiple threads race on T_BUF
+>     return loss_from(T_BUF)
+> end
+> ```
+>
+> With `threaded_gradient=true`, `n` parallel calls to `chi2(par)` all
+> mutate `T_BUF` simultaneously. The DFP loop then gets **corrupted
+> gradients** and silently converges to a **different minimum** (or
+> diverges).
+>
+> The real IAM fit (`BenchmarkExamples/IAM_2Pformfactor/`) hits exactly
+> this: `St4_00!` mutates `const c_00_4 = zeros(ComplexF64, 3, 3)` in
+> `src/init_const.jl`. Single-thread converges to χ² ≈ 614; threaded
+> "converges" to χ² ≈ 987 — silently wrong.
+>
+> **Mitigations**:
+> - Move scratch into `f`'s local scope (allocate per call, or pass via
+>   closure but with one-buffer-per-thread).
+> - Use `Threads.@threads`-incompatible idioms (per-thread storage via
+>   `[zeros(...) for _ in 1:Threads.maxthreadid()]`).
+> - **Always run `BenchmarkExamples/X3872_dip/bench.jl`-style
+>   cross-check** comparing single-thread vs threaded final `fval` and
+>   `parameters.x` before trusting threaded results in production.
+>
+> JuMinuit's internal buffers (`MigradScratch`, `cf_fixed`'s `full_buf`)
+> are all per-thread — the framework is safe. The contract is on
+> **your** FCN.
 
 ### When to choose which
 
