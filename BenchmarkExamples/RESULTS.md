@@ -110,7 +110,7 @@ fit-quality artifact. Tracked.
 - **FCN cost**: measured with `@benchmark` (`BenchmarkTools.jl`),
   reported in the per-script header.
 
-## Follow-up tasks already spawned
+## Open follow-up work
 
 1. **MINOS early termination on tight wells** — X(3872) par[2] case.
 2. **IAM 9-LEC early-termination divergence** — JuMinuit stops ~3×
