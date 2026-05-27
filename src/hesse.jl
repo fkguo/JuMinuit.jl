@@ -73,12 +73,17 @@ The returned `MinimumState`'s `error.status` may be:
 - `MnInvertFailed` — inversion failed; matrix is the same diagonal.
 """
 function hesse(
-    cf::CostFunction,
+    cf::AbstractCostFunction,
     state::MinimumState,
     strategy::Strategy = Strategy(1);
     prec::MachinePrecision = MachinePrecision(),
     maxcalls::Integer = 0,
 )
+    # HESSE computes 2nd derivatives by central differences on `cf(x)`
+    # — the user's analytical gradient (when `cf isa
+    # CostFunctionWithGradient`) doesn't speed this up and the algorithm
+    # ignores it. Accept any `AbstractCostFunction` so that
+    # `Minuit(...; grad=...)` users can still call `hesse(m)`.
     n = length(state)
     if maxcalls == 0
         maxcalls = 200 + 100 * n + 5 * n * n

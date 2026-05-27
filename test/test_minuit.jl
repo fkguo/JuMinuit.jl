@@ -508,4 +508,25 @@
         migrad(m_chain)
         @test JuMinuit.hesse(m_chain) === m_chain
     end
+
+    @testset "hesse(m) works when m was built with grad=" begin
+        # Regression — hesse(::AbstractCostFunction, ...) used to be
+        # narrowly typed to ::CostFunction, so Minuit constructed with
+        # an analytical gradient (CostFunctionWithGradient internally)
+        # raised MethodError on `hesse(m)`. HESSE only calls `cf(x)`
+        # — not the gradient — so it should accept either flavor.
+        cf_fn = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+        cf_grad = x -> [2*(x[1] - 1.0), 2*(x[2] - 2.0)]
+        m = Minuit(cf_fn, [0.0, 0.0]; errors = [0.1, 0.1], grad = cf_grad)
+        migrad(m; strategy = Strategy(0))
+        @test JuMinuit.hesse(m) === m   # no MethodError
+        @test m.is_valid
+        # Cov matches the numerical-gradient path on a pure quadratic.
+        cov_grad = collect(m.covariance)
+        m_num = Minuit(cf_fn, [0.0, 0.0]; errors = [0.1, 0.1])
+        migrad(m_num; strategy = Strategy(0))
+        JuMinuit.hesse(m_num)
+        cov_num = collect(m_num.covariance)
+        @test cov_grad ≈ cov_num atol = 1e-8
+    end
 end
