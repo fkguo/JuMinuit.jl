@@ -499,18 +499,24 @@ function _minos_external_via_function_cross(
     end
     step_lo = max(step_lo, 0.0)
 
-    _trace_info(print_level, "MnMinos",
-                @sprintf("Determination of upper error for par=%d (value=%.10g)",
-                          par_idx, ext_min))
+    # gap M1: outer-guarded to avoid the @sprintf String alloc at level 0
+    # (this helper is called per bounded-MINOS parameter request).
+    if print_level >= 1
+        _trace_info(print_level, "MnMinos",
+                    @sprintf("Determination of upper error for par=%d (value=%.10g)",
+                              par_idx, ext_min))
+    end
     cr_up = function_cross_external(bfm, cf, par_idx, +1.0;
                                      tlr = tlr, maxcalls = maxcalls,
                                      strategy = strategy, prec = prec,
                                      threaded_gradient = threaded_gradient,
                                      sigma = sigma,
                                      print_level = print_level)
-    _trace_info(print_level, "MnMinos",
-                @sprintf("Determination of lower error for par=%d (value=%.10g)",
-                          par_idx, ext_min))
+    if print_level >= 1
+        _trace_info(print_level, "MnMinos",
+                    @sprintf("Determination of lower error for par=%d (value=%.10g)",
+                              par_idx, ext_min))
+    end
     cr_lo = function_cross_external(bfm, cf, par_idx, -1.0;
                                      tlr = tlr, maxcalls = maxcalls,
                                      strategy = strategy, prec = prec,

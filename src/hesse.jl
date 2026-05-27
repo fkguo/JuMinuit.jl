@@ -258,14 +258,19 @@ function hesse(
 
         vhmat[i, i] = g2[i]
 
-        _trace_info(print_level, "MnHesse",
-                    @sprintf("diag i=%d  g2=%.6g  d=%.6g  converged=%s",
-                              i, g2[i], dirin[i], converged ? "yes" : "no");
-                    min_level = 2)
+        # gap M1: outer guard — without it the @sprintf would fire per
+        # parameter at level 0 (O(n) wasted Strings per HESSE).
+        if print_level >= 2
+            _trace_info(print_level, "MnHesse",
+                        @sprintf("diag i=%d  g2=%.6g  d=%.6g  converged=%s",
+                                  i, g2[i], dirin[i], converged ? "yes" : "no"))
+        end
 
         if ncalls(cf) > maxcalls
-            _trace_warn(print_level, "MnHesse",
-                        @sprintf("maxcalls exceeded during diagonal pass at i=%d", i))
+            if print_level >= 1
+                _trace_warn(print_level, "MnHesse",
+                            @sprintf("maxcalls exceeded during diagonal pass at i=%d", i))
+            end
             return _hesse_diagonal_failure(state, g2, prec, ncalls(cf), MnHesseFailed)
         end
     end
@@ -300,18 +305,23 @@ function hesse(
     # ── Off-diagonal pass ─────────────────────────────────────────
     # All pairs (i, j) with i < j.
     if n > 1
-        _trace_info(print_level, "MnHesse", "starting off-diagonal pass";
-                    min_level = 2)
+        # gap M1: O(n²) inner loop — outer guard is essential. Without
+        # it the @sprintf would alloc one String per (i,j) pair at
+        # every level (including 0) — 190 wasted allocs for n=20.
+        if print_level >= 2
+            _trace_info(print_level, "MnHesse", "starting off-diagonal pass")
+        end
         for i in 1:n
             x[i] += dirin[i]
             for j in (i + 1):n
                 x[j] += dirin[j]
                 fs1 = cf(x)
                 vhmat[i, j] = (fs1 + amin - yy[i] - yy[j]) / (dirin[i] * dirin[j])
-                _trace_info(print_level, "MnHesse",
-                            @sprintf("off-diag i=%d j=%d  H=%.6g",
-                                      i, j, vhmat[i, j]);
-                            min_level = 2)
+                if print_level >= 2
+                    _trace_info(print_level, "MnHesse",
+                                @sprintf("off-diag i=%d j=%d  H=%.6g",
+                                          i, j, vhmat[i, j]))
+                end
                 x[j] -= dirin[j]
             end
             x[i] -= dirin[i]

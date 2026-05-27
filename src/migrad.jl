@@ -685,8 +685,13 @@ function _migrad_loop(
             if gdel > 0
                 s0 = make_posdef(s0, prec)
                 made_pos_def_flag = true
-                _trace_info(print_level, "MnMigrad",
-                            "matrix not pos.def; MnPosDef applied"; min_level = 2)
+                # gap M1: outer guard avoids the literal-String alloc at level 0.
+                # `_trace_info`'s own gate is for callers that prefer the
+                # one-line form when the @sprintf cost is amortized.
+                if print_level >= 2
+                    _trace_info(print_level, "MnMigrad",
+                                "matrix not pos.def; MnPosDef applied")
+                end
                 sym_mul!(step, s0.error.inv_hessian, s0.gradient.grad, -1.0, 0.0)
                 gdel = dot(step, s0.gradient.grad)
                 if gdel > 0
@@ -696,9 +701,13 @@ function _migrad_loop(
 
             # ── Step 3: line search
             pp = line_search(cf, s0.parameters, step, gdel, prec; work_x = ls_work)
-            _trace_info(print_level, "MnMigrad",
-                        @sprintf("line search: y=%.10g  x=%.4g", pp.y, pp.x);
-                        min_level = 2)
+            # gap M1: outer-guarded so the @sprintf only runs at level ≥ 2.
+            # This sits in the hot DFP inner loop — without the guard the
+            # String alloc fires every iter even at level 0.
+            if print_level >= 2
+                _trace_info(print_level, "MnMigrad",
+                            @sprintf("line search: y=%.10g  x=%.4g", pp.y, pp.x))
+            end
 
             # ── Step 4: no-improvement check (C++ line 278)
             if abs(pp.y - s0.parameters.fval) <= abs(s0.parameters.fval) * prec.eps
@@ -802,10 +811,13 @@ function _migrad_loop(
                 _trace_iter(print_level, "MnMigrad", iter_dfp,
                             s0.parameters.fval, s0.edm, s0.error.dcovar,
                             ncalls(cf))
-                _trace_info(print_level, "MnMigrad",
-                            @sprintf("gnorm=%.6g",
-                                      sqrt(dot(new_grad.grad, new_grad.grad)));
-                            min_level = 2)
+                # gnorm sub-line is level ≥ 2 only — inner guard avoids
+                # the @sprintf String alloc when level == 1.
+                if print_level >= 2
+                    _trace_info(print_level, "MnMigrad",
+                                @sprintf("gnorm=%.6g",
+                                          sqrt(dot(new_grad.grad, new_grad.grad))))
+                end
                 _trace_state(print_level, "MnMigrad", iter_dfp,
                              s0.parameters.x, s0.gradient.grad)
             end
@@ -826,9 +838,11 @@ function _migrad_loop(
             # full original budget) but we have ncalls already; let Hesse
             # use the leftover up to maxfcn_eff. Hesse internally floors
             # at its own default budget.
-            _trace_info(print_level, "MnMigrad",
-                        @sprintf("entering inner HESSE refinement (strategy=%d  dcovar=%.4g)",
-                                  strategy.level, s0.error.dcovar))
+            if print_level >= 1
+                _trace_info(print_level, "MnMigrad",
+                            @sprintf("entering inner HESSE refinement (strategy=%d  dcovar=%.4g)",
+                                      strategy.level, s0.error.dcovar))
+            end
             budget_left = maxfcn_eff - ncalls(cf)
             s_hesse = hesse(cf, s0, strategy;
                              prec = prec, maxcalls = max(budget_left, 1),
@@ -836,8 +850,10 @@ function _migrad_loop(
             hessian_computed = true
             if !is_valid(s_hesse)
                 hesse_failed_flag = true
-                _trace_warn(print_level, "MnMigrad",
-                            "inner HESSE returned invalid state — terminating MIGRAD")
+                if print_level >= 1
+                    _trace_warn(print_level, "MnMigrad",
+                                "inner HESSE returned invalid state — terminating MIGRAD")
+                end
                 # Keep s0 as-is (C++ comment line 152: "Invalid Hessian - exit")
                 break
             end

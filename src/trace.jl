@@ -84,13 +84,19 @@ end
 
 Level-3 full-state trace via `@debug`. Emits the parameter and
 gradient vectors keyed by `x`/`grad`. Capture by configuring the
-active logger at `Logging.Debug` level.
+active logger at `Logging.Debug` level (e.g. via
+`Logging.with_logger(ConsoleLogger(stderr, Logging.Debug))`).
+
+The kwargs `x` and `grad` are passed as views — `@debug`'s lazy kwarg
+evaluation means no allocation happens when the active logger
+filters out `Debug` (i.e. the typical case where the user hasn't
+turned on debug-level capture).
 """
 @inline function _trace_state(level::Integer, prefix::AbstractString,
                                iter::Integer,
                                x::AbstractVector{<:Real},
                                grad::AbstractVector{<:Real})
     level >= 3 || return nothing
-    @debug "[$prefix] state at iter=$iter" x=collect(Float64, x) grad=collect(Float64, grad)
+    @debug "[$prefix] state at iter=$iter" x grad
     return nothing
 end

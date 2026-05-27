@@ -244,6 +244,9 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
     # gap M1: header. The C++ analog is `print.Info(...)` calls at
     # MnFunctionCross.cxx:108-122. Print `up_eff` (post-sigma-scale)
     # so the trace reflects what the algorithm actually uses.
+    # Outer-guarded so the @sprintf only runs at level ≥ 1 (this is
+    # called per MINOS direction; avoiding even one alloc per direction
+    # keeps level=0 a clean no-op).
     if print_level >= 1
         _trace_info(print_level, "MnFunctionCross",
                     @sprintf("start: fmin=%.10g  up=%.4g  aim=%.10g  tlr=%.4g  maxcalls=%d",
@@ -280,10 +283,14 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
     # ── Probe 1: α = aopt_seed (C++ "min1" / our seed-1 MIGRAD) ────────
     min1, nf1 = _probe(aopt_seed, maxcalls - nfcn)
     nfcn += nf1
-    _trace_info(print_level, "MnFunctionCross",
-                @sprintf("probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
-                          ipt + 1, aopt_seed, fval(min1), min1.is_valid);
-                min_level = 2)
+    # gap M1: outer-guarded — without this the @sprintf fires per probe
+    # at level 0. MINOS triggers `function_cross` 2× per parameter
+    # which translates to 4-20+ probes for a typical fit.
+    if print_level >= 2
+        _trace_info(print_level, "MnFunctionCross",
+                    @sprintf("probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
+                              ipt + 1, aopt_seed, fval(min1), min1.is_valid))
+    end
     fval(min1) < fmin_val - tlf &&
         return MnCross(min1.state, NaN, nfcn; valid=false, new_min=true)
     min1.reached_call_limit &&
@@ -311,10 +318,11 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
         aopt = a[1] + 0.2 * l300_step_count
         m, nf = _probe(aopt, maxcalls - nfcn)
         nfcn += nf
-        _trace_info(print_level, "MnFunctionCross",
-                    @sprintf("L300 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
-                              ipt + 1, aopt, fval(m), m.is_valid);
-                    min_level = 2)
+        if print_level >= 2
+            _trace_info(print_level, "MnFunctionCross",
+                        @sprintf("L300 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
+                                  ipt + 1, aopt, fval(m), m.is_valid))
+        end
         fval(m) < fmin_val - tlf &&
             return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
         m.reached_call_limit &&
@@ -348,10 +356,11 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
 
     m, nf = _probe(aopt, maxcalls - nfcn)
     nfcn += nf
-    _trace_info(print_level, "MnFunctionCross",
-                @sprintf("L460 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
-                          ipt + 1, aopt, fval(m), m.is_valid);
-                min_level = 2)
+    if print_level >= 2
+        _trace_info(print_level, "MnFunctionCross",
+                    @sprintf("L460 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
+                              ipt + 1, aopt, fval(m), m.is_valid))
+    end
     fval(m) < fmin_val - tlf &&
         return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
     m.reached_call_limit &&
@@ -442,10 +451,11 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
         # Probe at new aopt (C++ lines 481-487)
         m, nf = _probe(aopt_new, maxcalls - nfcn)
         nfcn += nf
-        _trace_info(print_level, "MnFunctionCross",
-                    @sprintf("L500 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
-                              ipt + 1, aopt_new, fval(m), m.is_valid);
-                    min_level = 2)
+        if print_level >= 2
+            _trace_info(print_level, "MnFunctionCross",
+                        @sprintf("L500 probe ipt=%d  aopt=%.6g  f=%.10g  valid=%s",
+                                  ipt + 1, aopt_new, fval(m), m.is_valid))
+        end
         fval(m) < fmin_val - tlf &&
             return MnCross(m.state, NaN, nfcn; valid=false, new_min=true)
         m.reached_call_limit &&
@@ -460,8 +470,10 @@ function _cross_core(_probe::F, fmin_val::Float64, up::Float64,
         last_min = m
     end
 
-    _trace_warn(print_level, "MnFunctionCross",
-                @sprintf("did not converge in %d iters", maxitr))
+    if print_level >= 1
+        _trace_warn(print_level, "MnFunctionCross",
+                    @sprintf("did not converge in %d iters", maxitr))
+    end
     return MnCross(state_fallback, NaN, nfcn; valid=false)
 end
 

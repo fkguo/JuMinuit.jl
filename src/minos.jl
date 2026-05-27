@@ -187,9 +187,13 @@ function minos(
 
     # gap M1: per-direction headers mirror C++ MnMinos.cxx:105
     # "Determination of upper/lower Minos error for parameter ...".
-    _trace_info(print_level, "MnMinos",
-                @sprintf("Determination of upper error for par=%d (value=%.10g)",
-                          par_idx, min_par_value))
+    # Outer-guarded — minos is called per parameter, so we avoid the
+    # @sprintf String alloc per direction × per parameter at level 0.
+    if print_level >= 1
+        _trace_info(print_level, "MnMinos",
+                    @sprintf("Determination of upper error for par=%d (value=%.10g)",
+                              par_idx, min_par_value))
+    end
 
     # Upper direction (positive). Threads the optional `scratch` —
     # both upper + lower cross searches use the same inner_dim (n-1),
@@ -224,9 +228,11 @@ function minos(
                                   n) : nothing
     nfcn_total = up_cross.nfcn
 
-    _trace_info(print_level, "MnMinos",
-                @sprintf("Determination of lower error for par=%d (value=%.10g)",
-                          par_idx, min_par_value))
+    if print_level >= 1
+        _trace_info(print_level, "MnMinos",
+                    @sprintf("Determination of lower error for par=%d (value=%.10g)",
+                              par_idx, min_par_value))
+    end
 
     # Lower direction (negative). aopt comes out positive; flip sign.
     lo_cross = function_cross(fmin, cf, par_idx, -1.0;
