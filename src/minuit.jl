@@ -94,6 +94,16 @@ mutable struct Minuit
     # are already per-thread via Phase G.1. Default `false` (single-threaded
     # behavior identical to pre-Phase G).
     threaded_gradient::Bool
+    # Phase H: when `true` AND `threaded_gradient=true`, JuMinuit runs
+    # one extra sequential+threaded gradient comparison at the seed
+    # point on the first migrad call. Throws `ThreadSafetyError` if the
+    # FCN's threaded gradient disagrees with the sequential one (race
+    # in user code → silently wrong minimum without this check). Default
+    # `true` whenever `threaded_gradient=true` — costs ~2 extra gradient
+    # evaluations (negligible for the typical case where threading is
+    # only enabled for expensive FCNs). Set to `false` to bypass once
+    # you've confirmed thread-safety another way.
+    verify_threading::Bool
 end
 
 function Minuit(
@@ -127,6 +137,12 @@ function Minuit(
     # opt-in when (a) FCN > 500 ns/call, (b) n ≥ 4, (c) FCN is thread-
     # safe (no hidden mutable state).
     threaded_gradient::Bool = false,
+    # Phase H: auto-verify FCN thread-safety on first gradient call when
+    # threading is enabled. Default `true` whenever `threaded_gradient=true`
+    # — costs ~2 extra gradient evaluations. Pass `false` to bypass once
+    # you've confirmed safety via `JuMinuit.is_thread_safe(cf, x0)` or
+    # otherwise.
+    verify_threading::Bool = threaded_gradient,
     # Catch-all for per-parameter `error_<name>`, `fix_<name>`, `limit_<name>`
     # kwargs in the IMinuit.jl style.
     kwargs...,
@@ -214,7 +230,7 @@ function Minuit(
     strat = strategy isa Strategy ? strategy : Strategy(Int(strategy))
     return Minuit(cf, params, nothing, Dict{Int,MinosError}(), prec,
                   cfwg, strat, Float64(tol), Int(print_level),
-                  Bool(threaded_gradient))
+                  Bool(threaded_gradient), Bool(verify_threading))
 end
 
 # IMinuit.jl-style: named-parameter constructor where each parameter
@@ -239,6 +255,7 @@ function Minuit(fcn;
                 tol::Real = 0.1,
                 print_level::Integer = 0,
                 threaded_gradient::Bool = false,
+                verify_threading::Bool = threaded_gradient,
                 kwargs...)
     # Separate `error_*`, `fix_*`, `limit_*`, and meta from the
     # parameter-name kwargs.
@@ -275,6 +292,7 @@ function Minuit(fcn;
                   grad = grad, strategy = strategy, tol = tol,
                   print_level = print_level,
                   threaded_gradient = threaded_gradient,
+                  verify_threading = verify_threading,
                   other_kws...)
 end
 
@@ -300,7 +318,8 @@ function Minuit(fcn, m::Minuit; kwargs...)
                             up = m.fcn.up, prec = m.prec,
                             strategy = m.strategy, tol = m.tol,
                             print_level = m.print_level,
-                            threaded_gradient = m.threaded_gradient, kwargs...)
+                            threaded_gradient = m.threaded_gradient,
+                            verify_threading = m.verify_threading, kwargs...)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -327,7 +346,8 @@ function migrad!(m::Minuit;
                   strategy::Strategy = m.strategy,
                   tol::Real = m.tol,
                   maxfcn::Union{Integer,Nothing} = nothing,
-                  threaded_gradient::Bool = m.threaded_gradient)
+                  threaded_gradient::Bool = m.threaded_gradient,
+                  verify_threading::Bool = m.verify_threading)
     # iminuit-style implicit resume: if we already converged once,
     # build a temporary Parameters carrying those values forward. The
     # user's m.params stays untouched so that `reset(m)` + migrad
@@ -337,12 +357,14 @@ function migrad!(m::Minuit;
         m.fmin = migrad(m.cfwg, params_to_use;
                          strategy = strategy, tol = tol, maxfcn = maxfcn,
                          prec = m.prec,
-                         threaded_gradient = threaded_gradient)
+                         threaded_gradient = threaded_gradient,
+                         verify_threading = verify_threading)
     else
         m.fmin = migrad(m.fcn, params_to_use;
                          strategy = strategy, tol = tol, maxfcn = maxfcn,
                          prec = m.prec,
-                         threaded_gradient = threaded_gradient)
+                         threaded_gradient = threaded_gradient,
+                         verify_threading = verify_threading)
     end
     return m
 end

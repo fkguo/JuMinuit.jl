@@ -77,6 +77,7 @@ export ParabolaPoint, line_search
 export has_negative_g2, negative_g2_line_search
 export seed_state, warm_restart_state
 export FunctionMinimum, migrad
+export is_thread_safe, ThreadSafetyError
 export parameters, errors, gradient, covariance
 export reached_call_limit, above_max_edm
 export MinuitParameter, Parameters

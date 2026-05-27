@@ -336,6 +336,7 @@ function migrad(
     prec::MachinePrecision = MachinePrecision(),
     scratch::Union{Nothing,MigradScratch} = nothing,
     threaded_gradient::Bool = false,
+    verify_threading::Bool = false,
 )
     n = length(x0)
     maxfcn_eff = maxfcn === nothing ? (200 + 100 * n + 5 * n^2) : Int(maxfcn)
@@ -345,9 +346,12 @@ function migrad(
     # is one call into `cf.g`, not a per-parameter loop). Accepted here
     # for API symmetry with the numerical path; downstream
     # `numerical_gradient!(::CFwG, ...)` accepts but ignores it.
+    # `verify_threading` likewise a no-op (nothing to verify on a
+    # single-call gradient path). Default false even when threaded=true.
     return _migrad_loop(seed, cf, strategy, Float64(tol), maxfcn_eff, prec;
                           scratch = scratch,
-                          threaded_gradient = threaded_gradient)
+                          threaded_gradient = threaded_gradient,
+                          verify_threading = verify_threading)
 end
 
 """
@@ -370,10 +374,12 @@ function migrad(
     prec::MachinePrecision = MachinePrecision(),
     scratch::Union{Nothing,MigradScratch} = nothing,
     threaded_gradient::Bool = false,
+    verify_threading::Bool = false,
 )
     n = length(seed)
     maxfcn_eff = maxfcn === nothing ? (200 + 100 * n + 5 * n^2) : Int(maxfcn)
     return _migrad_loop(seed, cf, strategy, Float64(tol), maxfcn_eff, prec;
                           scratch = scratch,
-                          threaded_gradient = threaded_gradient)
+                          threaded_gradient = threaded_gradient,
+                          verify_threading = verify_threading)
 end

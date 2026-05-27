@@ -206,15 +206,36 @@ Measured speedups depend on FCN cost:
 > **Mitigations**:
 > - Move scratch into `f`'s local scope (allocate per call, or pass via
 >   closure but with one-buffer-per-thread).
-> - Use `Threads.@threads`-incompatible idioms (per-thread storage via
->   `[zeros(...) for _ in 1:Threads.maxthreadid()]`).
-> - **Always run `BenchmarkExamples/X3872_dip/bench.jl`-style
->   cross-check** comparing single-thread vs threaded final `fval` and
->   `parameters.x` before trusting threaded results in production.
+> - Use per-thread storage via
+>   `[zeros(...) for _ in 1:Threads.maxthreadid()]` + index by
+>   `Threads.threadid()`.
+> - **Use the built-in safety net** (Phase H):
+>   - `migrad(..., threaded_gradient=true)` AUTO-VERIFIES on first call
+>     (default `verify_threading=true` when threading is on). If the
+>     FCN's threaded gradient disagrees with the sequential one,
+>     `ThreadSafetyError` is raised with a full diagnostic pointing
+>     at which parameter index broke and how to fix it.
+>   - Standalone probe: `JuMinuit.is_thread_safe(cf, x0)::Bool` to
+>     check before committing.
+>
+> ```julia
+> using JuMinuit
+> cf = CostFunction(my_chi2)
+> if Threads.nthreads() > 1 && JuMinuit.is_thread_safe(cf, x0)
+>     m = Minuit(my_chi2, x0; threaded_gradient=true)  # safe
+> else
+>     m = Minuit(my_chi2, x0)                          # fall back
+> end
+> ```
 >
 > JuMinuit's internal buffers (`MigradScratch`, `cf_fixed`'s `full_buf`)
 > are all per-thread — the framework is safe. The contract is on
-> **your** FCN.
+> **your** FCN. The IAM 2π form-factor fit
+> (`BenchmarkExamples/IAM_2Pformfactor/bench.jl`) is included as the
+> reference failure case: `is_thread_safe(cf_iam, paras0) = false`
+> detects in ~1 second; `migrad(..., threaded_gradient=true)` would
+> have silently converged to χ²≈987 (vs correct ≈614) without the
+> Phase H check.
 
 ### When to choose which
 

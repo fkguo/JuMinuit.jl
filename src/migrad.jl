@@ -123,6 +123,176 @@ dimension changes (MINOS n-1 → axis n-1 → ray n-2).
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Phase H — thread-safety verification.
+#
+# The single biggest pitfall when enabling `threaded_gradient=true` is a
+# user FCN with hidden mutable state (module-level scratch buffer, RNG,
+# cache). Concurrent gradient calls race on that state, producing
+# corrupted gradients; MIGRAD then slides to a different local minimum
+# than the sequential run, SILENTLY giving a wrong answer.
+#
+# The IAM 2π form-factor fit (BenchmarkExamples/IAM_2Pformfactor/)
+# exhibits this: `St4_00!` mutates `const c_00_4 = zeros(ComplexF64, 3, 3)`.
+# Single-thread converges to χ²≈614; threaded "converges" to χ²≈987.
+#
+# `_verify_thread_safety` runs sequential + threaded numerical gradient
+# at the seed point and asserts the results match within FP tolerance.
+# If they differ, throws `ThreadSafetyError` with the max difference
+# location and a pointer to the README mitigations.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    ThreadSafetyError(message)
+
+Raised by `_migrad_loop` when `threaded_gradient=true` is used with
+`verify_threading=true` and the user FCN's threaded gradient does not
+match its sequential counterpart at the seed point (Phase H safety
+check). Indicates the FCN has hidden mutable state that races under
+parallel evaluation.
+"""
+struct ThreadSafetyError <: Exception
+    message::String
+end
+Base.showerror(io::IO, e::ThreadSafetyError) = print(io, "ThreadSafetyError: ", e.message)
+
+"""
+    _verify_thread_safety(cf, seed::MinimumState, strategy, prec; tol=1e-8)
+
+Run the same numerical gradient at `seed.parameters` two ways:
+sequentially (`threaded=false`) and in parallel (`threaded=true`). If
+the maximum element-wise relative difference exceeds `tol`, throw
+`ThreadSafetyError` with a detailed diagnostic.
+
+Cost: 2 × (one gradient evaluation) ≈ 4·n·grad_ncycles FCN calls
+(~negligible for expensive FCNs; ~ms for cheap ones).
+
+Internal — drivers call this via `verify_threading=true` kwarg.
+"""
+function _verify_thread_safety(cf, seed::MinimumState, strategy::Strategy,
+                                 prec::MachinePrecision; tol::Float64 = 1e-8)
+    n = length(seed)
+    n >= 1 || return nothing
+
+    # Seed buffers for `numerical_gradient!` from the seed's existing
+    # gradient (so step refinement starts at the same point in both runs).
+    grad_seq = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    grad_par = FunctionGradient(zeros(n), zeros(n), zeros(n))
+
+    x_work_seq = similar(seed.parameters.x)
+    x_work_par = similar(seed.parameters.x)
+
+    # Sequential gradient (ground truth)
+    numerical_gradient!(grad_seq, x_work_seq, seed.parameters, seed.gradient,
+                          cf, strategy, prec; threaded = false)
+    # Threaded gradient (potentially corrupted by user-FCN race)
+    numerical_gradient!(grad_par, x_work_par, seed.parameters, seed.gradient,
+                          cf, strategy, prec; threaded = true)
+
+    # Element-wise relative difference
+    max_rel_diff = 0.0
+    bad_idx = 0
+    @inbounds for i in 1:n
+        diff = abs(grad_seq.grad[i] - grad_par.grad[i])
+        scale = max(abs(grad_seq.grad[i]), abs(grad_par.grad[i]), 1e-12)
+        rel = diff / scale
+        if rel > max_rel_diff
+            max_rel_diff = rel
+            bad_idx = i
+        end
+    end
+
+    if max_rel_diff > tol
+        throw(ThreadSafetyError("""
+            Threaded numerical gradient disagrees with sequential gradient
+            at the seed point (Phase H verification).
+
+              max relative difference = $(round(max_rel_diff; sigdigits=3))
+              at parameter index $bad_idx of $n
+              sequential[$bad_idx] = $(grad_seq.grad[bad_idx])
+              threaded[$bad_idx]   = $(grad_par.grad[bad_idx])
+              tolerance            = $tol
+
+            ROOT CAUSE — your user FCN is not thread-safe.
+
+            Most common HEP-fit pattern that violates this:
+              const T_BUF = zeros(ComplexF64, 3, 3)     # ← module-level
+              function chi2(par)
+                  fill_T_matrix!(T_BUF, par)            # ← multiple threads race
+                  return loss_from(T_BUF)
+              end
+
+            With `threaded_gradient=true`, n parallel calls to chi2 all
+            mutate T_BUF simultaneously → MIGRAD gets corrupted gradients
+            → silently converges to the WRONG local minimum.
+
+            Mitigations (see README "THREAD-SAFETY CONTRACT" section):
+              1. Move scratch into local scope (allocate per call).
+              2. Use per-thread storage:
+                   const T_POOL = [zeros(ComplexF64, 3, 3)
+                                   for _ in 1:Threads.maxthreadid()]
+                   function chi2(par)
+                       T = T_POOL[Threads.threadid()]
+                       fill_T_matrix!(T, par); loss_from(T)
+                   end
+              3. Disable threading: `threaded_gradient = false`.
+
+            To bypass this check after verifying thread-safety some other
+            way (NOT recommended unless you're absolutely sure):
+              migrad(..., threaded_gradient=true, verify_threading=false)
+            """))
+    end
+    return nothing
+end
+
+"""
+    is_thread_safe(cf::AbstractCostFunction, x0::AbstractVector;
+                    errs=fill(0.1, length(x0)), tol=1e-8,
+                    strategy=Strategy(0), prec=MachinePrecision()) -> Bool
+
+Standalone helper: test whether a user FCN gives the same numerical
+gradient sequentially vs. threaded at `x0`. Returns `true` if safe,
+`false` otherwise. Does NOT throw — for the throw version, see the
+auto-check triggered by `migrad(..., threaded_gradient=true,
+verify_threading=true)` (the default for high-level callers).
+
+Use this to probe a new FCN before committing to `threaded_gradient=true`:
+
+```julia
+using JuMinuit
+cf = CostFunction(my_chi2)
+if Threads.nthreads() > 1 && JuMinuit.is_thread_safe(cf, x0)
+    m = Minuit(my_chi2, x0; threaded_gradient=true)
+else
+    m = Minuit(my_chi2, x0)
+end
+```
+
+Cost: equivalent to 2 gradient evaluations (≈ 4·n·grad_ncycles FCN
+calls).
+"""
+function is_thread_safe(
+    cf::AbstractCostFunction,
+    x0::AbstractVector{<:Real};
+    errs::AbstractVector{<:Real} = fill(0.1, length(x0)),
+    tol::Float64 = 1e-8,
+    strategy::Strategy = Strategy(0),
+    prec::MachinePrecision = MachinePrecision(),
+)
+    if Threads.nthreads() == 1
+        # Single-threaded Julia — threading is a no-op, "thread-safe" by definition
+        return true
+    end
+    seed = seed_state(cf, x0, errs, strategy, prec)
+    try
+        _verify_thread_safety(cf, seed, strategy, prec; tol = tol)
+        return true
+    catch e
+        e isa ThreadSafetyError || rethrow()
+        return false
+    end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # migrad.jl — the MIGRAD loop.
 #
 # Mirrors reference/Minuit2_cpp/src/VariableMetricBuilder.cxx.
@@ -211,6 +381,7 @@ function migrad(
     prec::MachinePrecision = MachinePrecision(),
     scratch::Union{Nothing,MigradScratch} = nothing,
     threaded_gradient::Bool = false,
+    verify_threading::Bool = threaded_gradient,
 )
     n = length(x0)
     maxfcn_eff = maxfcn === nothing ? (200 + 100 * n + 5 * n^2) : Int(maxfcn)
@@ -218,7 +389,8 @@ function migrad(
     seed = seed_state(cf, x0, errs, strategy, prec)
     return _migrad_loop(seed, cf, strategy, Float64(tol), maxfcn_eff, prec;
                           scratch = scratch,
-                          threaded_gradient = threaded_gradient)
+                          threaded_gradient = threaded_gradient,
+                          verify_threading = verify_threading)
 end
 
 """
@@ -250,12 +422,18 @@ function migrad(
     prec::MachinePrecision = MachinePrecision(),
     scratch::Union{Nothing,MigradScratch} = nothing,
     threaded_gradient::Bool = false,
+    verify_threading::Bool = false,
 )
     n = length(seed)
     maxfcn_eff = maxfcn === nothing ? (200 + 100 * n + 5 * n^2) : Int(maxfcn)
+    # verify_threading default false here: warm-restart `migrad(cf, seed)`
+    # is called from inner cross-search probes where outer migrad has
+    # already verified. The 2-evaluation cost would multiply by probe
+    # count if defaulted true.
     return _migrad_loop(seed, cf, strategy, Float64(tol), maxfcn_eff, prec;
                           scratch = scratch,
-                          threaded_gradient = threaded_gradient)
+                          threaded_gradient = threaded_gradient,
+                          verify_threading = verify_threading)
 end
 
 """
@@ -303,8 +481,29 @@ function _migrad_loop(
     prec::MachinePrecision;
     scratch::Union{Nothing,MigradScratch} = nothing,
     threaded_gradient::Bool = false,
+    verify_threading::Bool = false,
 )
     n = length(seed)
+
+    # Phase H — thread-safety verification. When `threaded_gradient=true`
+    # AND `verify_threading=true`, run one sequential + one threaded
+    # gradient evaluation at the seed point and compare. If they differ
+    # beyond FP-roundoff tolerance, the user FCN has hidden mutable state
+    # that races under threading (common pattern: module-level scratch
+    # buffer mutated by FCN body). Throw a `ThreadSafetyError` rather
+    # than silently converge to a wrong minimum.
+    #
+    # The high-level drivers (`Minuit(..., threaded_gradient=true)`,
+    # bare `migrad(cf, x0, errs; threaded_gradient=true)`) default
+    # `verify_threading=true` for safety. Inner cross-search probes
+    # (`_migrad_with_fixed`, `_migrad_with_multi_fixed`) skip via
+    # `verify_threading=false` — the outer call already verified the
+    # FCN, and JuMinuit's `cf_fixed` splice infrastructure (Phase G.1
+    # per-thread `full_buf`) does not introduce thread-unsafety on
+    # top of a thread-safe user FCN.
+    if threaded_gradient && verify_threading && n >= 1 && is_valid(seed)
+        _verify_thread_safety(cf, seed, strategy, prec)
+    end
 
     # Tolerance handling matches C++ exactly:
     # - ModularFunctionMinimizer.cxx:175 scales by Up()
