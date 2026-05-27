@@ -189,4 +189,40 @@
         @test cr.aopt > 0.0
         @test cr.nfcn < 1500          # bounded call count
     end
+
+    @testset "_fix_one_param / _fix_multi_params — zero per-call alloc (V3 lift)" begin
+        # Phase A V3 — perf-regression guards. The fix-* wrappers MUST NOT
+        # allocate per call (lifted full_buf in the closure). If a future
+        # refactor reintroduces the per-call `Vector{Float64}(undef, n_)`
+        # alloc, these tests catch it immediately. 18% wall-time win on
+        # all corpus benchmarks (rosenbrock_10d / gauss_ll_10_1000 / quad_4d)
+        # depends on the zero-alloc invariant.
+        cf = CostFunction(x -> sum(abs2, x), 1.0)
+        cf_one = JuMinuit._fix_one_param(cf, 3, 0.5, 5)
+        y4 = [0.1, 0.2, 0.3, 0.4]
+        # Warmup (compile)
+        cf_one(y4)
+        # Two consecutive calls must both be zero-alloc — guards against
+        # accidental closure repromotion under future precompile changes.
+        @test (@allocated cf_one(y4)) == 0
+        @test (@allocated cf_one(y4)) == 0
+        # Return-type stability (the wrapped FCN returns Float64 → wrapper
+        # must too; @inferred fails if Julia infers Any/Union).
+        @test (@inferred cf_one(y4)) isa Float64
+
+        cf_multi = JuMinuit._fix_multi_params(cf, [1, 3], [0.5, 0.5], 5)
+        y3 = [0.1, 0.2, 0.3]
+        cf_multi(y3)
+        @test (@allocated cf_multi(y3)) == 0
+        @test (@allocated cf_multi(y3)) == 0
+        @test (@inferred cf_multi(y3)) isa Float64
+
+        # Numerical-correctness sanity: splicing fixed + free params produces
+        # the same value as a manual splice — guards against off-by-one in
+        # the lifted-buffer write pattern.
+        # cf_one: par at index 3 fixed to 0.5; free = [0.1, 0.2, 0.3, 0.4]
+        @test cf_one(y4) ≈ 0.1^2 + 0.2^2 + 0.5^2 + 0.3^2 + 0.4^2
+        # cf_multi: par at indices 1, 3 fixed to 0.5, 0.5; free = [0.1,0.2,0.3]
+        @test cf_multi(y3) ≈ 0.5^2 + 0.1^2 + 0.5^2 + 0.2^2 + 0.3^2
+    end
 end
