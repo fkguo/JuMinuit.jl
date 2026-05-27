@@ -370,7 +370,7 @@ println("  jm_num (ref): cx=", round(ref_c[1]; sigdigits=4),
 for (lab, pts) in mnc_pts
     lab == "jm_num   " && continue
     if isempty(pts)
-        println("  $lab: EMPTY (algorithm bailed)")
+        println("  $lab: EMPTY (algorithm terminated early)")
         continue
     end
     c = centroid_radius(pts)

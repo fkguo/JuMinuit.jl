@@ -107,11 +107,11 @@
         rosen(x) = (1 - x[1])^2 + 100 * (x[2] - x[1]^2)^2
         cf = CostFunction(rosen)
 
-        # Invalid sentinel state — should bail out
+        # Invalid sentinel state — should return nothing
         invalid = MinimumState(3)  # n=3 sentinel, !is_valid
         @test warm_restart_state(invalid, cf) === nothing
 
-        # Zero-dim state — should also bail
+        # Zero-dim state — should also return nothing
         empty = MinimumState(0)
         @test warm_restart_state(empty, cf) === nothing
     end
@@ -142,7 +142,7 @@
         fmin1 = migrad(cf_resume, fmin0.state)
         @test fmin1.is_valid
         @test fmin1.state.parameters.fval ≈ fmin0.state.parameters.fval atol = 1e-14
-        # At a converged seed, _migrad_loop bails before line search.
+        # At a converged seed, _migrad_loop returns before any line search.
         @test JuMinuit.ncalls(cf_resume) == 0
     end
 

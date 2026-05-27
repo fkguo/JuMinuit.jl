@@ -51,9 +51,10 @@ Published analysis: V. Baru, F.-K. Guo, C. Hanhart, A. Nefediev,
 
 The X(3872) fit overfits 3 parameters on 4 points (χ²_min = 0.017), so
 the 1σ region collapses to near machine precision in some directions.
-Both libraries bail with "MnContours unable to find first two points"
-on every parameter pair tested; the wall-times above are time-to-bail,
-not successful contour generation.
+Both libraries terminate early with "MnContours unable to find first
+two points" on every parameter pair tested; the wall-times above are
+the time spent until early termination, not the time of a successful
+contour generation.
 
 **Open issue (X3872)**
 
@@ -76,15 +77,16 @@ fit-quality artifact. Tracked.
 
 - JuMinuit MIGRAD is **3.5× faster than iminuit** on the 9-LEC fit
   (5.4 s vs 19.0 s) — **but lands at a SHALLOWER minimum** (fval=613.5
-  vs fval=409.9). The no-improvement early-bail in `src/migrad.jl`
-  fires too aggressively on this landscape. Both fits report
-  `is_valid=false` (above-max-edm). Tracked as follow-up.
+  vs fval=409.9). The no-improvement early-termination check in
+  `src/migrad.jl` triggers too aggressively on this landscape. Both
+  fits report `is_valid=false` (above-max-edm). Tracked as follow-up.
 - iminuit hard-refuses MINOS / MNCONTOUR on an invalid fmin (Python
   raises `RuntimeError("Function minimum is not valid")`). JuMinuit
   runs both to completion on the same invalid fmin — MINOS returns
   `(0, 0)` for this tight well, MNCONTOUR returns an empty point set.
   Neither behavior is "correct"; both libraries struggle. The bench
-  wraps the iminuit calls in `try/catch` so the script still completes.
+  wraps the iminuit calls in `try/catch` so the script still completes
+  end-to-end.
 - **Phase H pre-flight catches IAM thread-unsafety in milliseconds**:
   `is_thread_safe(chi2_iam, paras0)` returns `false` because
   `St4_00!` writes a module-level `const c_00_4` buffer. All `jm_th_*`
@@ -110,9 +112,9 @@ fit-quality artifact. Tracked.
 
 ## Follow-up tasks already spawned
 
-1. **MINOS bail on tight wells** — X(3872) par[2] case.
-2. **IAM 9-LEC early-bail divergence** — JuMinuit stops ~3× earlier
-   than iminuit and lands in a worse basin.
+1. **MINOS early termination on tight wells** — X(3872) par[2] case.
+2. **IAM 9-LEC early-termination divergence** — JuMinuit stops ~3×
+   earlier than iminuit and lands in a worse basin.
 
 These have task chips in the UI; if dismissed they live in
 `BenchmarkExamples/RESULTS.md` (this file) as documented behavior.

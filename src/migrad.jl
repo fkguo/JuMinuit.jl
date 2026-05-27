@@ -644,7 +644,7 @@ function _migrad_loop(
                 sym_mul!(step, s0.error.inv_hessian, s0.gradient.grad, -1.0, 0.0)
                 gdel = dot(step, s0.gradient.grad)
                 if gdel > 0
-                    break  # still bad — bail
+                    break  # still bad — terminate this iteration
                 end
             end
 
