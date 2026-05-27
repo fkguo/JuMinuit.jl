@@ -49,9 +49,19 @@ function _mn_bins(a1::Real, a2::Real, naa::Int)
         end
         bwid = sigrnd * 10.0^log_
 
-        lwid = floor(Int, al / bwid)
+        # Mirror C++ `int(alb); if (alb < 0) --lwid;` exactly. Julia's
+        # `floor(Int, ...)` diverges on exact-negative-integer `alb`
+        # (e.g. al=-1, bwid=0.25 → alb=-4: floor gives -4 but C++
+        # produces -5, shifting the lower bound below `al` to stay
+        # strictly-less even at exact multiples).
+        alb_l = al / bwid
+        lwid = trunc(Int, alb_l)
+        alb_l < 0.0 && (lwid -= 1)
         bl = bwid * lwid
-        kwid = floor(Int, ah / bwid + 1.0)
+
+        alb_h = ah / bwid + 1.0
+        kwid = trunc(Int, alb_h)
+        alb_h < 0.0 && (kwid -= 1)
         bh = bwid * kwid
         nb = kwid - lwid
 
@@ -118,17 +128,31 @@ function mn_plot_text(pts::AbstractVector{<:Tuple{Real,Real}};
         return String(take!(io))
     end
 
-    xs = first.(fpts)
-    ys = last.(fpts)
-    xmin, xmax = extrema(xs)
-    ymin, ymax = extrema(ys)
+    # Single-pass extrema (avoids two transient first./last. allocations).
+    xmin = ymin = Inf; xmax = ymax = -Inf
+    for (x, y) in fpts
+        x < xmin && (xmin = x); x > xmax && (xmax = x)
+        y < ymin && (ymin = y); y > ymax && (ymax = y)
+    end
     # Mirror C++ mnplot: pad each axis by 0.1 % of the range.
     dx = (xmax - xmin) * 0.001
     dy = (ymax - ymin) * 0.001
     xmin -= dx; xmax += dx
     ymin -= dy; ymax += dy
-    xmin == xmax && (xmax = xmin + 1.0)
-    ymin == ymax && (ymax = ymin + 1.0)
+    # Degenerate-axis fallback. Plain `+ 1.0` is too narrow at huge |x|
+    # (1e300 + 1 == 1e300) and overly wide at tiny |x|, so scale by
+    # max(1, |x|). Catches both "near-equal-after-padding" (e.g. single
+    # point, or two points one ulp apart) and "tiny-but-not-zero" cases.
+    if xmax <= xmin
+        bump = max(1.0, abs(xmin)) * 1e-6
+        xmax = xmin + bump
+        xmax <= xmin && (xmax = nextfloat(xmin))
+    end
+    if ymax <= ymin
+        bump = max(1.0, abs(ymin)) * 1e-6
+        ymax = ymin + bump
+        ymax <= ymin && (ymax = nextfloat(ymin))
+    end
 
     xlo, xhi, nx, bwx = _mn_bins(xmin, xmax, width)
     ylo, yhi, ny, bwy = _mn_bins(ymin, ymax, height)
@@ -147,17 +171,20 @@ function mn_plot_text(pts::AbstractVector{<:Tuple{Real,Real}};
         end
     end
 
+    # Grid indices: clamp to [1, nx] / [1, ny]. Without the clamp, a
+    # point at exactly y = ylo maps to iy = ny + 1 (the (yhi - y)/bwy
+    # division hits the right edge of the closed interval) and is
+    # silently dropped — including the trivial 1-point degenerate case.
+    @inline _gx(x) = clamp(floor(Int, (x - xlo) / bwx) + 1, 1, nx)
+    @inline _gy(y) = clamp(floor(Int, (yhi - y) / bwy) + 1, 1, ny)
+
     for (x, y) in fpts
-        ix = floor(Int, (x - xlo) / bwx) + 1
-        iy = floor(Int, (yhi - y) / bwy) + 1
-        _stamp!(ix, iy, '*')
+        _stamp!(_gx(x), _gy(y), '*')
     end
     if x_center !== nothing
         xc = Float64(x_center[1]); yc = Float64(x_center[2])
         if isfinite(xc) && isfinite(yc)
-            ix = floor(Int, (xc - xlo) / bwx) + 1
-            iy = floor(Int, (yhi - yc) / bwy) + 1
-            _stamp!(ix, iy, 'X')
+            _stamp!(_gx(xc), _gy(yc), 'X')
         end
     end
 
@@ -178,13 +205,15 @@ function mn_plot_text(pts::AbstractVector{<:Tuple{Real,Real}};
     println(io, "└", "─"^nx, "┘")
 
     # Legend.
+    n = length(fpts)
+    noun = n == 1 ? "point" : "points"
     if x_center === nothing
-        @printf(io, " * = point   (%d points)\n", length(fpts))
+        @printf(io, " * = point   (%d %s)\n", n, noun)
         overprint[] && println(io, " & = overlap (two or more differing chars)")
     else
         legend = overprint[] ? "* = point, X = minimum, & = overlap" :
                                 "* = point, X = minimum"
-        @printf(io, " %s   (%d points)\n", legend, length(fpts))
+        @printf(io, " %s   (%d %s)\n", legend, n, noun)
     end
     return String(take!(io))
 end
@@ -201,6 +230,8 @@ empty-plot message rather than throwing.
 """
 function mn_plot_text(c::ContoursError; width::Integer = 60,
                        height::Integer = 20)
+    c.valid ||
+        return "INVALID contour — fit did not converge (no points to plot).\n"
     par_x = "par[$(c.par_x)]"
     par_y = "par[$(c.par_y)]"
     center = (c.minos_x.min_par_value, c.minos_y.min_par_value)

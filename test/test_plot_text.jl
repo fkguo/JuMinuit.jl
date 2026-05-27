@@ -105,22 +105,89 @@
         @test occursin("overlap", out)
     end
 
-    @testset "degenerate single-point input does not crash" begin
+    @testset "degenerate single-point input renders a `*`" begin
+        # Regression test for the codex BLOCKING #2 finding: point at
+        # exact y=ylo used to map to iy = ny+1 and get silently dropped.
+        # Clamp must keep it inside the grid.
         out = mn_plot_text([(1.0, 1.0)]; width = 20, height = 10)
         @test out isa String
-        @test occursin("(1 points)", out)
-        # Frame must still be present
+        @test occursin("(1 point)", out)   # grammar: singular, no "s"
+        @test occursin('*', out)            # the point IS actually stamped
         @test occursin('┌', out)
         @test occursin('└', out)
     end
 
-    @testset "_mn_bins smoke checks (round numbers)" begin
-        # Round binning per Minuit2 mnbins: width-10 → expects ≈ 1.0/0.5/0.2/0.1 spacing
+    @testset "boundary points at exact ylo / xhi are stamped" begin
+        # Multiple points sharing the bottom and right edges of the
+        # bounding box must all show up — covers the closed-interval
+        # clamp in _gx / _gy.
+        pts = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+        out = mn_plot_text(pts; width = 30, height = 14)
+        @test occursin("(3 points)", out)
+        @test occursin('*', out)
+    end
+
+    @testset "invalid ContoursError → INVALID message" begin
+        # Build an invalid ContoursError without running a fit.
+        bad_mex = MinosError(1, 0.0, 0.0, 0.0,
+                              false, false, false, false,
+                              false, false, false, false, 0)
+        bad_mey = MinosError(2, 0.0, 0.0, 0.0,
+                              false, false, false, false,
+                              false, false, false, false, 0)
+        bad = ContoursError(1, 2, Tuple{Float64,Float64}[],
+                              bad_mex, bad_mey, 0, false)
+        out = mn_plot_text(bad)
+        @test out isa String
+        @test occursin("INVALID", out)
+        @test !occursin('┌', out)   # no frame for invalid result
+    end
+
+    @testset "narrow and wide ranges do not crash" begin
+        # Tiny range (ulp-wide) — codex MEDIUM #3 / code-reviewer MEDIUM #1.
+        narrow = [(1.0, 1.0), (nextfloat(1.0), nextfloat(1.0))]
+        out_n = mn_plot_text(narrow; width = 20, height = 10)
+        @test out_n isa String
+        @test !occursin("EMPTY", out_n)
+        @test occursin('*', out_n)
+
+        # Wide range (15 orders of magnitude).
+        wide = [(0.0, 0.0), (1e15, 1e15)]
+        out_w = mn_plot_text(wide; width = 30, height = 12)
+        @test out_w isa String
+        @test !occursin("EMPTY", out_w)
+        @test occursin('*', out_w)
+
+        # width/height clamp — pass below the floor; renderer must
+        # produce a non-empty frame anyway.
+        out_clamp = mn_plot_text([(0.0, 0.0), (1.0, 1.0)]; width = 5, height = 5)
+        @test occursin('┌', out_clamp)
+    end
+
+    @testset "_mn_bins smoke checks (round numbers + C++ parity)" begin
         bl, bh, nb, bwid = JuMinuit._mn_bins(-1.0, 1.0, 10)
         @test bl <= -1.0 && bh >= 1.0
         @test nb >= 1
         @test bwid > 0
-        # The width times bin count must enclose the range
         @test bl + nb * bwid ≈ bh atol=1e-9
+
+        # Mantissa must be one of {2, 2.5, 5, 10} · 10^k. Sample 4 ranges.
+        for (a, b, n) in [(-1.0, 1.0, 10), (0.0, 100.0, 20),
+                           (-0.5, 0.5, 30), (10.0, 11.0, 8)]
+            _, _, _, w = JuMinuit._mn_bins(a, b, n)
+            log_ = floor(Int, log10(w))
+            mant = w / 10.0^log_
+            @test any(isapprox(mant, m; atol=1e-9)
+                        for m in (1.0, 2.0, 2.5, 5.0, 10.0))
+        end
+
+        # C++ parity on exact-negative-multiple `alb` (codex BLOCKING #1).
+        # For (-1, 1, 10) with bwid=0.25, alb = -1/0.25 = -4.0 exactly.
+        # C++ shifts lwid below trunc → bl must be < -1.0 (strict).
+        bl5, bh5, nb5, bw5 = JuMinuit._mn_bins(-1.0, 1.0, 10)
+        @test bw5 == 0.25
+        @test bl5 < -1.0 - 1e-12
+        @test bh5 > 1.0 + 1e-12
+        @test nb5 == 10
     end
 end
