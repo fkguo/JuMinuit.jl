@@ -8,7 +8,7 @@ BLAS.set_num_threads(1)
 println("Threads: nthreads=", Threads.nthreads(), " maxthreadid=", Threads.maxthreadid())
 
 # Need to cd to IAM dir for relative ./datajl paths in setup
-const IAM_DIR = "/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/BenchmarkExamples/IAM_2Pformfactor"
+const IAM_DIR = @__DIR__   # script-relative, portable across machines
 cd(IAM_DIR)
 
 # Mimic notebook environment but use JuMinuit instead of IMinuit

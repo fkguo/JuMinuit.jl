@@ -10,7 +10,7 @@ using LinearAlgebra, Random, Statistics, BenchmarkTools
 BLAS.set_num_threads(1)
 println("Threads: nthreads=", Threads.nthreads(), " maxthreadid=", Threads.maxthreadid())
 
-const X3872_DIR = "/Users/fkg/Coding/Agents/ResearchWork/JuMinuit/BenchmarkExamples/X3872_dip"
+const X3872_DIR = @__DIR__   # script-relative, portable across machines
 cd(X3872_DIR)
 include(joinpath(X3872_DIR, "hadronmasses.jl"))
 
