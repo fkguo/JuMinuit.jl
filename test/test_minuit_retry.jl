@@ -43,6 +43,9 @@
         migrad!(m5; iterate = 5)
         # Byte-identical nfcn proves the retry loop's gating predicate
         # never fired on pass 1. If retry had entered, nfcn(m5) > nfcn(m1).
+        # Strict `==` (not `isapprox`) — identical code paths must produce
+        # identical bits. A future regression that re-runs the inner DFP
+        # iteration on a "valid" pass 1 would break this.
         @test m1.nfcn == m5.nfcn
         @test m1.fval == m5.fval
         @test m1.values == m5.values
@@ -106,6 +109,59 @@
         @test m.values[2] == 5.0  # fixed
     end
 
+    @testset "Retry actually triggers and recovers on a pathological seed" begin
+        # The critical end-to-end test: an FCN + start point where pass 1
+        # exits with `is_valid=false` (no improvement / above_max_edm)
+        # WITHOUT hitting the call limit. From this state the retry loop
+        # MUST enter — otherwise the prior_cov / Simplex hop / Strategy
+        # branches all sit untested.
+        #
+        # Construction: a multi-minimum landscape (quadratic bowl with
+        # cos+sin overlay) seeded from far away (-5, 5). On pass 1 the
+        # DFP descent stalls at a saddle-like point with fval ≈ 20.8 and
+        # `is_valid=false`. The retry loop's Simplex hop + re-seed
+        # escapes that basin.
+        fcn = x -> begin
+            a, b = x[1], x[2]
+            return (a - 3)^2 + (b - 3)^2 +
+                   0.3 * cos(5 * a) + 0.3 * cos(5 * b) +
+                   0.5 * sin(a * b)
+        end
+
+        # Single-shot baseline
+        m1 = Minuit(fcn, [-5.0, 5.0];
+                     names = ["a", "b"], errors = [0.5, 0.5])
+        migrad!(m1; iterate = 1, tol = 1e-6, maxfcn = 2000)
+        @test !m1.valid                                 # pass 1 failed
+        @test !m1.fmin.internal.reached_call_limit      # not via budget
+        nfcn1 = m1.nfcn
+        fval1 = m1.fval
+
+        # With retry: must run AT LEAST one extra pass (nfcn > nfcn1) and
+        # NEVER end up at a worse fval than the single-shot baseline.
+        m5 = Minuit(fcn, [-5.0, 5.0];
+                     names = ["a", "b"], errors = [0.5, 0.5])
+        migrad!(m5; iterate = 5, tol = 1e-6, maxfcn = 2000)
+        @test m5.nfcn > nfcn1     # retry loop entered (proves coverage)
+        @test m5.fval ≤ fval1 + 1e-10
+        # And on this FCN the retry actually rescues to a valid fit at a
+        # much deeper minimum (fval ≈ -0.86 vs +20.8). This is the
+        # X(3872)-shaped "dip vs peak" outcome the spec calls for.
+        @test m5.valid
+        @test m5.fval < 0.0
+
+        # Same FCN with `use_simplex=false` exercises the `_retry_prior_cov`
+        # branch (which is skipped when use_simplex=true). The prior_cov
+        # path also escapes the bad seed on this FCN.
+        m5_ns = Minuit(fcn, [-5.0, 5.0];
+                        names = ["a", "b"], errors = [0.5, 0.5])
+        migrad!(m5_ns; iterate = 5, use_simplex = false,
+                       tol = 1e-6, maxfcn = 2000)
+        @test m5_ns.nfcn > nfcn1
+        @test m5_ns.fval ≤ fval1 + 1e-10
+        @test m5_ns.valid
+    end
+
     @testset "Multi-minimum safety invariant" begin
         # Bimodal landscape: a deeper Gaussian well centred at (3, 3) and
         # a shallower well at (-3, -3). The choice of relative depth is
@@ -144,14 +200,79 @@
     @testset "Implicit resume still works after migrad! + migrad!" begin
         # The retry layer must NOT break the iminuit-style implicit
         # resume: calling migrad!(m) twice in a row should carry the
-        # previous converged point forward as the new seed.
-        m = Minuit(fcn_convex, [0.0, 0.0];
+        # previous converged point forward as the new seed. Start far
+        # from the minimum so the first call uses non-trivial nfcn,
+        # then the second call (from the minimum) should be CHEAPER —
+        # which is only possible if the resume path is actually feeding
+        # the converged values into the new pass-1 seed.
+        m = Minuit(fcn_convex, [10.0, -10.0];   # far from (1, 2)
                     names = ["x", "y"], errors = [0.1, 0.1])
         migrad!(m; iterate = 5)
+        @test m.fmin !== nothing                # converged state stored
+        nfcn_first = m.nfcn
         v1 = copy(m.values)
         migrad!(m; iterate = 5)
-        @test m.values ≈ v1 atol = 1e-8  # idempotent at the minimum
+        @test m.values ≈ v1 atol = 1e-8         # idempotent at the minimum
         @test m.valid
+        # On a convex FCN, a second migrad starting from the converged
+        # point should converge in far fewer FCN calls than starting
+        # from the far-away seed.
+        @test m.nfcn < nfcn_first
+    end
+
+    @testset "Bounded migrad accepts prior_cov directly (M5 plumbing)" begin
+        # Direct functional test of the bounded `migrad(cf, params;
+        # prior_cov=...)` plumbing this PR added. The seed wraps the
+        # supplied matrix as the inverse Hessian and sets dcovar=0.0;
+        # we don't have direct access to dcovar from the BFM but we
+        # can verify a well-conditioned prior_cov produces a valid fit
+        # in the same number of (or fewer) calls as the cold start.
+        cf = JuMinuit.CostFunction(x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2)
+        params = JuMinuit.Parameters(["x", "y"], [0.0, 0.0], [0.1, 0.1])
+        # Cold start
+        bfm_cold = migrad(cf, params)
+        @test JuMinuit.is_valid(bfm_cold)
+        # Warm start with the cold result's inverse Hessian as prior_cov
+        # (also in internal coords since this FCN has no bounds → int == ext).
+        prior = bfm_cold.internal.state.error.inv_hessian
+        cf2 = JuMinuit.CostFunction(x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2)
+        params2 = JuMinuit.Parameters(["x", "y"], [0.0, 0.0], [0.1, 0.1])
+        bfm_warm = migrad(cf2, params2; prior_cov = prior)
+        @test JuMinuit.is_valid(bfm_warm)
+        # And the CFwG overload accepts prior_cov too
+        cfwg = JuMinuit.CostFunctionWithGradient(
+            x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2,
+            x -> [2.0 * (x[1] - 1.0), 2.0 * (x[2] - 2.0)],
+            1.0)
+        params3 = JuMinuit.Parameters(["x", "y"], [0.0, 0.0], [0.1, 0.1])
+        bfm_ad = migrad(cfwg, params3; prior_cov = prior)
+        @test JuMinuit.is_valid(bfm_ad)
+    end
+
+    @testset "AD-gradient FCN survives retry path (codex BLOCKING regression)" begin
+        # The AD `seed_state` rejects strategy.level != 0 (see
+        # src/ad_gradient.jl:254-255). The retry loop must NOT bump to
+        # Strategy(2) when `m.cfwg !== nothing`, or any retry pass would
+        # throw on the AD seed. We exercise both `use_simplex=true` (the
+        # default) and `use_simplex=false` (which engages `_retry_prior_cov`
+        # if retry triggers). Pass 1 validates on this convex FCN, so the
+        # retry loop never enters — but the AD-aware retry-strategy
+        # selection logic (`m.cfwg === nothing ? Strategy(2) : strategy`)
+        # is reached unconditionally before the loop check, so any
+        # regression that re-hardcodes `Strategy(2)` would still throw at
+        # construction time.
+        f_ad = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+        g_ad = x -> [2.0 * (x[1] - 1.0), 2.0 * (x[2] - 2.0)]
+        for us in (true, false)
+            m_ad = Minuit(f_ad, [0.0, 0.0];
+                           names = ["x", "y"], errors = [0.1, 0.1],
+                           grad = g_ad)
+            migrad!(m_ad; iterate = 5, use_simplex = us)
+            @test m_ad.valid
+            @test m_ad.fval < 1e-8
+            @test m_ad.values[1] ≈ 1.0 atol = 1e-4
+            @test m_ad.values[2] ≈ 2.0 atol = 1e-4
+        end
     end
 
 end

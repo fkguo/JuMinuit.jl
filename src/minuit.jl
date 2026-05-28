@@ -333,19 +333,26 @@ end
                        verify_threading=m.verify_threading,
                        print_level=m.print_level) -> Minuit
 
-Run MIGRAD on `m` with iminuit-style robust retry. If pass 1 fails to
-validate (no-improvement / above-max-EDM exit, see C++
+Run MIGRAD on `m` with an iminuit-shaped robust retry on top of the
+M5 prior-cov mechanism from PR #4. If pass 1 fails to validate
+(no-improvement / above-max-EDM exit, see C++
 `VariableMetricBuilder.cxx:278`) and the call limit hasn't been
 reached, retry up to `iterate-1` more passes. Each retry:
 
 - Upgrades to `Strategy(2)` regardless of the user request (iminuit
-  heuristic in `_robust_low_level_fit`).
+  heuristic in `_robust_low_level_fit`). Exception: when the FCN was
+  constructed with `grad=...`, the AD seed path requires Strategy(0),
+  so the user's stored strategy is retained on retry — Simplex + the
+  prior_cov carry remain in effect.
 - Optionally runs a Nelder-Mead Simplex step from the failed point
-  before the next MIGRAD (`use_simplex=true`, the default).
-- Carries the failed fit's inverse Hessian as `prior_cov` to the next
-  MIGRAD seed (uses the M5 mechanism from PR #4, see
-  `reference/Minuit2_cpp/src/MnSeedGenerator.cxx:63-67` HasCovariance
-  branch).
+  before the next MIGRAD (`use_simplex=true`, the default). With
+  `use_simplex=false`, the failed fit's inverse Hessian is carried
+  to the next MIGRAD seed as `prior_cov` (uses the M5 mechanism from
+  PR #4, see `reference/Minuit2_cpp/src/MnSeedGenerator.cxx:63-67`
+  HasCovariance branch). With `use_simplex=true`, the post-Simplex
+  state has no usable inverse Hessian, so `prior_cov` is dropped and
+  the next seed falls back to the diagonal-from-g2 estimate (this
+  matches installed iminuit 2.32.0 `_robust_low_level_fit`).
 
 This helps in two distinct scenarios:
 
@@ -386,10 +393,16 @@ function migrad!(m::Minuit;
     iterate >= 1 ||
         throw(ArgumentError("iterate must be ≥ 1, got $iterate"))
 
-    # Pass 1: user's stored Strategy, no prior_cov. iminuit-style
-    # implicit resume: if we already converged once, carry the prior
-    # ext_values forward as the new starting point. m.params untouched
-    # (review BLOCKING #2 from the original `migrad!` review).
+    # Pass 1: user's stored Strategy, no prior_cov. Byte-identical to
+    # the pre-retry-layer single-shot path — relies on `_migrad_into!`'s
+    # default `prior_cov=nothing` matching the bounded `migrad`
+    # overload's default. If a future change ever introduces a
+    # non-`nothing` default anywhere in this kwarg chain, the
+    # `iterate=1` test in `test_minuit_retry.jl` will catch it.
+    #
+    # iminuit-style implicit resume: if we already converged once, carry
+    # the prior ext_values forward as the new starting point. m.params
+    # untouched (review BLOCKING #2 from the original `migrad!` review).
     params_to_use = m.fmin === nothing ? m.params : _build_resume_params(m)
     bfm = _migrad_into!(m, params_to_use;
                          strategy = strategy, tol = tol, maxfcn = maxfcn,
@@ -409,6 +422,14 @@ function migrad!(m::Minuit;
     # Loop exits when the fit validates OR the call limit is exhausted
     # (retrying with no budget left would just waste the budget on
     # another forced abort).
+    # The retry strategy is `Strategy(2)` for numerical-gradient FCNs
+    # (the iminuit default). For analytical-gradient FCNs (`m.cfwg !==
+    # nothing`), the AD `seed_state` rejects any strategy.level != 0
+    # (see `src/ad_gradient.jl:254-255`); rather than throw mid-retry,
+    # we keep the user's stored strategy on the AD path. Retry's
+    # value-add for AD users then comes from the Simplex hop and the
+    # prior_cov carry, not the Strategy bump.
+    retry_strategy = m.cfwg === nothing ? Strategy(2) : strategy
     for _pass in 2:Int(iterate)
         (is_valid(bfm.internal) || bfm.internal.reached_call_limit) && break
 
@@ -421,6 +442,9 @@ function migrad!(m::Minuit;
             # simplex never built an inverse Hessian (its MinimumError
             # is the I placeholder with available=false), and
             # `_retry_prior_cov(sx)` would return nothing in any case.
+            # This matches installed iminuit 2.32.0 `_robust_low_level_fit`,
+            # which recreates `MnMigrad` from the post-Simplex state with
+            # no warm-start covariance.
             sx = simplex(m.fcn, params_next;
                           maxfcn = maxfcn, prec = m.prec)
             params_next = _build_resume_params(m, sx)
@@ -429,7 +453,7 @@ function migrad!(m::Minuit;
         end
 
         bfm = _migrad_into!(m, params_next;
-                             strategy = Strategy(2), tol = tol,
+                             strategy = retry_strategy, tol = tol,
                              maxfcn = maxfcn,
                              threaded_gradient = threaded_gradient,
                              verify_threading = verify_threading,
@@ -477,11 +501,16 @@ end
 # as `prior_cov` in the next MIGRAD pass — but ONLY when the prior fit
 # actually produced a usable covariance. Simplex leaves the placeholder
 # `MinimumError(I, ..., available=false)`; without this guard that
-# placeholder would silently leak in as a fake prior, killing the
-# retry's information transfer. The returned matrix is in INTERNAL
+# identity placeholder would silently leak in as a fake prior, killing
+# the retry's information transfer. The returned matrix is in INTERNAL
 # coordinates (which is what the bounded `migrad(cf, params;
 # prior_cov=...)` path expects — it feeds straight into
 # `seed_state(cf_internal, int_vals, int_errs; prior_cov=...)`).
+#
+# Dimensional invariant: `n_free` is constant across all retry passes
+# within one `migrad!` call (we never fix/release between passes — the
+# loop runs to completion uninterrupted), so the (n_free × n_free)
+# matrix shape automatically matches the next pass's `int_vals` length.
 function _retry_prior_cov(bfm::BoundedFunctionMinimum)
     err = bfm.internal.state.error
     is_available(err) || return nothing
@@ -1184,7 +1213,11 @@ or set `m.strategy = Strategy(1)` once before the first migrad.
 
 `iterate` and `use_simplex` are threaded through to [`migrad!`](@ref)
 unchanged — see its docstring for the iminuit
-`_robust_low_level_fit`-parity retry loop they control.
+`_robust_low_level_fit`-shaped retry loop they control. Note that
+retries silently upgrade to `Strategy(2)` (iminuit heuristic) on the
+numerical-gradient path, even if you passed `strategy=Strategy(0)`
+here. The AD-gradient path retains the user's strategy because its
+seed rejects `strategy.level != 0`.
 """
 function migrad(m::Minuit;
                  ncall::Union{Integer,Nothing} = nothing,
