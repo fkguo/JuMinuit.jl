@@ -116,11 +116,35 @@ pre-closure baseline — no regression from the 9 merged PRs M1–P5).
 - **FCN cost**: measured with `@benchmark` (`BenchmarkTools.jl`),
   reported in the per-script header.
 
-## Open follow-up work
+## Closed follow-up work
 
-1. **MINOS early termination on tight wells** — X(3872) par[2] case.
-2. **IAM 9-LEC early-termination divergence** — JuMinuit stops ~3×
-   earlier than iminuit and lands in a worse basin.
+Both originally-flagged follow-ups were closed by a single PR:
 
-These have task chips in the UI; if dismissed they live in
-`BenchmarkExamples/RESULTS.md` (this file) as documented behavior.
+1. ✅ **MINOS early termination on tight wells** — X(3872) par[2] now
+   returns `(-0.00439, +0.00439)` instead of `(0, 0)`; IAM par1 returns
+   `(-0.000173, +0.000173)` instead of `(0, 0)`. Resolved by PR #6
+   (commit `a1fa015`): loosening the `_migrad_loop` seed-acceptance
+   gate to match C++ `BasicMinimumSeed::IsValid()` semantics (the C++
+   check only looks at the seed's own `fValid` flag, not state
+   validity), so a `MnHesseFailed`-status seed with structurally
+   valid params + gradient + diagonal V is no longer rejected.
+
+2. ✅ **IAM 9-LEC early-termination divergence** — at Strategy(2), IAM
+   MIGRAD now reaches **fval = 401.45** (was stuck at 613.49),
+   matching iminuit Strategy(0)'s **400.23** (same basin). At
+   Strategy(2), X(3872) drops from 1.30 to **0.017** (matches the
+   published [arXiv:2404.12003](https://arxiv.org/abs/2404.12003)
+   global minimum). Resolved by the same PR #6: dropping a C++
+   Minuit2 bug in `_hesse_diagonal_failure` — the second `eps2` clamp
+   on `1/g2` was inverting the truth (mapping `1/g2 = 1e-10`, i.e.
+   "very well determined", to `1.0`, i.e. "poorly determined"),
+   producing `V = I` whenever any parameter was FCN-flat. Verified
+   that iminuit Strategy(2) hits the same trap with the C++ formula,
+   so this is a real upstream bug that JuMinuit now fixes.
+
+Note: the default Strategy(1) IAM behavior is unchanged from the
+pre-PR-#6 numbers above (the fix is gated on the
+seed-time-MnHesse-bootstrap path that only Strategy(2) takes today —
+the `_migrad_loop` strategy-1 cold path doesn't go through MnHesse at
+the seed). The headline IAM 9-LEC fitter should now set
+`m.strategy = Strategy(2)` for the deeper minimum.
