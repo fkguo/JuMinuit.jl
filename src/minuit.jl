@@ -686,90 +686,299 @@ function Base.setproperty!(m::Minuit, name::Symbol, val)
         end
     elseif name === :values
         # iminuit-style `m.values = [...]`: replaces the per-parameter
-        # initial values. Any prior `m.fmin` becomes invalid (its
-        # covariance is aligned with the OLD values), so we drop it.
-        # Review IMPORTANT round-3.
-        _set_param_field!(m, val, :value)
-        setfield!(m, :fmin, nothing)
-        empty!(m.minos_errors)
+        # initial values. Routed through `set_value!` so the cache-
+        # invalidation semantics are guaranteed identical to the
+        # per-parameter mutator (review IMPORTANT round-3).
+        _bulk_set_values!(m, val)
     elseif name === :errors
-        _set_param_field!(m, val, :error)
-        setfield!(m, :fmin, nothing)
-        empty!(m.minos_errors)
+        _bulk_set_errors!(m, val)
     elseif name === :limits
-        _set_param_limits!(m, val)
-        setfield!(m, :fmin, nothing)
-        empty!(m.minos_errors)
+        _bulk_set_limits!(m, val)
     elseif name === :fixed
-        _set_param_fixed!(m, val)
-        setfield!(m, :fmin, nothing)
-        empty!(m.minos_errors)
+        _bulk_set_fixed!(m, val)
     else
         setfield!(m, name, val)
     end
 end
 
-# Helper: update one field of every parameter from a vector of new
-# values. Used by `m.values = [...]` and `m.errors = [...]`.
-function _set_param_field!(m::Minuit, vals::AbstractVector, field::Symbol)
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-parameter mutators (gap M3) — mirror C++ `MnUserParameters` methods.
+#
+# C++ refs:
+#   reference/Minuit2_cpp/inc/Minuit2/MnUserParameters.h:75-95
+#   reference/Minuit2_cpp/src/MnApplication.cxx:117-180
+#
+# Each mutator accepts an `Integer` (1-based external index) OR an
+# `AbstractString` (parameter name → `ext_index` lookup), rebuilds the
+# single touched `MinuitParameter` in place, then invalidates the
+# cached fit (`m.fmin = nothing`, `empty!(m.minos_errors)`) — matching
+# the same staleness rule the bulk `setproperty!` paths use. The bulk
+# `m.values=...` / `m.errors=...` / `m.fixed=...` / `m.limits=...`
+# setters route through these mutators so behavior cannot drift.
+#
+# Returns `m` for chaining: `m |> migrad! |> (m -> fix!(m,"alpha")) |> migrad!`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Validate `i` is a usable external index; throw `BoundsError` otherwise.
+# Rejects `Bool` explicitly — `Bool <: Integer` in Julia, so without this
+# guard `fix!(m, true)` would dispatch into the Integer method and the
+# error would only surface from `Base.checkbounds` one line later with
+# a confusing "invalid index: true of type Bool" message.
+@inline function _check_par_index(m::Minuit, i::Integer)
+    i isa Bool &&
+        throw(ArgumentError("parameter index must be an Integer, got Bool"))
+    1 <= i <= n_pars(m.params) ||
+        throw(BoundsError(m.params.pars, i))
+    return nothing
+end
+
+# Replace the entire `pars` vector, rebuild `Parameters` (so
+# `ext_of_int` / `int_of_ext` / `name_to_ext` caches stay consistent),
+# and drop any cached fit. Single atomic commit point — both
+# per-parameter and bulk setters land here.
+function _replace_all_params!(m::Minuit, new_pars::Vector{MinuitParameter})
+    setfield!(m, :params, Parameters(new_pars, m.prec))
+    setfield!(m, :fmin, nothing)
+    empty!(m.minos_errors)
+    return m
+end
+
+# Per-parameter pivot: clone the current vector, swap one entry, commit.
+function _replace_one_param!(m::Minuit, i::Int, new_p::MinuitParameter)
+    new_pars = collect(m.params.pars)
+    new_pars[i] = new_p
+    return _replace_all_params!(m, new_pars)
+end
+
+# Normalize a user-supplied bound spec to the `MinuitParameter` storage
+# convention (NaN = absent). `nothing` and `±Inf` both mean "no bound",
+# matching the existing bulk-limits setter behavior.
+_normalize_bound(::Nothing) = NaN
+function _normalize_bound(x::Real)
+    xf = Float64(x)
+    return (isnan(xf) || isinf(xf)) ? NaN : xf
+end
+
+# ── Builder helpers (validate + construct, no commit) ────────────────────────
+#
+# Each `_build_*_par(p, ...)` returns a NEW `MinuitParameter` derived from
+# `p` with the requested field updated. Validation throws here (NaN for
+# value, negative/NaN for error, lo >= up for limits via the
+# `MinuitParameter` ctor). Used by both per-parameter mutators (one
+# build, one commit) and bulk setters (build N first, commit once, so
+# any single-element failure leaves `m` unchanged — exception atomicity).
+function _build_value_par(p::MinuitParameter, v::Real)
+    vf = Float64(v)
+    isfinite(vf) ||
+        throw(ArgumentError("set_value!: value must be finite, got $v"))
+    return MinuitParameter(p.name, vf, p.error;
+                             lower = p.lower, upper = p.upper, fixed = p.fixed)
+end
+
+function _build_error_par(p::MinuitParameter, e::Real)
+    ef = Float64(e)
+    (isfinite(ef) && ef >= 0) ||
+        throw(ArgumentError("set_error!: step must be finite and ≥ 0, got $e"))
+    return MinuitParameter(p.name, p.value, ef;
+                             lower = p.lower, upper = p.upper, fixed = p.fixed)
+end
+
+function _build_fixed_par(p::MinuitParameter, fix::Bool)
+    return MinuitParameter(p.name, p.value, p.error;
+                             lower = p.lower, upper = p.upper, fixed = fix)
+end
+
+function _build_limits_par(p::MinuitParameter, lo, up)
+    return MinuitParameter(p.name, p.value, p.error;
+                             lower = _normalize_bound(lo),
+                             upper = _normalize_bound(up),
+                             fixed = p.fixed)
+end
+
+"""
+    fix!(m::Minuit, par::Union{Integer,AbstractString}) -> Minuit
+
+Mark parameter `par` as fixed (excluded from optimization). Mirrors
+C++ `MnUserParameters::Fix(i)` / `Fix(name)`. Drops `m.fmin` and
+clears `m.minos_errors`. Returns `m` for chaining.
+
+`par` is either the 1-based external index or the parameter name.
+Already-fixed parameters are still re-fixed (no-op on the fixed flag,
+but cache is still invalidated for consistency).
+
+```julia
+fix!(m, 1)
+fix!(m, "alpha")
+```
+"""
+fix!(m::Minuit, par::AbstractString) =
+    fix!(m, ext_index(m.params, String(par)))
+function fix!(m::Minuit, i::Integer)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_fixed_par(m.params.pars[i], true))
+end
+
+"""
+    release!(m::Minuit, par::Union{Integer,AbstractString}) -> Minuit
+
+Clear parameter `par`'s fixed flag (re-include in optimization).
+Mirrors C++ `MnUserParameters::Release(i)` / `Release(name)`. Drops
+`m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+Pairs with [`fix!`](@ref) for fix-fit-release-fit profile-likelihood
+scans:
+
+```julia
+fix!(m, "alpha"); migrad!(m); release!(m, "alpha"); migrad!(m)
+```
+"""
+release!(m::Minuit, par::AbstractString) =
+    release!(m, ext_index(m.params, String(par)))
+function release!(m::Minuit, i::Integer)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_fixed_par(m.params.pars[i], false))
+end
+
+"""
+    set_value!(m::Minuit, par::Union{Integer,AbstractString}, v::Real) -> Minuit
+
+Set parameter `par`'s initial value to `v`. Mirrors C++
+`MnUserParameters::SetValue(i, v)` / `SetValue(name, v)`. Drops
+`m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+`v` must be finite (NaN / ±Inf throw `ArgumentError`) — matches the
+iminuit Python wrapper's `setattr` guard. The int↔ext transform clamps
+to bounds at minimization time, so no value-vs-limits check is done
+here (matches C++).
+"""
+set_value!(m::Minuit, par::AbstractString, v::Real) =
+    set_value!(m, ext_index(m.params, String(par)), v)
+function set_value!(m::Minuit, i::Integer, v::Real)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_value_par(m.params.pars[i], v))
+end
+
+"""
+    set_error!(m::Minuit, par::Union{Integer,AbstractString}, e::Real) -> Minuit
+
+Set parameter `par`'s step size to `e`. Mirrors C++
+`MnUserParameters::SetError(i, e)` / `SetError(name, e)`. Drops
+`m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+`e` must be finite and non-negative (NaN / ±Inf / negative throw
+`ArgumentError`). A non-positive step would degrade the numerical
+gradient floor and could silently poison the seed.
+"""
+set_error!(m::Minuit, par::AbstractString, e::Real) =
+    set_error!(m, ext_index(m.params, String(par)), e)
+function set_error!(m::Minuit, i::Integer, e::Real)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_error_par(m.params.pars[i], e))
+end
+
+"""
+    set_limits!(m::Minuit, par, lo, up) -> Minuit
+
+Set parameter `par`'s bounds to `(lo, up)`. Mirrors C++
+`MnUserParameters::SetLimits(i, lo, up)` / `SetLimits(name, lo, up)`.
+Drops `m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+`lo` and `up` may each be a `Real`, `nothing`, or `±Inf` — the latter
+two are stored as `NaN` (the "absent bound" sentinel), so passing
+`(nothing, 10.0)` makes `par` upper-bounded only, and
+`(nothing, nothing)` is equivalent to [`remove_limits!`](@ref). When
+both are finite Reals, `lo < up` is required (else `ArgumentError`).
+"""
+set_limits!(m::Minuit, par::AbstractString, lo, up) =
+    set_limits!(m, ext_index(m.params, String(par)), lo, up)
+function set_limits!(m::Minuit, i::Integer, lo, up)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_limits_par(m.params.pars[i], lo, up))
+end
+
+"""
+    remove_limits!(m::Minuit, par::Union{Integer,AbstractString}) -> Minuit
+
+Clear both bounds on parameter `par`. Mirrors C++
+`MnUserParameters::RemoveLimits(i)` / `RemoveLimits(name)`. Drops
+`m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+After the call, `m.params.pars[par].lower` and `.upper` are both `NaN`.
+"""
+remove_limits!(m::Minuit, par::AbstractString) =
+    remove_limits!(m, ext_index(m.params, String(par)))
+function remove_limits!(m::Minuit, i::Integer)
+    _check_par_index(m, i)
+    return _replace_one_param!(m, Int(i),
+        _build_limits_par(m.params.pars[i], nothing, nothing))
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bulk setters — share the per-parameter `_build_*_par` validation +
+# construction helpers, then commit ALL changes in a single
+# `_replace_all_params!` call. This preserves exception-atomicity (if
+# any element's validation fails, `m` is untouched — matches the pre-M3
+# semantics) AND guarantees identical validation rules to the
+# per-parameter mutators above (a single point of truth via the build
+# helpers).
+# ─────────────────────────────────────────────────────────────────────────────
+
+function _bulk_set_values!(m::Minuit, vals::AbstractVector)
     n = n_pars(m.params)
     length(vals) == n ||
         throw(DimensionMismatch("expected $n values, got $(length(vals))"))
     new_pars = Vector{MinuitParameter}(undef, n)
     @inbounds for i in 1:n
-        p = m.params.pars[i]
-        new_val   = field === :value ? Float64(vals[i]) : p.value
-        new_err   = field === :error ? Float64(vals[i]) : p.error
-        new_pars[i] = MinuitParameter(p.name, new_val, new_err;
-                                       lower = p.lower, upper = p.upper,
-                                       fixed = p.fixed)
+        new_pars[i] = _build_value_par(m.params.pars[i], vals[i])
     end
-    setfield!(m, :params, Parameters(new_pars, m.prec))
+    _replace_all_params!(m, new_pars)
     return nothing
 end
 
-# Helper: update bounds. `lim` is a vector of `(lo, hi)` tuples (or
-# `nothing` for unbounded; or `(nothing, x)` / `(x, nothing)` for one-
-# sided). Matches the iminuit `m.limits` setter shape.
-function _set_param_limits!(m::Minuit, lim::AbstractVector)
+function _bulk_set_errors!(m::Minuit, errs::AbstractVector)
     n = n_pars(m.params)
-    length(lim) == n ||
-        throw(DimensionMismatch("expected $n limit tuples, got $(length(lim))"))
+    length(errs) == n ||
+        throw(DimensionMismatch("expected $n values, got $(length(errs))"))
     new_pars = Vector{MinuitParameter}(undef, n)
     @inbounds for i in 1:n
-        p = m.params.pars[i]
-        lo, hi = NaN, NaN
-        l = lim[i]
-        if l !== nothing
-            lo_raw, up_raw = l
-            if lo_raw !== nothing && !(lo_raw isa Real && isinf(lo_raw))
-                lo = Float64(lo_raw)
-            end
-            if up_raw !== nothing && !(up_raw isa Real && isinf(up_raw))
-                hi = Float64(up_raw)
-            end
-        end
-        new_pars[i] = MinuitParameter(p.name, p.value, p.error;
-                                       lower = lo, upper = hi,
-                                       fixed = p.fixed)
+        new_pars[i] = _build_error_par(m.params.pars[i], errs[i])
     end
-    setfield!(m, :params, Parameters(new_pars, m.prec))
+    _replace_all_params!(m, new_pars)
     return nothing
 end
 
-# Helper: update fixed flags from a `Vector{Bool}`.
-function _set_param_fixed!(m::Minuit, fx::AbstractVector)
+function _bulk_set_fixed!(m::Minuit, fx::AbstractVector)
     n = n_pars(m.params)
     length(fx) == n ||
         throw(DimensionMismatch("expected $n fixed flags, got $(length(fx))"))
     new_pars = Vector{MinuitParameter}(undef, n)
     @inbounds for i in 1:n
-        p = m.params.pars[i]
-        new_pars[i] = MinuitParameter(p.name, p.value, p.error;
-                                       lower = p.lower, upper = p.upper,
-                                       fixed = Bool(fx[i]))
+        new_pars[i] = _build_fixed_par(m.params.pars[i], Bool(fx[i]))
     end
-    setfield!(m, :params, Parameters(new_pars, m.prec))
+    _replace_all_params!(m, new_pars)
+    return nothing
+end
+
+function _bulk_set_limits!(m::Minuit, lim::AbstractVector)
+    n = n_pars(m.params)
+    length(lim) == n ||
+        throw(DimensionMismatch("expected $n limit tuples, got $(length(lim))"))
+    new_pars = Vector{MinuitParameter}(undef, n)
+    @inbounds for i in 1:n
+        l = lim[i]
+        new_pars[i] = if l === nothing
+            _build_limits_par(m.params.pars[i], nothing, nothing)
+        else
+            lo_raw, up_raw = l
+            _build_limits_par(m.params.pars[i], lo_raw, up_raw)
+        end
+    end
+    _replace_all_params!(m, new_pars)
     return nothing
 end
 

@@ -95,6 +95,8 @@ export ContoursError, contour, contour_exact
 export function_cross_multi
 export BoundedFunctionMinimum, ext_errors, ext_covariance, free_covariance
 export Minuit, migrad!, minos!
+# Per-parameter mutators (mirror C++ MnUserParameters; gap M3)
+export fix!, release!, set_value!, set_error!, set_limits!, remove_limits!
 # IMinuit.jl-compatible helpers (NB: `reset` extends `Base.reset`,
 # `matrix` is JuMinuit's own — IMinuit.jl's matrix returns the
 # correlation/covariance matrix with the same signature).
