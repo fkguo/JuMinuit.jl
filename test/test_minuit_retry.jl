@@ -167,6 +167,14 @@
                       names = ["a", "b"], errors = [0.5, 0.5],
                       strategy = Strategy(0))
         migrad!(m5s; iterate = 5, use_simplex = true, tol = 1e-6, maxfcn = 2000)
+        # Retry loop entered (proves coverage). NB: `m.nfcn` is the BEST pass's
+        # call count, not the cumulative total — and under the C++-faithful
+        # Simplex (audit §5: minedm = 0.1·up, initial edge ≈ errs) the winning
+        # simplex + re-MIGRAD pass now converges efficiently, in fewer calls than
+        # pass 1's Strategy(0) stall, so the old `nfcn > nfcn1` proxy no longer
+        # holds. `n_passes > 1` is the direct, robust proof the retry layer ran
+        # (matching the n_passes checks elsewhere in this file).
+        @test m5s.n_passes > 1
         @test m5s.valid
         @test m5s.fval ≤ fval1 + 1e-10
         @test m5s.fval < 0.0              # reaches the deep (negative) well
