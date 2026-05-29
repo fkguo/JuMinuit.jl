@@ -27,11 +27,14 @@ Returns a **new** `MinimumError` (not the same instance) — matches C++
 semantic which constructs a new BasicMinimumError. The original `err`
 is untouched. Status of the returned object:
 
-- `MnHesseValid` — if `err` was already positive-definite and required
-  no perturbation (C++ line 86: `return MinimumError(err, e.Dcovar())`,
-  preserving original status).
-- `MnMadePosDef` — if any diagonal perturbation was applied (C++ line
-  103).
+- `MnHesseValid` — if `err` passed the eigenvalue gate (C++ MnPosDef.cxx:85-86:
+  `return MinimumError(err, e.Dcovar())`, the (matrix, dcovar) ctor that forces
+  valid+pos-def). The incoming `err.dcovar` is preserved; the incoming `status`
+  is NOT — a stale `MnMadePosDef` must not survive the gate (audit §11b).
+- `MnMadePosDef` — if any diagonal perturbation was applied (C++ line 103) or
+  the n=1 clamp fired (line 39). `dcovar` is forced to `1.0` to match the C++
+  `BasicMinimumError` tag constructor; this drives MIGRAD's
+  `edm_corrected = edm·(1+3·dcovar)` after a pos-def event (audit §11a).
 
 # Algorithm (per `MnPosDef.cxx:30-104`)
 
@@ -66,7 +69,9 @@ function make_posdef(err::MinimumError, prec::MachinePrecision = MachinePrecisio
         if M_in[1, 1] < eps
             new_M = fill(0.0, 1, 1)
             new_M[1, 1] = 1.0
-            return MinimumError(Symmetric(new_M, :U), err.dcovar, MnMadePosDef, true)
+            # C++ MnPosDef.cxx:39 `MinimumError(err, MnMadePosDef())` — tag ctor
+            # forces dcovar = 1.0 (BasicMinimumError.h), not the incoming dcovar.
+            return MinimumError(Symmetric(new_M, :U), 1.0, MnMadePosDef, true)
         else
             return err  # already valid
         end
@@ -117,8 +122,13 @@ function make_posdef(err::MinimumError, prec::MachinePrecision = MachinePrecisio
     pmax = eval_[end]
     pmax = max(abs(pmax), 1.0)      # MnPosDef.cxx:84
     if pmin > epspdf * pmax
-        # Pos-def enough — return with original status + original dcov
-        return MinimumError(Symmetric(err_M, :U), err.dcovar, err.status, true)
+        # Pos-def enough. C++ MnPosDef.cxx:85-86 returns `MinimumError(err,
+        # e.Dcovar())` — the (matrix, dcovar) ctor, which forces valid+pos-def
+        # (fValid=fPosDef=true, fMadePosDef=false) while KEEPING the incoming
+        # dcovar. Preserving err.status here (v1) could carry a stale
+        # MnMadePosDef across the gdel>0→edm<0 re-invocation within a single
+        # MIGRAD iteration (audit §11b) — force MnHesseValid instead.
+        return MinimumError(Symmetric(err_M, :U), err.dcovar, MnHesseValid, true)
     end
 
     # Force pos-def: add (0.001·pmax − pmin) · diag (MnPosDef.cxx:88-91)
@@ -127,7 +137,11 @@ function make_posdef(err::MinimumError, prec::MachinePrecision = MachinePrecisio
         err_M[i, i] *= (1.0 + padd)
     end
 
-    return MinimumError(Symmetric(err_M, :U), err.dcovar, MnMadePosDef, true)
+    # C++ MnPosDef.cxx:103 returns `MinimumError(err, MnMadePosDef())` — the tag
+    # ctor forces dcovar = 1.0 (BasicMinimumError.h), inflating MIGRAD's
+    # edm·(1+3·dcovar) correction after the pos-def event (audit §11a). v1
+    # passed the incoming err.dcovar, under-inflating the correction.
+    return MinimumError(Symmetric(err_M, :U), 1.0, MnMadePosDef, true)
 end
 
 """
