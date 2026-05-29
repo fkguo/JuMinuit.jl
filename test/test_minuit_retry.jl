@@ -128,9 +128,19 @@
                    0.5 * sin(a * b)
         end
 
+        # Pin Strategy(0) here: this test exercises the *retry layer* and
+        # needs a pass-1 stall (is_valid=false, not call-limited) so the
+        # retry loop enters and the Simplex / prior_cov / Strategy branches
+        # get covered. The coarse Strategy-0 gradient reliably produces that
+        # stall on this multi-minimum FCN. The high-level default is now
+        # Strategy(1) (iminuit parity, see docs/IAM_CONVERGENCE_GAP.md),
+        # under which pass 1 descends far enough that the retry would not
+        # add a pass — which would leave the retry branches untested.
+
         # Single-shot baseline
         m1 = Minuit(fcn, [-5.0, 5.0];
-                     names = ["a", "b"], errors = [0.5, 0.5])
+                     names = ["a", "b"], errors = [0.5, 0.5],
+                     strategy = Strategy(0))
         migrad!(m1; iterate = 1, tol = 1e-6, maxfcn = 2000)
         @test !m1.valid                                 # pass 1 failed
         @test !m1.fmin.internal.reached_call_limit      # not via budget
@@ -140,7 +150,8 @@
         # With retry: must run AT LEAST one extra pass (nfcn > nfcn1) and
         # NEVER end up at a worse fval than the single-shot baseline.
         m5 = Minuit(fcn, [-5.0, 5.0];
-                     names = ["a", "b"], errors = [0.5, 0.5])
+                     names = ["a", "b"], errors = [0.5, 0.5],
+                     strategy = Strategy(0))
         migrad!(m5; iterate = 5, tol = 1e-6, maxfcn = 2000)
         @test m5.nfcn > nfcn1     # retry loop entered (proves coverage)
         @test m5.fval ≤ fval1 + 1e-10
@@ -154,7 +165,8 @@
         # branch (which is skipped when use_simplex=true). The prior_cov
         # path also escapes the bad seed on this FCN.
         m5_ns = Minuit(fcn, [-5.0, 5.0];
-                        names = ["a", "b"], errors = [0.5, 0.5])
+                        names = ["a", "b"], errors = [0.5, 0.5],
+                        strategy = Strategy(0))
         migrad!(m5_ns; iterate = 5, use_simplex = false,
                        tol = 1e-6, maxfcn = 2000)
         @test m5_ns.nfcn > nfcn1
@@ -250,17 +262,16 @@
     end
 
     @testset "AD-gradient FCN survives retry path (codex BLOCKING regression)" begin
-        # The AD `seed_state` rejects strategy.level != 0 (see
-        # src/ad_gradient.jl:254-255). The retry loop must NOT bump to
-        # Strategy(2) when `m.cfwg !== nothing`, or any retry pass would
-        # throw on the AD seed. We exercise both `use_simplex=true` (the
-        # default) and `use_simplex=false` (which engages `_retry_prior_cov`
-        # if retry triggers). Pass 1 validates on this convex FCN, so the
-        # retry loop never enters — but the AD-aware retry-strategy
-        # selection logic (`m.cfwg === nothing ? Strategy(2) : strategy`)
-        # is reached unconditionally before the loop check, so any
-        # regression that re-hardcodes `Strategy(2)` would still throw at
-        # construction time.
+        # The retry loop keeps the user's strategy on the AD path rather
+        # than bumping to Strategy(2) (the numerical-path multistart
+        # heuristic): `retry_strategy = m.cfwg === nothing ? Strategy(2) :
+        # strategy`. The AD `seed_state` now supports all strategy levels,
+        # so this is a deliberate choice, not a constraint. We exercise both
+        # `use_simplex=true` (the default) and `use_simplex=false` (which
+        # engages `_retry_prior_cov` if retry triggers). Pass 1 validates on
+        # this convex FCN (now at the Strategy(1) default), so the retry
+        # loop never enters; the guard here is that the whole AD retry path
+        # — strategy selection + seed + (skipped) loop — runs without error.
         f_ad = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
         g_ad = x -> [2.0 * (x[1] - 1.0), 2.0 * (x[2] - 2.0)]
         for us in (true, false)

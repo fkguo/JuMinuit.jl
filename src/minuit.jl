@@ -178,7 +178,22 @@ function Minuit(
     # IMinuit.jl-compatible stored settings. These become `m.strategy`,
     # `m.tol`, `m.print_level` and feed into subsequent migrad! calls
     # when not explicitly overridden.
-    strategy::Union{Strategy,Integer} = Strategy(0),
+    #
+    # Default `Strategy(1)` matches the iminuit `Minuit` class default
+    # (`self._strategy = MnStrategy(1)`) and C++ Minuit2's `MnStrategy()`
+    # default (`SetMediumStrategy`), so a bare `migrad!(m)` is drop-in-
+    # equivalent to iminuit's `m.migrad()` — for BOTH numerical and
+    # analytical/AD (`grad=`) FCNs (iminuit applies strategy 1 regardless of
+    # whether a gradient is supplied; the AD `seed_state` in ad_gradient.jl
+    # supports all strategy levels). Strategy 1 enables the dcovar-triggered
+    # inner-HESSE refinement inside `_migrad_loop`, which re-seeds the DFP
+    # curvature mid-run and reaches deeper minima on stiff fits than the
+    # coarse 2-cycle Strategy(0) gradient (see docs/IAM_CONVERGENCE_GAP.md).
+    #
+    # The *low-level* `migrad(cf, …)` / `seed` / `function_cross` / `minos`
+    # / `contours` entry points keep their own `Strategy(0)` defaults
+    # (pinned to the C++ oracle reference data — see test_cpp_oracle.jl).
+    strategy::Union{Strategy,Integer} = Strategy(1),
     tol::Real = 0.1,
     print_level::Integer = 0,
     # Phase G: parallel inner numerical-gradient. Requires `julia -t N`.
@@ -300,7 +315,10 @@ function Minuit(fcn;
                 errordef::Union{Real,Nothing} = nothing,
                 prec::MachinePrecision = MachinePrecision(),
                 grad::Union{Function,Nothing} = nothing,
-                strategy::Union{Strategy,Integer} = Strategy(0),
+                # iminuit Minuit-class default (level 1), for numerical AND
+                # AD FCNs. See the Minuit(fcn, x0) constructor for the
+                # full rationale.
+                strategy::Union{Strategy,Integer} = Strategy(1),
                 tol::Real = 0.1,
                 print_level::Integer = 0,
                 threaded_gradient::Bool = false,
@@ -388,11 +406,13 @@ M5 prior-cov mechanism from PR #4. If pass 1 fails to validate
 `VariableMetricBuilder.cxx:278`) and the call limit hasn't been
 reached, retry up to `iterate-1` more passes. Each retry:
 
-- Upgrades to `Strategy(2)` regardless of the user request (iminuit
-  heuristic in `_robust_low_level_fit`). Exception: when the FCN was
-  constructed with `grad=...`, the AD seed path requires Strategy(0),
-  so the user's stored strategy is retained on retry — Simplex + the
-  prior_cov carry remain in effect.
+- Upgrades to `Strategy(2)` regardless of the user request (a JuMinuit
+  multistart choice — iminuit's `_robust_low_level_fit` does NOT bump
+  strategy on retry, it re-runs at the user's strategy; see
+  docs/IAM_CONVERGENCE_GAP.md). Exception: when the FCN was
+  constructed with `grad=...`, the user's stored strategy is retained
+  on retry (no S=2 bump) — the AD value-add comes from the Simplex hop
+  and the prior_cov carry, not the bump.
 - Optionally runs a Nelder-Mead Simplex step from the failed point
   before the next MIGRAD (`use_simplex=true`, the default). With
   `use_simplex=false`, the failed fit's inverse Hessian is carried
@@ -515,12 +535,16 @@ function migrad!(m::Minuit;
     #
     # Loop exits when the fit validates, the call limit is exhausted, the
     # perturbation saturates the physical range, or a cycle is detected.
-    # The retry strategy is `Strategy(2)` for numerical-gradient FCNs (the
-    # iminuit default). For analytical-gradient FCNs (`m.cfwg !== nothing`)
-    # the AD `seed_state` rejects any strategy.level != 0 (see
-    # `src/ad_gradient.jl:254-255`); rather than throw mid-retry we keep the
-    # user's stored strategy on the AD path. Retry's value-add for AD users
-    # then comes from the Simplex hop and the prior_cov carry, not the bump.
+    # The retry strategy is `Strategy(2)` for numerical-gradient FCNs (a
+    # JuMinuit multistart choice; NOTE iminuit's own `_robust_low_level_fit`
+    # does NOT bump strategy on retry — it re-runs `MnMigrad` at the user's
+    # strategy. See docs/IAM_CONVERGENCE_GAP.md "Secondary findings").
+    # For analytical-gradient FCNs (`m.cfwg !== nothing`) we keep the
+    # user's stored strategy on retry rather than bumping (the AD
+    # `seed_state` now supports all strategy levels, so this is a choice,
+    # not a constraint): the S=2 bump is a numerical-path multistart
+    # heuristic, whereas the AD path's retry value-add comes from the
+    # Simplex hop and the prior_cov carry.
     #
     # Safety invariant (PR #8): `iterate=N` never yields a worse fval than
     # `iterate=1`. We guarantee it *by construction* — `best_bfm` tracks the
@@ -1794,18 +1818,19 @@ accepted for IMinuit.jl interface parity:
     `eps` value (rarely used).
 
 `strategy` and `tol` default to whatever the user stored on `m`
-(settable via `m.strategy = ...`, `m.tol = ...`). Constructor default
-is `Strategy(0)` — faster than iminuit's `Strategy(1)`; if you want
-the iminuit-matching accuracy/cost trade pass `strategy=Strategy(1)`
-or set `m.strategy = Strategy(1)` once before the first migrad.
+(settable via `m.strategy = ...`, `m.tol = ...`). The constructor
+default is `Strategy(1)` — matching iminuit's `Minuit`-class default and
+C++ Minuit2's `MnStrategy()` — for both numerical and analytical/AD
+(`grad=`) FCNs. Override per call with `strategy=...`, or set
+`m.strategy = ...` once before the first migrad.
 
 `iterate` and `use_simplex` are threaded through to [`migrad!`](@ref)
 unchanged — see its docstring for the iminuit
-`_robust_low_level_fit`-shaped retry loop they control. Note that
-retries silently upgrade to `Strategy(2)` (iminuit heuristic) on the
-numerical-gradient path, even if you passed `strategy=Strategy(0)`
-here. The AD-gradient path retains the user's strategy because its
-seed rejects `strategy.level != 0`.
+`_robust_low_level_fit`-shaped retry loop they control. Note that on the
+numerical-gradient path JuMinuit's retry passes upgrade to `Strategy(2)`
+(a JuMinuit multistart choice — iminuit's own retry instead re-runs at
+the user's strategy), even if you passed `strategy=Strategy(0)` here.
+The AD-gradient path retains the user's strategy on retry (no S=2 bump).
 """
 function migrad(m::Minuit;
                  ncall::Union{Integer,Nothing} = nothing,
