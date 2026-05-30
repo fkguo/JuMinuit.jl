@@ -106,7 +106,7 @@ export has_parameters, has_covariance, fval, edm, nfcn
 export initial_gradient, initial_gradient!
 export numerical_gradient, numerical_gradient!
 export estimate_edm, estimate_edm!
-export make_posdef, is_posdef_enough
+export make_posdef, make_posdef!, is_posdef_enough
 export ParabolaPoint, line_search
 export has_negative_g2, negative_g2_line_search
 export seed_state, warm_restart_state
