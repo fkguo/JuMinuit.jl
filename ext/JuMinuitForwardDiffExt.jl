@@ -57,7 +57,8 @@ libraries, etc.), use plain `CostFunction(f, up)` + `threaded_gradient=true`
 on `julia -t N` instead. See README "Beyond C++ Minuit2" section.
 """
 function JuMinuit.CostFunctionAD(f, up::Real = 1.0;
-                                   chunk_size::Union{Integer,Nothing} = nothing)
+                                   chunk_size::Union{Integer,Nothing} = nothing,
+                                   check_gradient::Bool = true)
     g = if chunk_size === nothing
         x -> ForwardDiff.gradient(f, x)
     else
@@ -72,7 +73,8 @@ function JuMinuit.CostFunctionAD(f, up::Real = 1.0;
             ForwardDiff.gradient(f, x, cfg)
         end
     end
-    return JuMinuit.CostFunctionWithGradient(f, g, Float64(up))
+    return JuMinuit.CostFunctionWithGradient(f, g, Float64(up);
+                                             check_gradient = check_gradient)
 end
 
 end # module JuMinuitForwardDiffExt

@@ -63,16 +63,50 @@ using LinearAlgebra: Symmetric
         end
     end
 
-    @testset "squeeze_error — singular matrix triggers diagonal fallback" begin
-        # Construct a rank-1 inverse-Hessian (will fail to invert)
+    @testset "squeeze_error — first inversion (V→H) failure → VALID diagonal (audit §12)" begin
+        # Rank-1 inverse-Hessian V = v·v' is singular, so the V→H inversion
+        # (squeeze_error Step 1) fails. C++ `MnCovarianceSqueeze` does NOT bail
+        # to a failure status here: that inversion lives inside `err.Hessian()`
+        # (BasicMinimumError.cxx:20-35), which on failure returns the diagonal
+        # Hessian diag(1/V[i,i]); MnCovarianceSqueeze then squeezes that diagonal
+        # and re-inverts it cleanly, yielding the VALID
+        # `MinimumError(squeezed, err.Dcovar())` whose diagonal is diag(V[i,i]).
+        # Pre-fix JuMinuit mis-tagged this MnInvertFailed (audit §12).
         v = [1.0, 2.0, 3.0]
-        # V = v·v' is rank-1 (singular); sym_invert! will throw
-        Vsing_mat = v * v'
-        # Make sure the construction is positive-semidefinite Symmetric
+        Vsing_mat = v * v'                              # rank-1 ⇒ singular
         Vsing = Symmetric(0.5 * (Vsing_mat + Vsing_mat'), :U)
         err = MinimumError(Vsing, 0.5)
         sq = JuMinuit.squeeze_error(err, 2; prec)
-        @test invert_failed(sq)
         @test size(sq) == (2, 2)
+        # C++-aligned status: VALID, not MnInvertFailed.
+        @test is_valid(sq)
+        @test !invert_failed(sq)
+        @test sq.status == MnHesseValid
+        # dcovar preserved from input (C++ line 86 `MinimumError(squeezed, Dcovar)`).
+        @test sq.dcovar == 0.5
+        # Diagonal = original V diagonal with row/col 2 dropped: [V[1,1], V[3,3]].
+        @test sq.inv_hessian[1, 1] == Vsing[1, 1]       # 1.0
+        @test sq.inv_hessian[2, 2] == Vsing[3, 3]       # 9.0
+        @test sq.inv_hessian[1, 2] == 0.0
+    end
+
+    @testset "squeeze_error — back-inversion (squeezed H→V) failure → MnInvertFailed" begin
+        # The OTHER fallback (C++ MnCovarianceSqueeze.cxx:76-84), unchanged by
+        # the §12 fix: V→H succeeds but the squeezed Hessian is singular, so the
+        # back-inversion (Step 3) fails → MnInvertFailed.
+        #
+        # Triggering this reliably needs an EXACTLY-singular squeezed Hessian:
+        # a generic indefinite V leaves the recovered H only *near*-singular
+        # after the V→H round-trip's float error, which Bunch–Kaufman then
+        # inverts rather than rejecting. An involution V (V² = I ⇒ inv(V)=V is
+        # recovered exactly, no float drift) sidesteps that. Here
+        # V = diag-swap; recovering H=V and dropping row/col 2 gives the exactly
+        # singular [[1,0],[0,0]].
+        V = Symmetric(Float64[1 0 0; 0 0 1; 0 1 0], :U)
+        err = MinimumError(V, 0.25)
+        sq = JuMinuit.squeeze_error(err, 2; prec)
+        @test size(sq) == (2, 2)
+        @test invert_failed(sq)
+        @test sq.status == MnInvertFailed
     end
 end

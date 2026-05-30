@@ -1,6 +1,14 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 using ForwardDiff
+using Logging
+
+# Run `thunk` capturing all log records (used by the CheckGradient tests to
+# assert presence/absence of the discrepancy warning without being brittle to
+# unrelated log messages).
+_logs_of(thunk) = (l = Test.TestLogger(); Logging.with_logger(thunk, l); l.logs)
+_has_checkgrad_warning(logs) =
+    any(r -> r.level == Logging.Warn && occursin("CheckGradient", String(r.message)), logs)
 
 @testset "ad_gradient.jl — analytical-gradient MIGRAD (Phase 2.1 first cut)" begin
 
@@ -135,5 +143,102 @@ using ForwardDiff
         # Default up=1.0 path
         cf_default = CostFunctionAD(f)
         @test cf_default.up == 1.0
+    end
+
+    @testset "CheckGradient discrepancy check (audit §8/§9)" begin
+        # C++ MnSeedGenerator.cxx:124-144 — validate the user/AD gradient
+        # against a numerical 2-point estimate at the seed; warn (never crash)
+        # on disagreement. Default on (C++ FCNGradientBase::CheckGradient()).
+        f = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+        gcorrect = x -> [2 * (x[1] - 1.0), 2 * (x[2] - 2.0)]
+        gwrong = x -> [2 * (x[1] - 1.0) + 5.0, 2 * (x[2] - 2.0)]  # comp-1 off by +5
+        x0 = [0.0, 0.0]
+        errs = [0.1, 0.1]
+
+        @testset "seed_state warns on a wrong gradient" begin
+            cf = CostFunctionWithGradient(f, gwrong)
+            logs = _logs_of(() -> JuMinuit.seed_state(cf, x0, errs))
+            @test _has_checkgrad_warning(logs)
+        end
+
+        @testset "seed_state is silent on a correct gradient" begin
+            cf = CostFunctionWithGradient(f, gcorrect)
+            logs = _logs_of(() -> JuMinuit.seed_state(cf, x0, errs))
+            @test !_has_checkgrad_warning(logs)
+        end
+
+        @testset "check_gradient=false skips the check (silent + no extra FCN calls)" begin
+            cf = CostFunctionWithGradient(f, gwrong; check_gradient = false)
+            @test cf.check_gradient == false
+            logs = _logs_of(() -> JuMinuit.seed_state(cf, x0, errs))
+            @test !_has_checkgrad_warning(logs)
+            # The check is the only seed-time consumer of FCN calls beyond the
+            # initial fval; skipping it leaves just that one evaluation.
+            @test ncalls(cf) == 1
+        end
+
+        @testset "_check_user_gradient return value + diagnostic-only (no state change)" begin
+            par = MinimumParameters(x0, errs, f(x0))
+            cf_ok = CostFunctionWithGradient(f, gcorrect)
+            cf_bad = CostFunctionWithGradient(f, gwrong)
+            grad_ok = JuMinuit.analytical_gradient(par, cf_ok)
+            grad_bad = JuMinuit.analytical_gradient(par, cf_bad)
+            @test JuMinuit._check_user_gradient(par, grad_ok, cf_ok) == true
+            local ret
+            logs = _logs_of(() -> (ret = JuMinuit._check_user_gradient(par, grad_bad, cf_bad)))
+            @test ret == false
+            @test _has_checkgrad_warning(logs)
+
+            # The check must not mutate the supplied gradient (it is diagnostic).
+            @test grad_bad.grad == [2 * (x0[1] - 1.0) + 5.0, 2 * (x0[2] - 2.0)]
+        end
+
+        @testset "seed state is identical with the check on vs off (diagnostic-only)" begin
+            cf_on = CostFunctionWithGradient(f, gcorrect; check_gradient = true)
+            cf_off = CostFunctionWithGradient(f, gcorrect; check_gradient = false)
+            s_on = JuMinuit.seed_state(cf_on, x0, errs)
+            s_off = JuMinuit.seed_state(cf_off, x0, errs)
+            @test s_on.parameters.x == s_off.parameters.x
+            @test s_on.gradient.grad == s_off.gradient.grad
+            @test s_on.edm == s_off.edm
+            # Only the FCN-call accounting differs (the check costs seed calls).
+            @test ncalls(cf_on) > ncalls(cf_off)
+        end
+
+        @testset "Minuit(fcn, x0; grad=wrong) warns; correct does not; fit unaffected" begin
+            # The audit's end-to-end test: the high-level constructor path
+            # (migrad! → migrad_bounded `_wrap_fcn_internal_to_external` → seed).
+            m_bad = Minuit(f, x0; grad = gwrong, error = errs)
+            logs_bad = _logs_of(() -> migrad!(m_bad))
+            @test _has_checkgrad_warning(logs_bad)
+
+            m_ok = Minuit(f, x0; grad = gcorrect, error = errs)
+            logs_ok = _logs_of(() -> migrad!(m_ok))
+            @test !_has_checkgrad_warning(logs_ok)
+            @test m_ok.valid
+            @test m_ok.values[1] ≈ 1.0 atol = 1e-5
+            @test m_ok.values[2] ≈ 2.0 atol = 1e-5
+
+            # Opt-out silences the warning end-to-end (unbounded path).
+            m_off = Minuit(f, x0; grad = gwrong, error = errs, check_gradient = false)
+            logs_off = _logs_of(() -> migrad!(m_off))
+            @test !_has_checkgrad_warning(logs_off)
+        end
+
+        @testset "bounded fit honors the check + the check_gradient=false opt-out" begin
+            # Regression: the migrad_bounded `_wrap_fcn_internal_to_external`
+            # wrap must forward `check_gradient`. Bounding a parameter routes
+            # the seed through the int↔ext wrap; the check runs in internal
+            # coordinates and still flags a wrong external gradient.
+            m_b_bad = Minuit(f, x0; grad = gwrong, error = errs,
+                             limit_x0 = (-10.0, 10.0))
+            logs_b_bad = _logs_of(() -> migrad!(m_b_bad))
+            @test _has_checkgrad_warning(logs_b_bad)
+
+            m_b_off = Minuit(f, x0; grad = gwrong, error = errs,
+                             limit_x0 = (-10.0, 10.0), check_gradient = false)
+            logs_b_off = _logs_of(() -> migrad!(m_b_off))
+            @test !_has_checkgrad_warning(logs_b_off)
+        end
     end
 end

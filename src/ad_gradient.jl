@@ -43,6 +43,15 @@ central-difference numerical gradient.
 - `ngrad::Base.RefValue{Int}` — gradient call counter (separate from
   nfcn since each gradient call is "one shot" vs the 2n+ FCN calls
   numerical_gradient! makes per iteration).
+- `check_gradient::Bool` — when `true` (the default), `seed_state`
+  validates this gradient against a numerical 2-point estimate at the
+  seed point and **warns** on disagreement beyond tolerance (the
+  `CheckGradient` discrepancy check; see [`_check_user_gradient`]).
+  Mirrors C++ `FCNGradientBase::CheckGradient()` (default `true`) gating
+  `MnSeedGenerator.cxx:124-144`. Pass `false` to skip the seed-time check
+  (the cross-search probe wrappers do this — the user gradient is already
+  validated at the top-level fit, so re-checking each MINOS/contour
+  re-seed is redundant).
 
 # Examples
 
@@ -59,10 +68,20 @@ struct CostFunctionWithGradient{F,G,T} <: AbstractCostFunction
     up::T
     nfcn::Base.RefValue{Int}
     ngrad::Base.RefValue{Int}
+    check_gradient::Bool
 end
 
-CostFunctionWithGradient(f, g, up = 1.0) =
-    CostFunctionWithGradient(f, g, Float64(up), Ref(0), Ref(0))
+# Convenience constructors. `check_gradient` defaults to `true` — the C++
+# `FCNGradientBase::CheckGradient()` default (so the high-level
+# `Minuit(fcn, x0; grad=g)` and `CostFunctionAD` paths validate the
+# gradient at the seed, matching C++/iminuit). Pass `check_gradient=false`
+# to skip the seed-time discrepancy check.
+CostFunctionWithGradient(f, g, up::Real = 1.0; check_gradient::Bool = true) =
+    CostFunctionWithGradient(f, g, Float64(up), Ref(0), Ref(0), check_gradient)
+
+CostFunctionWithGradient(f, g, up::Real, nfcn::Base.RefValue{Int},
+                         ngrad::Base.RefValue{Int}; check_gradient::Bool = true) =
+    CostFunctionWithGradient(f, g, Float64(up), nfcn, ngrad, check_gradient)
 
 # Phase F alias kept for any external code that already imported it;
 # new signatures should prefer `AbstractCostFunction` directly. Defined
@@ -128,6 +147,10 @@ informative error.
 - `chunk_size::Union{Int,Nothing}=nothing` — ForwardDiff chunk size.
   `nothing` lets ForwardDiff pick automatically. For n > 12 a smaller
   chunk (e.g., 4-6) can reduce memory pressure.
+- `check_gradient::Bool=true` — validate the AD gradient against a
+  numerical 2-point estimate at the seed and warn on disagreement (the
+  C++ Minuit2 `CheckGradient` discrepancy check). Default `true` matches
+  C++; pass `false` to skip the one-time seed check.
 
 # When to use
 
@@ -238,6 +261,65 @@ function initial_gradient(par::MinimumParameters,
     return out
 end
 
+"""
+    _check_user_gradient(par, grad, cf::CostFunctionWithGradient,
+                         prec=MachinePrecision()) -> Bool
+
+Port of the `CheckGradient` discrepancy check in
+`reference/Minuit2_cpp/src/MnSeedGenerator.cxx:124-144` (the analytical
+seed overload) + `AnalyticalGradientCalculator::CheckGradient`.
+
+At the seed point, recompute the gradient numerically and compare it to
+the user/AD-supplied gradient component-wise. C++ uses a
+`HessianGradientCalculator` at `MnStrategy(2)`, whose `DeltaGradient`
+returns both the numerically-refined gradient and a per-component
+uncertainty `dgrd[i] = max(dgmin, |grdold − grdnew|)`; a component is
+flagged when `|numerical[i] − user[i]| > dgrd[i]`. JuMinuit already
+ports `DeltaGradient` as [`hessian_gradient`](@ref), so this reuses it
+verbatim.
+
+`grad` must be the analytical gradient with the initial-gradient
+`g2`/`gstep` companions — exactly what [`analytical_gradient`](@ref)
+returns, matching C++'s
+`dgrad = FunctionGradient(grd.Grad(), tmp.G2(), tmp.Gstep())`.
+
+**Action on disagreement:** C++ warns per component, then `assert(good)`
+(a no-op in release / iminuit builds; an abort only in debug builds).
+JuMinuit **warns and continues** — a wrong user gradient should be
+reported, never crash the fit (matching the release-build behavior).
+Returns `true` when the gradient agrees within tolerance.
+
+The numerical recompute costs up to `2·n·HessianGradientNCycles(2)` FCN
+calls at the seed (typically far fewer — the inner loop breaks on
+convergence); it is purely diagnostic and does not alter the seed state.
+"""
+function _check_user_gradient(
+    par::MinimumParameters,
+    grad::FunctionGradient,
+    cf::CostFunctionWithGradient,
+    prec::MachinePrecision = MachinePrecision(),
+)
+    n = length(par)
+    # C++ MnSeedGenerator.cxx:126 — HessianGradientCalculator at MnStrategy(2).
+    refined, dgrd = hessian_gradient(par, grad, cf, Strategy(2), prec)
+    bad = Int[]
+    @inbounds for i in 1:n
+        if abs(refined.grad[i] - grad.grad[i]) > dgrd[i]
+            push!(bad, i)
+        end
+    end
+    if !isempty(bad)
+        @warn string(
+            "CheckGradient: user-supplied `grad=` disagrees with the numerical ",
+            "2-point estimate beyond tolerance at internal parameter ",
+            "index(es) $bad (of $n). Continuing with the supplied gradient — ",
+            "verify it (or pass `check_gradient=false` to silence this check). ",
+            "[C++ MnSeedGenerator.cxx:124-144]",
+        ) user_grad = grad.grad[bad] numerical_grad = refined.grad[bad] tolerance = dgrd[bad]
+    end
+    return isempty(bad)
+end
+
 # Make seed_state work with CostFunctionWithGradient by treating it as
 # a regular CostFunction for the cold-start FCN evaluations.
 function seed_state(
@@ -269,6 +351,15 @@ function seed_state(
     par = MinimumParameters(x, dirin, fval)
 
     grad = analytical_gradient(par, cf, strategy, prec)
+
+    # CheckGradient discrepancy check (C++ MnSeedGenerator.cxx:124-144).
+    # Validate the user/AD gradient against a numerical 2-point estimate at
+    # the seed; warn (never crash) on disagreement. Gated on
+    # `cf.check_gradient` (C++ `gc.CheckGradient()` ⇒ default true). Runs
+    # before the HasCovariance branch, matching C++ ordering.
+    if cf.check_gradient
+        _check_user_gradient(par, grad, cf, prec)
+    end
 
     n_total = n
     # M5: user-supplied covariance branch — mirrors C++ MnSeedGenerator.cxx:63-67.
