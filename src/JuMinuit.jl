@@ -143,7 +143,8 @@ export eigenvalues, global_cc
 # IMinuit.jl-compatible algorithm wrappers
 export mncontour, profile, mnprofile
 export draw_contour, draw_mncontour, draw_profile, draw_mnprofile, draw_mnmatrix
-export scipy
+# Alternative-minimizer bridge (Optim.jl extension — `using Optim` to enable)
+export scipy, minimize_with
 
 # Terminal / SSH / headless-CI ASCII renderer (plot_text.jl, gap M2)
 export mn_plot_text

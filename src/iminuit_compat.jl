@@ -682,20 +682,120 @@ Requires `using Plots`.
 """
 function draw_mnmatrix end
 
-# scipy IMinuit alias — JuMinuit doesn't bundle scipy; throw a helpful
-# error so existing IMinuit.jl call sites get a clear message.
-"""
-    scipy(m::Minuit; kws...) -> error
+# ─────────────────────────────────────────────────────────────────────────────
+# scipy / minimize_with — the alternative-minimizer bridge (Optim.jl extension).
+#
+# iminuit's `m.scipy(method=...)` minimises the FCN with `scipy.optimize.minimize`
+# as the escape hatch when MIGRAD struggles (trust-region / derivative-free
+# methods on stiff problems), then the user calls `hesse()` for the covariance.
+# The Julia-optimal analog bridges to Optim.jl — the native, AD-friendly
+# `scipy.optimize` equivalent — rather than shelling out to Python. The concrete
+# implementation lives in `ext/JuMinuitOptimExt.jl` (a package extension, like
+# JuMinuitForwardDiffExt / JuMinuitPlotsExt), activated by `using Optim`.
+#
+# These thin entry points dispatch into the extension via `Base.get_extension`,
+# so copy-pasted iminuit `scipy(m)` call sites keep working, and a missing
+# `using Optim` yields a helpful message instead of a bare MethodError.
+# ─────────────────────────────────────────────────────────────────────────────
 
-iminuit's `m.scipy(...)` delegates to Python `scipy.optimize`. JuMinuit
-is a pure Julia port — no scipy. Use [`migrad`](@ref) (DFP variable-
-metric) or [`simplex`](@ref) (Nelder-Mead) instead, or call a Julia
-optimizer like `Optim.optimize(f, x0)` and feed the result back via
-`Minuit(fcn, x0_opt)`.
-"""
-function scipy(m::Minuit; kwargs...)
-    throw(ArgumentError(
-        "scipy(m) is a Python-only iminuit feature. Use `migrad(m)` or " *
-        "`simplex(m)` for pure-Julia minimization, or call Optim.jl " *
-        "directly and seed Minuit with the result."))
+# Helpful message when the Optim extension isn't loaded. A `const` so tests can
+# assert on its content independent of the loaded state.
+const _OPTIM_BRIDGE_NOT_LOADED =
+    "scipy(m) / minimize_with(m) is JuMinuit's alternative-minimizer bridge, " *
+    "the Julia analog of iminuit's scipy.optimize escape hatch — powered by " *
+    "Optim.jl. Load it to enable: `using Optim`. (Or stay in pure JuMinuit with " *
+    "`migrad(m)` / `simplex(m)`.)"
+
+# Fetch the loaded Optim extension module, or throw the helpful "load Optim"
+# error. Centralised so `scipy` and `minimize_with` share one dispatch point.
+function _optim_bridge_ext()
+    ext = Base.get_extension(@__MODULE__, :JuMinuitOptimExt)
+    ext === nothing && throw(ArgumentError(_OPTIM_BRIDGE_NOT_LOADED))
+    return ext
 end
+
+"""
+    scipy(m::Minuit; method=:lbfgs, ncall=nothing, maxcall=nothing,
+                     tol=nothing, options=nothing) -> Minuit
+
+The Julia analog of iminuit's `m.scipy(...)` — the alternative-minimizer escape
+hatch, powered by **Optim.jl** instead of Python's `scipy.optimize`. Load
+`using Optim` to enable (it is an optional package extension).
+
+Minimises the FCN with the chosen Optim optimizer starting from `m`'s current
+parameter values, honours fixed parameters and box limits (via Optim's
+`Fminbox`), writes the optimum back into `m` (so `m.values` / `m.fval` update),
+and returns `m`. Run [`hesse`](@ref)`(m)` afterwards for the covariance —
+matching iminuit's scipy-then-hesse flow. Use this when MIGRAD struggles
+(stiff / ill-conditioned problems where a trust-region or derivative-free
+method does better).
+
+# `method` mapping (case / dash / underscore insensitive)
+
+| `method`                                   | Optim optimizer        |
+|:-------------------------------------------|:-----------------------|
+| `:lbfgs`, `"L-BFGS-B"`                      | `LBFGS()`              |
+| `:bfgs`                                     | `BFGS()`               |
+| `:neldermead`, `:simplex`                   | `NelderMead()`         |
+| `:newton`                                   | `Newton()`             |
+| `:conjugategradient`, `:cg`                 | `ConjugateGradient()`  |
+| `:gradientdescent`                          | `GradientDescent()`    |
+
+Derivative-free (`:neldermead`) and second-order (`:newton`) methods cannot be
+combined with box limits — Optim's `Fminbox` requires a first-order optimizer.
+Use a first-order method (`:lbfgs` / `:bfgs` / `:conjugategradient` /
+`:gradientdescent`) for bounded fits. When the constructor was given `grad=…`,
+the analytical gradient is passed through to first-order optimizers; otherwise
+Optim finite-differences it.
+
+# Keyword arguments
+
+- `method` — optimizer selector (see table). Default `:lbfgs`.
+- `ncall` / `maxcall` — function-evaluation budget → Optim's `f_calls_limit`.
+- `tol` — gradient-norm convergence tolerance → Optim's `g_tol`.
+- `options` — a full `Optim.Options(...)` for fine control (overrides
+  `ncall`/`maxcall`/`tol`).
+
+!!! note "Bounded (Fminbox) fits"
+    For bounded fits `ncall`/`maxcall`/`tol` configure Fminbox's *inner*
+    optimizer (per outer iteration), not the global call budget or the outer
+    stop criterion. For hard control of the outer Fminbox loop, pass a full
+    `options=Optim.Options(outer_iterations=…, outer_g_abstol=…)`.
+
+For full control over the optimizer object itself, use [`minimize_with`](@ref):
+`minimize_with(m, Optim.LBFGS())`.
+
+# Examples
+
+```julia
+using JuMinuit, Optim
+m = Minuit(fcn, x0)
+scipy(m; method=:lbfgs)   # or m |> scipy
+hesse(m)                  # covariance, à la iminuit
+```
+"""
+scipy(m::Minuit; kwargs...) = _optim_bridge_ext()._scipy_optim(m, nothing; kwargs...)
+
+"""
+    minimize_with(m::Minuit, optimizer=nothing; method=:lbfgs, ncall=nothing,
+                  maxcall=nothing, tol=nothing, options=nothing) -> Minuit
+
+Clearer-named alias of [`scipy`](@ref): minimise `m`'s FCN with an alternative
+optimizer from **Optim.jl**, write the optimum back, and return `m` (run
+[`hesse`](@ref)`(m)` afterwards for the covariance). Load `using Optim` to
+enable.
+
+The first positional argument may be an Optim optimizer object, bypassing the
+`method` name table for full control:
+
+```julia
+using JuMinuit, Optim
+minimize_with(m, LBFGS())                       # optimizer object
+minimize_with(m, NelderMead())
+minimize_with(m; method=:bfgs, tol=1e-10)       # by name, like scipy(m; …)
+```
+
+See [`scipy`](@ref) for the `method` mapping and keyword semantics.
+"""
+minimize_with(m::Minuit, optimizer = nothing; kwargs...) =
+    _optim_bridge_ext()._scipy_optim(m, optimizer; kwargs...)

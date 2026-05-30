@@ -51,4 +51,11 @@ using Test
     include("test_eigen_corr.jl")
     include("test_phase1_cleanup.jl")
     include("test_print_level.jl")
+    # Optim.jl is a test dependency; guard the alternative-minimizer bridge
+    # tests so the rest of the suite still runs if it is ever unavailable.
+    if Base.identify_package("Optim") !== nothing
+        include("test_optim_bridge.jl")
+    else
+        @warn "Optim not available — skipping test_optim_bridge.jl"
+    end
 end
