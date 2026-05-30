@@ -729,7 +729,7 @@ function _migrad_loop(
         # lets the IAM x_jm warm start reach χ²=322.59 like iminuit does.
         #
         # **Status-gated entry shortcut** (JuMinuit-only optimization, see
-        # `docs/DAVIDON_CXX_AUDIT.md` option B): when (a) edm is already
+        # `docs/dev/DAVIDON_CXX_AUDIT.md` option B): when (a) edm is already
         # below tolerance AND (b) the current V has status `MnHesseValid`
         # (i.e., came from a real Hesse / DFP-update, NOT a placeholder),
         # skip the body. Preserves the historical "warm-restart at

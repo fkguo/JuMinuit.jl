@@ -194,7 +194,7 @@ function Minuit(
     # supports all strategy levels). Strategy 1 enables the dcovar-triggered
     # inner-HESSE refinement inside `_migrad_loop`, which re-seeds the DFP
     # curvature mid-run and reaches deeper minima on stiff fits than the
-    # coarse 2-cycle Strategy(0) gradient (see docs/IAM_CONVERGENCE_GAP.md).
+    # coarse 2-cycle Strategy(0) gradient (see docs/dev/IAM_CONVERGENCE_GAP.md).
     #
     # The *low-level* `migrad(cf, …)` / `seed` / `function_cross` / `minos`
     # / `contours` entry points keep their own `Strategy(0)` defaults
@@ -423,7 +423,7 @@ re-seed, discarding the possibly-degraded DFP inverse-Hessian), up to
 addition, reproduced faithfully here. The re-seed lets a stalled fit escape
 (IAM cold start: S=0 613 → ~383, S=1 330 → ~326 — via iminuit's retry
 *mechanism*; the exact basin reached differs from iminuit's on this
-ill-conditioned problem, see docs/IAM_CONVERGENCE_GAP.md § Fidelity).
+ill-conditioned problem, see docs/dev/IAM_CONVERGENCE_GAP.md § Fidelity).
 
 **`use_simplex=true` (opt-in, NOT the default) enables a structured Simplex
 multistart that is NOT part of C++ Minuit2 or iminuit** — a JuMinuit extension
@@ -509,7 +509,7 @@ function migrad!(m::Minuit;
     # is drop-in-equivalent to iminuit's `m.migrad()`. The re-seed is what lets
     # a stalled fit escape (IAM cold start: S=0 613 → ~383, S=1 330 → ~326 — via
     # iminuit's retry *mechanism*; the exact basin differs from iminuit's on the
-    # ill-conditioned IAM, see docs/IAM_CONVERGENCE_GAP.md § Fidelity).
+    # ill-conditioned IAM, see docs/dev/IAM_CONVERGENCE_GAP.md § Fidelity).
     #
     # Opt-in (`use_simplex=true`): a structured Simplex multistart that is NOT
     # part of C++ Minuit2 or iminuit — a JuMinuit EXTENSION for genuinely

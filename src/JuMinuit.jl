@@ -7,18 +7,32 @@
 """
     JuMinuit
 
-Native-Julia port of the C++ Minuit2 function-minimization library, the
-algorithm at the heart of every HEP fit. Targets drop-in replacement of
-the iminuit/IMinuit.jl stack with C++-comparable performance.
+Native-Julia port of the C++ Minuit2 function-minimization library — the
+algorithm at the heart of every HEP fit. A drop-in replacement for the
+iminuit / IMinuit.jl stack with C++-comparable (often better) performance.
 
-Status: **Phase 0 (proof of concept)** — see [`ROADMAP.md`](../ROADMAP.md).
-Phase 0 ships unconstrained MIGRAD with numerical gradient and
-`Strategy(0)` only. Bounds, fixed parameters, MINOS, contours, and HESSE
-land in Phase 1.
+# What's included
+- **MIGRAD** (variable-metric / DFP), **HESSE**, **MINOS** (asymmetric
+  errors), **MnContours**, **Simplex** and **Scan** — ported from C++
+  Minuit2 v6.24.0 with line-by-line fidelity.
+- Bounds, fixed parameters and Strategy levels 0/1/2, using the same
+  sin/√ transforms as C++; the user FCN always sees external coordinates.
+- An iminuit-style `Minuit` front end (`m.values`, `m.errors`, `migrad!`,
+  `minos!`, …) plus IMinuit.jl-compatible `Fit` / `ArrayFit`.
+- A Julia-native cost-function family (`LeastSquares`, `UnbinnedNLL`,
+  `BinnedNLL`, …) composable with `CostSum`.
+- Error analysis beyond HESSE/MINOS: Monte-Carlo Δχ² regions, bootstrap,
+  jackknife and multi-modal solution detection (see `docs/src/error_analysis.md`).
+- AD-backed gradients (ForwardDiff extension), an opt-in threaded numerical
+  gradient, and an `Optim.jl` alternative-minimizer bridge (`scipy`).
 
-The implementation mirrors `reference/Minuit2_cpp/` (pinned to
-`57dc936`, v6.24.0). Each src/ file maps 1-to-1 to a C++ translation
-unit so audits diff cleanly. See `docs/PORTING.md` for the mapping.
+The implementation mirrors `reference/Minuit2_cpp/` (pinned to GooFit/Minuit2
+`57dc936`, v6.24.0); each src/ file maps to a C++ translation unit so audits
+diff cleanly. Development history, the C++-fidelity audit, and the
+deferred-feature list live in `docs/dev/`.
+
+See the [manual](https://fkguo.github.io/JuMinuit.jl) for tutorials and the
+full API.
 """
 module JuMinuit
 

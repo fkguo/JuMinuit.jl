@@ -364,7 +364,7 @@ prominently:
 ```
 
 The flag is exposed as `mode.new_min`. This connects directly to the IAM
-cold-start convergence gap (see [`IAM_CONVERGENCE_GAP.md`](IAM_CONVERGENCE_GAP.md)):
+cold-start convergence gap (see [`IAM_CONVERGENCE_GAP.md`](../dev/IAM_CONVERGENCE_GAP.md)):
 a separated cluster can be exactly the basin a stiff cold-start fit failed to
 reach. Per-mode re-fits are parallelized across threads when the fit opts into
 threading (`m.threaded_gradient`, honoring the same FCN thread-safety contract as

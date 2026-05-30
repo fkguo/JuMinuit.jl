@@ -276,7 +276,7 @@ Full `Pkg.test` 2558/2558, retry-layer testset 98/98.
   MnHesse-fail fallback yields `V ≈ I` (the C++ second clamp restored in
   PR #10), so the first Newton step `−V·g` has magnitude ~1e6 and the line
   search cannot make progress. This confirms the
-  `docs/DAVIDON_CXX_AUDIT.md` "S=2 cold-seed pathology" note and is *not* a
+  `DAVIDON_CXX_AUDIT.md` "S=2 cold-seed pathology" note and is *not* a
   JuMinuit bug.
 
 ## Verification
@@ -309,7 +309,7 @@ Full `Pkg.test` 2558/2558, retry-layer testset 98/98.
   the retry S=2 bump, neither of which this change modifies. `test_cpp_oracle.jl`
   (low-level `migrad`, `strategy_level == 0`) is likewise unaffected.
 
-## Relationship to `docs/DAVIDON_CXX_AUDIT.md`
+## Relationship to `DAVIDON_CXX_AUDIT.md`
 
 That audit studied the **x_jm warm start** (S=2 basin walk to 322) and recorded
 in its post-resolution table:

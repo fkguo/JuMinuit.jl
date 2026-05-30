@@ -18,7 +18,7 @@
     end
 
     @testset "Default strategy = 1 (iminuit Minuit-class parity)" begin
-        # Regression for docs/IAM_CONVERGENCE_GAP.md: the high-level
+        # Regression for docs/dev/IAM_CONVERGENCE_GAP.md: the high-level
         # Minuit(fcn, x0) constructor must default to Strategy(1) — the
         # iminuit `Minuit` class default and C++ Minuit2 `MnStrategy()`
         # default — so a bare `migrad!(m)` is drop-in-equivalent to

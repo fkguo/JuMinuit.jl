@@ -43,7 +43,7 @@ The asymmetric error result for a single parameter. Mirrors C++
   snapshot at the ±σ crossing endpoint. `nothing` when that side
   did not converge cleanly. Mirrors C++ `MinosError::UpperState()` /
   `LowerState()` (`MinosError.h:73-74`). Useful for HEP correlated-
-  systematic studies and at-bound diagnostics — see GAP_AUDIT.md M4.
+  systematic studies and at-bound diagnostics — see docs/dev/GAP_AUDIT.md M4.
 
 # Note on sign convention
 

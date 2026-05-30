@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# IAM convergence-gap regression guard (docs/IAM_CONVERGENCE_GAP.md).
+# IAM convergence-gap regression guard (docs/dev/IAM_CONVERGENCE_GAP.md).
 #
 # Asserts that the high-level `Minuit(chi2_iam, paras0)` default path reaches
 # the deep basin (fval ≤ 410) from the cold `paras0` seed — i.e. that the
@@ -74,7 +74,7 @@ end
 chi2_iam(pars) = (p8 = @views pars[1:8]; chisq_ps(δ00_0, data00, p8) + chisq_ps(δ11, data11, p8) + chisq_ps(δ20, data20, p8))
 const errs0 = fill(1e-6, 9)
 
-@testset "IAM cold-start convergence gap (docs/IAM_CONVERGENCE_GAP.md)" begin
+@testset "IAM cold-start convergence gap (docs/dev/IAM_CONVERGENCE_GAP.md)" begin
     # The constructor default must be Strategy(1) (numerical FCN).
     m_probe = JuMinuit.Minuit(chi2_iam, paras0; error = errs0)
     @test m_probe.strategy == JuMinuit.Strategy(1)
@@ -97,7 +97,7 @@ const errs0 = fill(1e-6, 9)
     # Strategy(0) default retry also reaches the deep basin via the faithful
     # default retry (iminuit's `_robust_low_level_fit` plain re-seed restart at
     # the same strategy — use_simplex=false). The old retry (Simplex hop +
-    # unconditional S=2 bump) stuck at 613.49 — see docs/IAM_CONVERGENCE_GAP.md
+    # unconditional S=2 bump) stuck at 613.49 — see docs/dev/IAM_CONVERGENCE_GAP.md
     # "Closing the S=0 retry gap".
     m0 = JuMinuit.Minuit(chi2_iam, paras0; error = errs0, strategy = 0)
     JuMinuit.migrad!(m0)

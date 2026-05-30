@@ -26,6 +26,8 @@ makedocs(
             "Bounded parameters" => "tutorials/bounded.md",
             "MINOS errors & contours" => "tutorials/minos_contours.md",
         ],
+        "Cost functions" => "cost_functions.md",
+        "Error analysis" => "error_analysis.md",
         "API Reference" => "api.md",
         "Internals" => "internals.md",
     ],

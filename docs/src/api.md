@@ -73,6 +73,54 @@ JuMinuit.Strategy
 JuMinuit.MachinePrecision
 ```
 
+## Cost functions
+
+```@docs
+JuMinuit.AbstractCost
+JuMinuit.LeastSquares
+JuMinuit.UnbinnedNLL
+JuMinuit.ExtendedUnbinnedNLL
+JuMinuit.BinnedNLL
+JuMinuit.ExtendedBinnedNLL
+JuMinuit.CostSum
+JuMinuit.errordef
+```
+
+## Error analysis (sampling & confidence regions)
+
+```@docs
+JuMinuit.delta_chisq
+JuMinuit.chisq_cl
+JuMinuit.get_contours_samples
+JuMinuit.contour_df_samples
+JuMinuit.contour_parameter_sets
+```
+
+## Resampling (bootstrap & jackknife)
+
+```@docs
+JuMinuit.bootstrap
+JuMinuit.jackknife
+JuMinuit.BootstrapResult
+JuMinuit.JackknifeResult
+JuMinuit.correlation
+```
+
+## Multi-modal solution detection
+
+```@docs
+JuMinuit.find_solution_modes
+JuMinuit.SolutionMode
+JuMinuit.SolutionModes
+```
+
+## Alternative minimizers (Optim.jl bridge)
+
+```@docs
+JuMinuit.scipy
+JuMinuit.minimize_with
+```
+
 ## Common accessors
 
 These small accessor functions are exported but documented as part of

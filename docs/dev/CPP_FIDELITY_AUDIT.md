@@ -484,7 +484,7 @@ limit-clamps diverge (the seed-time CheckGradient is now implemented — §8).
 ## 10. DavidonErrorUpdator + VariableMetricEDMEstimator
 
 `DavidonErrorUpdator.cxx`, `VariableMetricEDMEstimator.cxx` ↔ `src/davidon.jl`,
-`src/edm.jl`. (Cross-checked against `docs/DAVIDON_CXX_AUDIT.md`.)
+`src/edm.jl`. (Cross-checked against `DAVIDON_CXX_AUDIT.md`.)
 
 Findings:
 - ✓ **Fully faithful, verified term-by-term.** The DFP update (the rank-2 base

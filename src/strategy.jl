@@ -32,7 +32,7 @@ The `level` field exposes the integer level (0/1/2) — `VariableMetricBuilder.c
 branches on `Strategy() >= 1` to invoke the inner `MnHesse` refinement path.
 All three levels are supported (`hesse.jl` shipped in Phase 1); the inner-HESSE
 re-seed at Strategy ≥ 1 is what lets the DFP loop reach deeper minima on stiff
-fits — see `docs/IAM_CONVERGENCE_GAP.md` and `docs/DESIGN.md` DR-008.
+fits — see `docs/dev/IAM_CONVERGENCE_GAP.md` and `docs/dev/DESIGN.md` DR-008.
 
 Like [`MachinePrecision`](@ref), this is an immutable, isbits, type-stable
 struct — zero allocation when passed through the call chain.
@@ -73,7 +73,7 @@ function Strategy(level::Integer)
     else
         throw(ArgumentError(
             "Strategy level must be 0, 1, or 2 (got $level). " *
-            "Phase 0 also requires level == 0 — see docs/DESIGN.md DR-008."
+            "Phase 0 also requires level == 0 — see docs/dev/DESIGN.md DR-008."
         ))
     end
 end

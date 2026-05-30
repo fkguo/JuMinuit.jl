@@ -8,15 +8,12 @@ physics for χ² and likelihood fits.
 
 [iminuit](https://github.com/scikit-hep/iminuit) (Python) and
 [IMinuit.jl](https://github.com/fkguo/IMinuit.jl) (Julia, by the same
-author) both wrap the upstream C++ library. **JuMinuit.jl is a clean-room
+lead author) both wrap the upstream C++ library. **JuMinuit.jl is a clean-room
 Julia port** of the same algorithms — no C++ dependency, no FFI overhead,
 and full access to Julia tooling (ForwardDiff, threads, broadcasted FCN
-evaluation).
-
-Performance target: **comparable to or better than C++** on the Phase 0
-benchmark corpus (Rosenbrock, Quad-NF, Gauss-LL). On Apple Silicon with
-4 threads the current code is in the 0.13–0.89× C++ wall-time range —
-see [`benchmark/`](https://github.com/fkguo/JuMinuit.jl/tree/main/benchmark).
+evaluation). On the benchmark corpus it runs in the **0.13–0.89× C++
+wall-time** range, i.e. comparable to or faster than C++ Minuit2 — see
+[`benchmark/`](https://github.com/fkguo/JuMinuit.jl/tree/main/benchmark).
 
 ## Quick example
 
@@ -47,26 +44,45 @@ show(stdout, MIME"text/plain"(), m)
 └───────────────────────────────────┴───────────────────────────────────┘
 ```
 
-## Status
+Or the iminuit / IMinuit.jl-style front end, with named parameters, limits,
+and asymmetric MINOS errors:
 
-| Phase | What it ships | Status |
-|------:|:--------------|:-------|
-| 0 | MIGRAD (Strategy 0), gradient calculator, DFP update, EDM, linesearch, posdef | ✅ done |
-| 1 | Bounds (sin/sqrt transforms), parameters API, HESSE, MINOS, contours, covariance squeeze, inner-Hesse for Strategy ≥ 1 | ✅ done |
-| 1.x | C++-exact MnFunctionCross 3-point parabolic, Int2extError two-sided, free-covariance accessor | ✅ done |
-| 2.1 | AD-backed analytical gradients (ForwardDiff) | ✅ done |
-| 2.2 | Threaded numerical gradient | ✅ done |
-| 2.3 | Plots/RecipesBase recipes | ✅ done |
-| 2.4 | PrecompileTools workload | ✅ done |
-| 2.5 | JSON serialization | ✅ done |
-| 3 | iminuit-style pretty-print, Documenter docs site, polish | ⏳ in progress |
+```julia
+m = Minuit(x -> sum(abs2, x .- [1.0, 2.0, 3.0, 4.0]), zeros(4);
+           names = ["a", "b", "c", "d"])
+migrad!(m)
+minos!(m)
+m.values        # ≈ [1, 2, 3, 4]
+m.minos_errors  # asymmetric ±σ per parameter
+```
 
-## Next steps
+## What's included
 
-* See [Quickstart](tutorials/quickstart.md) for a hands-on tour.
-* For parameter limits and fixed parameters, see [Bounded parameters](tutorials/bounded.md).
-* For asymmetric error bars and 2D confidence contours,
-  see [MINOS errors & contours](tutorials/minos_contours.md).
+- **Minuit2 algorithms** — MIGRAD, HESSE, MINOS, MnContours, Simplex and
+  Scan; bounds, fixed parameters, and Strategy levels 0/1/2, ported with
+  line-by-line C++ fidelity and iminuit-matching defaults.
+- **iminuit / IMinuit.jl-compatible front end** — `m.values`, `m.errors`,
+  `migrad!`, `minos!`, `mncontour`, named-parameter access, per-parameter
+  `fix!`/`set_limits!`, and Jupyter-first rich output. `Fit`/`ArrayFit` are
+  exported aliases of [`Minuit`](@ref).
+- **[Cost functions](cost_functions.md)** — a Julia-native family
+  (`LeastSquares`, `UnbinnedNLL`, `BinnedNLL`, …) composable with `CostSum`.
+- **[Error analysis](error_analysis.md) beyond HESSE/MINOS** — Monte-Carlo
+  Δχ² regions, bootstrap, jackknife, and multi-modal solution detection, for
+  the flat or strongly non-Gaussian likelihoods where MINOS struggles.
+- **AD & threaded gradients** — a ForwardDiff extension and an opt-in
+  threaded numerical gradient — plus an `Optim.jl` alternative-minimizer
+  bridge (`scipy`).
+
+## Tutorials & reference
+
+* [Quickstart](tutorials/quickstart.md) — a hands-on tour.
+* [Bounded parameters](tutorials/bounded.md) — parameter limits and fixed
+  parameters.
+* [MINOS errors & contours](tutorials/minos_contours.md) — asymmetric error
+  bars and 2-D confidence contours.
+* [Cost functions](cost_functions.md) — the Julia-native cost family.
+* [Error analysis](error_analysis.md) — which uncertainty method to use, when.
 * Full [API reference](api.md) and [internals](internals.md).
 
 ## Citation
@@ -81,4 +97,5 @@ Minuit2 (which JuMinuit ports algorithmically):
 ## License
 
 LGPL-2.1-or-later — matches upstream Minuit2 (the same algorithms,
-ported to Julia).
+ported to Julia). See [`docs/UPSTREAM.md`](https://github.com/fkguo/JuMinuit.jl/blob/main/docs/UPSTREAM.md)
+for provenance and attribution.

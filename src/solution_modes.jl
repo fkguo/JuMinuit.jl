@@ -368,7 +368,7 @@ end
 
 Cluster a set of Δχ²-accepted parameter samples into DISTINCT solution modes —
 a "beyond iminuit" capability for multi-modal posteriors. See the file header
-and `docs/ERROR_ANALYSIS.md` for the full rationale.
+and `docs/src/error_analysis.md` for the full rationale.
 
 # Arguments
 

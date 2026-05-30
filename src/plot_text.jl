@@ -6,7 +6,7 @@
 # Mirrors reference/Minuit2_cpp/src/{MnPlot.cxx,mntplot.cxx,mnbins.cxx}.
 # Provides the `mn_plot_text` helper promised in ROADMAP §9 ("Julia users
 # get RecipesBase recipes in Phase 2.3 plus an `mn_plot_text` helper for
-# terminal use"). Closes GAP_AUDIT.md item M2.
+# terminal use"). Closes docs/dev/GAP_AUDIT.md item M2.
 #
 # Use when there is no GUI backend (headless CI, SSH session, terminal):
 #

@@ -7,6 +7,7 @@
 *.jl.mem
 /Manifest.toml
 /docs/build/
+/docs/Manifest.toml
 /docs/site/
 
 # OS / editor
@@ -16,6 +17,7 @@
 *.swp
 
 # Local dev
+/.claude/
 /scratch/
 
 # C++ harness build artifacts (regenerable via tools/regen_reference.sh)

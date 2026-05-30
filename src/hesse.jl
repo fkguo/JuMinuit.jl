@@ -152,7 +152,7 @@ function hesse(
     # cycles regardless of seed, so the observable g2/gstep output
     # matches C++ to within FP precision. For pathological FCNs where
     # convergence depends on the initial step, the two paths can
-    # diverge — see [docs/GAP_AUDIT.md] P2 follow-up note for the fix
+    # diverge — see [docs/dev/GAP_AUDIT.md] P2 follow-up note for the fix
     # (propagate seed-time errors through `MinimumState`).
     #
     # NOTE — gate fidelity vs C++:
@@ -425,7 +425,7 @@ replaces the meaningful `1/g2` with `1.0`. The intuition "1/g2 = 1e-10
 means the parameter is well determined" suggests the second clamp is
 counterproductive — and PR #6 (commit a1fa015) acted on that
 intuition, removing it. But the empirical IAM x_jm warm-start audit
-(docs/DAVIDON_CXX_AUDIT.md) revealed the opposite: that clamp is
+(docs/dev/DAVIDON_CXX_AUDIT.md) revealed the opposite: that clamp is
 **load-bearing** for cross-basin convergence. The story:
 
 - At the IAM x_jm warm start, all 8 active LECs have `g2 ≈ 1e10` and
@@ -461,7 +461,7 @@ avoids the paras0+S=2 trap.
   the first check; for `g2 < 0` the first check `g2 < eps2` is true
   → C++ falls back to 1 immediately).
 
-See `scratch/iam_seed_at_failed.jl` and `docs/DAVIDON_CXX_AUDIT.md`
+See `scratch/iam_seed_at_failed.jl` and `docs/dev/DAVIDON_CXX_AUDIT.md`
 for the live reproduction and audit trail.
 """
 function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
@@ -477,7 +477,7 @@ function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
     # large, > 1/eps2 ≈ 3e7) and falls back to V[j,j] = 1. PR #6
     # (commit a1fa015) had removed this clamp on the theory it was a
     # C++ bug; the empirical IAM x_jm + iminuit cross-check audit
-    # (docs/DAVIDON_CXX_AUDIT.md) showed the clamp is what produces
+    # (docs/dev/DAVIDON_CXX_AUDIT.md) showed the clamp is what produces
     # the iminuit-style V ≈ I that walks the warm start across basins
     # to χ²=322.59 in 8 DFP iters. Restored here for C++ parity.
     @inbounds for j in 1:n

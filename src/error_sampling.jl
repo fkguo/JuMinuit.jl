@@ -24,7 +24,7 @@
 #     failure mode that makes naïve `MvNormal` sampling silently
 #     under-estimate when Σ is unreliable or the posterior is nonlinear).
 #
-# See `docs/ERROR_ANALYSIS.md` for the full discussion, the Δχ² table,
+# See `docs/src/error_analysis.md` for the full discussion, the Δχ² table,
 # the joint-vs-single-parameter distinction, and a worked X(3872) example.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -227,7 +227,7 @@ delta_chisq(1,      2)  # ≈ 2.30   (cl=1 ⇒ 1σ ⇒ 0.6827 ⇒ 2.30)
 delta_chisq(2,      1)  # ≈ 4.00   (2σ, one parameter)
 ```
 
-See also [`chisq_cl`](@ref) (the inverse), and `docs/ERROR_ANALYSIS.md`.
+See also [`chisq_cl`](@ref) (the inverse), and `docs/src/error_analysis.md`.
 """
 function delta_chisq(cl::Real, ndof::Real)
     ndof > 0 || throw(DomainError(ndof, "ndof must be a positive integer"))
@@ -646,7 +646,7 @@ hit its cap, or stopped on a still-clipping round, while the region was
 plausibly larger than sampled), and `mahalanobis` (or `nothing`).
 
 See [`contour_df_samples`](@ref) for a `DataFrame` of `samples`, and
-`docs/ERROR_ANALYSIS.md` for the full discussion + a worked example.
+`docs/src/error_analysis.md` for the full discussion + a worked example.
 """
 function get_contours_samples(m::Minuit;
                               χsq = nothing,
@@ -737,7 +737,7 @@ function get_contours_samples(m::Minuit;
 (is_valid=$(is_valid(m.fmin)), made_pos_def=$(fm.made_pos_def), cov_status=$cov_status). \
 A MvNormal proposal centred on this Σ can SEVERELY UNDER-ESTIMATE the error region. \
 Mitigations: rely on adaptive widening (adaptive=$adaptive), raise `inflate`, or use a \
-covariance-free `proposal=:uniform` with explicit `ranges`. See docs/ERROR_ANALYSIS.md."""
+covariance-free `proposal=:uniform` with explicit `ranges`. See docs/src/error_analysis.md."""
         end
     end
 
