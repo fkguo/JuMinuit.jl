@@ -263,13 +263,11 @@ On actual HEP fits (vs `iminuit` via PyCall, `julia -t 8`):
 - **X(3872) dip line shape** (3 params, J/ψρ + DD̄* coupled channels) — JuMinuit
   with AD gradients runs migrad+HESSE **2.3× faster than iminuit** (3.3 ms vs
   7.2 ms) and MINOS **2.1×** faster; even the numerical path is ~30% faster.
-- **IAM 2π form factor** (9 LECs, ~10 ms/call) — JuMinuit's MIGRAD is **~3.5×
-  faster** (5.4 s vs 18.7 s); its Phase-H pre-flight catches the fit's
-  thread-unsafe FCN in milliseconds; and it completes MINOS/MnContours where
-  iminuit hard-refuses on an invalid minimum. Both libraries find this stiff
-  9-LEC landscape hard — see
-  [`BenchmarkExamples/RESULTS.md`](BenchmarkExamples/RESULTS.md) for the full
-  picture, including a convergence caveat.
+
+(The IAM 2π form-factor fit — the thread-safety example above — is a stiff,
+ill-conditioned amplitude fit whose convergence is seed-sensitive; it is
+documented in [`BenchmarkExamples/RESULTS.md`](BenchmarkExamples/RESULTS.md)
+rather than cited as a speed comparison.)
 
 ## Reliability
 
