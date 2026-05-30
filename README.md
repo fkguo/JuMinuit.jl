@@ -5,10 +5,10 @@
 
 Native-Julia port of the C++ [Minuit2](https://root.cern.ch/doc/master/Minuit2Page.html)
 function-minimization library — the workhorse of every HEP fit. JuMinuit is a
-drop-in replacement for the [iminuit](https://github.com/scikit-hep/iminuit) +
-[IMinuit.jl](https://github.com/fkguo/IMinuit.jl) stack with **C++-comparable
-(often better) performance**, plus error-analysis tools that go beyond what
-either offers.
+drop-in replacement for [IMinuit.jl](https://github.com/fkguo/IMinuit.jl) (the
+Julia Minuit2 wrapper), with an [iminuit](https://github.com/scikit-hep/iminuit)-style
+API, **C++-comparable (often better) performance**, and error-analysis tools
+that go beyond what either offers.
 
 License: **LGPL 2.1 or later** (mirrors upstream Minuit2). This is a derivative
 work of C++ Minuit2 — see [`LICENSE`](LICENSE) and [`docs/UPSTREAM.md`](docs/UPSTREAM.md).

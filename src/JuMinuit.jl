@@ -8,8 +8,9 @@
     JuMinuit
 
 Native-Julia port of the C++ Minuit2 function-minimization library — the
-algorithm at the heart of every HEP fit. A drop-in replacement for the
-iminuit / IMinuit.jl stack with C++-comparable (often better) performance.
+algorithm at the heart of every HEP fit. A drop-in replacement for IMinuit.jl
+(the Julia Minuit2 wrapper), with an iminuit-style API and C++-comparable
+(often better) performance.
 
 # What's included
 - **MIGRAD** (variable-metric / DFP), **HESSE**, **MINOS** (asymmetric
