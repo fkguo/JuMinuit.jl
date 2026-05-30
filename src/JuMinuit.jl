@@ -130,7 +130,7 @@ export ExtendedUnbinnedNLL, ExtendedBinnedNLL, CostSum
 export parameter_names
 
 # Data-resampling error analysis (resampling.jl)
-export bootstrap, jackknife, BootstrapResult, JackknifeResult
+export bootstrap, jackknife, BootstrapResult, JackknifeResult, correlation
 
 # Algorithms ported from C++ Minuit2
 export simplex, scan

@@ -63,7 +63,11 @@ Result of [`bootstrap`](@ref). Fields:
   versus the symmetric HESSE error.
 - `ci_level::Float64` — the CI coverage (default `0.68`, i.e. a ±1σ-equivalent).
 - `covariance::Union{Nothing,Matrix{Float64}}` — bootstrap covariance of θ̂
-  (`npar × npar`), or `nothing` unless `covariance=true` was requested.
+  (`npar × npar`), or `nothing` unless `covariance=true` was requested. The
+  off-diagonal captures parameter correlations; [`correlation`](@ref) returns
+  the standardised correlation matrix from `samples` regardless of this flag,
+  and the raw `samples` cloud retains non-Gaussian joint structure a covariance
+  cannot.
 - `kind::Symbol` — `:nonparametric` (resample points with replacement) or
   `:parametric` (regenerate y from the best-fit model + error model).
 - `nresample::Int`, `n_valid::Int` — total and converged resample counts.
@@ -104,6 +108,11 @@ per re-fit. Fields:
 - `bias_corrected::Vector{Float64}` — `θ̂_full - bias` (the debiased estimate).
 - `variance::Vector{Float64}` — jackknife variance `((g-1)/g)·Σ(θ̂₍ⱼ₎ - θ̄)²`.
 - `std::Vector{Float64}` — `sqrt.(variance)` (comparable to the HESSE error).
+- `covariance::Matrix{Float64}` — the full jackknife covariance
+  `((g-1)/g)·Σ(θ̂₍ⱼ₎ - θ̄)(θ̂₍ⱼ₎ - θ̄)ᵀ`, whose diagonal is `variance`. Its
+  off-diagonal captures the **parameter correlations** (to first order — the
+  jackknife is a linearisation; use [`bootstrap`](@ref) for non-Gaussian /
+  strongly nonlinear joint structure). See [`correlation`](@ref).
 - `n::Int` — number of data points `N`.
 - `d::Int` — block size (`1` for the delete-1 jackknife).
 - `g::Int` — number of deleted groups (`N` for delete-1).
@@ -119,6 +128,7 @@ struct JackknifeResult
     bias_corrected::Vector{Float64}
     variance::Vector{Float64}
     std::Vector{Float64}
+    covariance::Matrix{Float64}
     n::Int
     d::Int
     g::Int
@@ -293,6 +303,7 @@ function _jackknife_stats(samples::Matrix{Float64}, valid::AbstractVector{Bool},
     bias_corr = fill(NaN, npar)
     variance = fill(NaN, npar)
     σ = fill(NaN, npar)
+    cov = fill(NaN, npar, npar)
     if gv >= 1
         S = @view samples[rows, :]
         for j in 1:npar
@@ -301,18 +312,24 @@ function _jackknife_stats(samples::Matrix{Float64}, valid::AbstractVector{Bool},
         bias .= (gv - 1) .* (θ̄ .- estimate)
         bias_corr .= estimate .- bias
         if gv >= 2
-            for j in 1:npar
+            # Full jackknife covariance ((g-1)/g)·Σ(θ̂₍ⱼ₎-θ̄)(θ̂₍ⱼ₎-θ̄)ᵀ; the
+            # diagonal is the per-parameter variance, the off-diagonal the
+            # (first-order) parameter correlation structure.
+            scale = (gv - 1) / gv
+            for j in 1:npar, i in 1:npar
                 acc = 0.0
                 @inbounds for r in 1:gv
-                    Δ = S[r, j] - θ̄[j]
-                    acc += Δ * Δ
+                    acc += (S[r, i] - θ̄[i]) * (S[r, j] - θ̄[j])
                 end
-                variance[j] = (gv - 1) / gv * acc
-                σ[j] = sqrt(variance[j])
+                cov[i, j] = scale * acc
+            end
+            for j in 1:npar
+                variance[j] = cov[j, j]
+                σ[j] = sqrt(max(variance[j], 0.0))
             end
         end
     end
-    return θ̄, bias, bias_corr, variance, σ, gv
+    return θ̄, bias, bias_corr, variance, σ, cov, gv
 end
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -513,8 +530,10 @@ Keyword arguments:
 - further `kws...` flow to `model_fit` / `Minuit` when `start` is a vector.
 
 The returned [`JackknifeResult`](@ref) reports the bias estimate
-`(g-1)·(θ̄ - θ̂_full)`, the bias-corrected estimate, and the jackknife variance
-`((g-1)/g)·Σ(θ̂₍ⱼ₎ - θ̄)²`. For an unbiased (e.g. linear) estimator the bias is ≈ 0
+`(g-1)·(θ̄ - θ̂_full)`, the bias-corrected estimate, the jackknife variance
+`((g-1)/g)·Σ(θ̂₍ⱼ₎ - θ̄)²`, and the full jackknife `covariance` matrix (its
+off-diagonal gives the first-order parameter correlations — see
+[`correlation`](@ref)). For an unbiased (e.g. linear) estimator the bias is ≈ 0
 and the variance ≈ the HESSE error².
 """
 function jackknife(model::Function, data::Data, start::Union{AbstractVector,Minuit};
@@ -553,12 +572,12 @@ function jackknife(model::Function, data::Data, start::Union{AbstractVector,Minu
     end
 
     samples, valid = _run_resamples(fit_one, g, npar, threaded)
-    θ̄, bias, bias_corr, variance, σ, gv = _jackknife_stats(samples, valid, θ_full)
+    θ̄, bias, bias_corr, variance, σ, cov, gv = _jackknife_stats(samples, valid, θ_full)
 
     gv < g && @warn "jackknife: $(g - gv) of $g leave-one-out re-fits did not converge; statistics use the $gv valid groups"
 
     return JackknifeResult(samples, valid, names, θ_full, θ̄, bias, bias_corr,
-                           variance, σ, N, Int(d), g, gv)
+                           variance, σ, cov, N, Int(d), g, gv)
 end
 
 """
@@ -592,11 +611,45 @@ function jackknife(refit::Function, data;
     end
 
     samples, valid = _run_resamples(fit_one, g, npar, threaded)
-    θ̄, bias, bias_corr, variance, σ, gv = _jackknife_stats(samples, valid, θ_full)
+    θ̄, bias, bias_corr, variance, σ, cov, gv = _jackknife_stats(samples, valid, θ_full)
 
     return JackknifeResult(samples, valid, nm, θ_full, θ̄, bias, bias_corr,
-                           variance, σ, N, Int(d), g, gv)
+                           variance, σ, cov, N, Int(d), g, gv)
 end
+
+# ═════════════════════════════════════════════════════════════════════════════
+# correlation — parameter correlation matrix from a resampling result
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Pearson correlation of the re-fitted θ̂ over the converged-and-finite resamples.
+# For the jackknife this equals the standardised jackknife covariance (the
+# (g-1)/g scale cancels), so the same code path serves both result types.
+function _sample_correlation(samples::Matrix{Float64}, valid::AbstractVector{Bool},
+                             npar::Int)
+    rows = _stat_mask(samples, valid, true)
+    count(rows) >= 2 || return fill(NaN, npar, npar)
+    return Matrix(Statistics.cor(samples[rows, :]))
+end
+
+"""
+    correlation(r::BootstrapResult) -> Matrix{Float64}
+    correlation(r::JackknifeResult) -> Matrix{Float64}
+
+The `npar × npar` Pearson **correlation matrix** of the parameter estimators,
+computed from the re-fitted θ̂ over the converged-and-finite resamples (for the
+jackknife this is the standardised `r.covariance`). The off-diagonal entries are
+the estimated parameter correlations — the joint information the per-parameter
+marginal CIs / errors drop.
+
+Correlation is a **linear** (second-moment) summary. For a non-Gaussian or
+nonlinearly-correlated joint distribution (e.g. a curved degeneracy / "banana"
+in an amplitude fit) inspect the raw joint cloud `r.samples` directly — a
+scatter of `r.samples[:, i]` vs `r.samples[:, j]`, a 2-D density, or a contour —
+which retains the structure a correlation coefficient cannot. A fixed (zero-
+variance) parameter yields `NaN` in its row/column (correlation undefined).
+"""
+correlation(r::BootstrapResult) = _sample_correlation(r.samples, r.valid, length(r.names))
+correlation(r::JackknifeResult) = _sample_correlation(r.samples, r.valid, length(r.names))
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Display — boxed tables in the house style (reuses _fmt_num/_ljust/_center).

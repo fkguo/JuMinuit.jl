@@ -132,6 +132,42 @@ using Test
         @test bnc.covariance === nothing
     end
 
+    @testset "parameter correlations: jackknife covariance + correlation()" begin
+        jk = jackknife(linmodel, d, m)
+        # full jackknife covariance: symmetric, diagonal == variance
+        @test size(jk.covariance) == (2, 2)
+        @test jk.covariance ≈ jk.covariance'
+        @test [jk.covariance[1, 1], jk.covariance[2, 2]] ≈ jk.variance rtol = 1e-12
+        # correlation matrix: unit diagonal, symmetric, slope/intercept
+        # ANTI-correlated for a line fit over positive x (a known physical sign).
+        Cj = correlation(jk)
+        @test size(Cj) == (2, 2)
+        @test Cj[1, 1] ≈ 1.0 atol = 1e-12
+        @test Cj[2, 2] ≈ 1.0 atol = 1e-12
+        @test Cj ≈ Cj'
+        @test Cj[1, 2] < -0.5
+        # correlation == standardised covariance
+        Dj = sqrt.([jk.covariance[1, 1], jk.covariance[2, 2]])
+        @test Cj[1, 2] ≈ jk.covariance[1, 2] / (Dj[1] * Dj[2]) rtol = 1e-10
+
+        # bootstrap correlation is available even when covariance=false (default)
+        bs = bootstrap(linmodel, d, m; nresample = 1000, seed = 3)
+        @test bs.covariance === nothing
+        Cb = correlation(bs)
+        @test size(Cb) == (2, 2)
+        @test Cb[1, 1] ≈ 1.0 atol = 1e-12
+        @test Cb[1, 2] < -0.5
+        # and it equals the standardised stored covariance when that IS requested
+        bsc = bootstrap(linmodel, d, m; nresample = 1000, seed = 3, covariance = true)
+        Dc = sqrt.([bsc.covariance[1, 1], bsc.covariance[2, 2]])
+        @test correlation(bsc)[1, 2] ≈ bsc.covariance[1, 2] / (Dc[1] * Dc[2]) rtol = 1e-10
+        # jackknife and bootstrap estimate the same correlation
+        @test Cj[1, 2] ≈ Cb[1, 2] rtol = 0.15
+        # degenerate: <2 valid samples → NaN correlation matrix (no throw)
+        Cnan = JuMinuit._sample_correlation(jk.samples, falses(jk.g), 2)
+        @test all(isnan, Cnan)
+    end
+
     @testset "delete-d block jackknife" begin
         jb = jackknife(linmodel, d, m; d = 5)
         @test jb.d == 5

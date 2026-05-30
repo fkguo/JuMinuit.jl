@@ -122,6 +122,33 @@ local-deletion linearisation breaks down). The delete-`d` block variant targets
 **serially-correlated** data; for IID data it is a coarse, higher-variance
 estimator (shuffle before blocking to restore exchangeability).
 
+## Parameter correlations & nonlinear joint structure
+
+Both resampling methods re-fit **all** parameters jointly on each resampled
+dataset, so the joint distribution of θ̂ carries the parameter *correlations* —
+but the per-parameter `std` / percentile CIs are **marginal** and drop that
+joint information. To recover it:
+
+- **Bootstrap.** `bootstrap(...; covariance=true)` stores the `npar × npar`
+  covariance; `correlation(r)` returns the standardised correlation matrix from
+  `r.samples` *regardless* of that flag. Because the bootstrap re-fits the full
+  nonlinear model, the **raw `r.samples` cloud retains non-Gaussian joint
+  structure** — a curved degeneracy / "banana" common in amplitude and
+  phase-shift fits — that a covariance (a second moment) and the HESSE ellipse
+  both flatten. Inspect it directly: scatter `r.samples[:,i]` vs `r.samples[:,j]`,
+  or build a 2-D density / contour.
+- **Jackknife.** `JackknifeResult` carries the full `covariance` matrix
+  `((g−1)/g)·Σ(θ̂₍ⱼ₎−θ̄)(θ̂₍ⱼ₎−θ̄)ᵀ` (diagonal = `variance`), and `correlation(r)`
+  standardises it. This captures correlation only to **first order** — the
+  jackknife is a linearisation, so it cannot represent the nonlinear / asymmetric
+  joint structure the bootstrap does. Use it for a quick correlation read, not as
+  the primary tool when the model is strongly nonlinear.
+
+So: for the *linear* correlation summary use `correlation(r)` (or `r.covariance`);
+for the *full nonlinear* joint structure use the bootstrap's `r.samples`. The
+likelihood-geometry counterparts are HESSE's covariance (Gaussian/elliptical) and
+MC-Δχ² (the true, possibly non-elliptical, joint region with the data held fixed).
+
 ## A short decision guide
 
 1. **Default:** quote the **HESSE** error. If the fit is non-parabolic but valid,
