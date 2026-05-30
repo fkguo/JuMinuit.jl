@@ -384,6 +384,7 @@ function migrad(
     verify_threading::Bool = threaded_gradient,
     prior_cov::Union{Nothing,AbstractMatrix{<:Real}} = nothing,
     storage_level::Integer = 0,
+    has_limits::Union{Nothing,AbstractVector{Bool}} = nothing,
     print_level::Integer = 0,
 )
     n = length(x0)
@@ -398,6 +399,7 @@ function migrad(
                           threaded_gradient = threaded_gradient,
                           verify_threading = verify_threading,
                           storage_level = storage_level,
+                          has_limits = has_limits,
                           print_level = print_level)
 end
 
@@ -470,6 +472,33 @@ function migrad(
 end
 
 """
+    _migrad_second_pass_invalid(ipass, s0, edm_corrected, edmval) -> Bool
+
+Predicate for the C++ `VariableMetricBuilder.cxx:127-132` 2nd-pass-invalid
+early bail: `if (ipass > 0 && !min.IsValid()) return min;`. After a
+NON-first inner DFP pass (`ipass > 0`) whose result is invalid, MIGRAD
+bails instead of spending further HESSE + DFP passes grinding toward the
+call limit.
+
+The C++ `HasReachedCallLimit` case (`VariableMetricBuilder.cxx:121`) is
+handled separately by the `ncalls ≥ maxfcn_eff` break in `_migrad_loop`,
+so the remaining inner-pass invalidity is
+
+    !min.IsValid()  ⇔  !State().IsValid() || IsAboveMaxEdm()
+
+i.e. `!is_valid(s0)` OR above-max-edm. The latter uses `edm_corrected >
+10·edmval` — the *same* expression `_migrad_loop`'s final-verdict
+`above_max` uses, so the bail fires exactly when the resulting
+`FunctionMinimum` would be flagged invalid-by-above-max. This is
+efficiency-only (identical final `is_valid` verdict, fewer wasted FCN
+calls on non-converging Strategy≥1 fits). For `ipass == 0` it is always
+`false`, preserving the first-pass do-while semantics.
+"""
+_migrad_second_pass_invalid(ipass::Integer, s0::MinimumState,
+                            edm_corrected::Real, edmval::Real) =
+    ipass > 0 && (!is_valid(s0) || edm_corrected > 10 * edmval)
+
+"""
     _migrad_loop(seed, cf, strategy, tol, maxfcn, prec;
                  scratch=nothing) -> FunctionMinimum
 
@@ -495,6 +524,7 @@ function _migrad_loop(
     threaded_gradient::Bool = false,
     verify_threading::Bool = false,
     storage_level::Integer = 0,
+    has_limits::Union{Nothing,AbstractVector{Bool}} = nothing,
     print_level::Integer = 0,
 )
     n = length(seed)
@@ -885,6 +915,19 @@ function _migrad_loop(
             break
         end
 
+        # ── 2nd-pass-invalid early bail (C++ VariableMetricBuilder.cxx:127-132)
+        # After a NON-first inner DFP pass (ipass > 0) whose result is
+        # invalid, bail rather than spending further HESSE + DFP passes
+        # grinding toward the call limit. C++:
+        #     if (ipass > 0 && !min.IsValid()) return min;
+        # See `_migrad_second_pass_invalid` for the predicate. Efficiency-
+        # only: same final is_valid verdict, just fewer wasted FCN calls on
+        # non-converging Strategy≥1 fits. Purely ADDITIVE — does NOT touch
+        # the deliberate status-gated entry shortcut at the top of the loop.
+        if _migrad_second_pass_invalid(ipass, s0, edm_corrected, edmval)
+            break
+        end
+
         if strategy.level == 2 ||
            (strategy.level == 1 && s0.error.dcovar > 0.05)
             # Compute remaining budget for Hesse. C++ passes maxfcn (the
@@ -897,8 +940,13 @@ function _migrad_loop(
                                       strategy.level, s0.error.dcovar))
             end
             budget_left = maxfcn_eff - ncalls(cf)
+            # Thread the per-parameter bound flags so the inner-HESSE
+            # diagonal step clamp (C++ MnHesse.cxx:160-167, 194-195) fires
+            # for bounded fits too — this runs in INTERNAL coords, the
+            # frame the C++ clamp targets. `nothing` for unbounded callers.
             s_hesse = hesse(cf, s0, strategy;
                              prec = prec, maxcalls = max(budget_left, 1),
+                             has_limits = has_limits,
                              print_level = print_level)
             hessian_computed = true
             if !is_valid(s_hesse)
