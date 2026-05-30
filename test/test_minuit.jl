@@ -577,6 +577,18 @@
         @test_throws ArgumentError JuMinuit.hesse(m)  # no migrad! yet
     end
 
+    @testset "hesse! is the exported bang alias of hesse" begin
+        @test JuMinuit.hesse! === JuMinuit.hesse
+        @test :hesse! in names(JuMinuit)
+        cf_fn = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+        m = Minuit(cf_fn, [0.0, 0.0]; errors = [0.1, 0.1])
+        migrad!(m)
+        ret = hesse!(m)                  # bang alias: mutates m, returns m
+        @test ret === m
+        @test m.is_valid
+        @test m.covariance !== nothing
+    end
+
     @testset "hesse(m) refreshes the covariance (was placeholder)" begin
         # Task #36 — `hesse(m::Minuit)` used to be a no-op. After the
         # fix, a Strategy(0) MIGRAD followed by `hesse(m)` should give

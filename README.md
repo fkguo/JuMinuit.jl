@@ -172,8 +172,9 @@ m = Minuit(my_chi2, x0; error = errs, threaded_gradient = true)
 migrad!(m)             # threading propagates through MINOS / contours too
 ```
 
-Speedup scales with FCN cost — e.g. a real inverse-amplitude-method (IAM) fit
-(n=9, 9.5 ms/call) reaches **~10× on `julia -t 8`**.
+The win scales with FCN cost and parameter count: an expensive FCN at higher
+`n` benefits most, a sub-µs FCN not at all (threading overhead dominates), and a
+**thread-unsafe FCN is refused outright** (see the contract below).
 
 > **⚠ Thread-safety contract.** Your FCN must not share mutable state across
 > threads (module-level scratch buffers, RNG, file I/O). The classic HEP
@@ -251,8 +252,24 @@ optimization test problems, not Minuit operations) are:
 
 **Why Julia wins**: a parametric `CostFunction{F}` devirtualizes the FCN call
 site at compile time, whereas C++ Minuit2 pays for `shared_ptr` ref-counting and
-`ABObj` expression-template dispatch. Reproduce with
-`benchmark/cpp/build/cpp_bench` + `julia benchmark/compare_cpp.jl`.
+`ABObj` expression-template dispatch. Reproduce: build the C++ side
+(`cmake --build benchmark/cpp/build`), generate the Julia baseline
+(`scripts/run_gate.sh --save-baseline`), then `julia benchmark/compare_cpp.jl`.
+
+### Real-world physics fits
+
+On actual HEP fits (vs `iminuit` via PyCall, `julia -t 8`):
+
+- **X(3872) dip line shape** (3 params, J/ψρ + DD̄* coupled channels) — JuMinuit
+  with AD gradients runs migrad+HESSE **2.3× faster than iminuit** (3.3 ms vs
+  7.2 ms) and MINOS **2.1×** faster; even the numerical path is ~30% faster.
+- **IAM 2π form factor** (9 LECs, ~10 ms/call) — JuMinuit's MIGRAD is **~3.5×
+  faster** (5.4 s vs 18.7 s); its Phase-H pre-flight catches the fit's
+  thread-unsafe FCN in milliseconds; and it completes MINOS/MnContours where
+  iminuit hard-refuses on an invalid minimum. Both libraries find this stiff
+  9-LEC landscape hard — see
+  [`BenchmarkExamples/RESULTS.md`](BenchmarkExamples/RESULTS.md) for the full
+  picture, including a convergence caveat.
 
 ## Reliability
 

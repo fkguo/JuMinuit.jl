@@ -83,7 +83,16 @@ include("plot_recipes.jl")
 include("plot_text.jl")
 include("precompile_workload.jl")
 
-# Phase 0 public surface (will grow as files are added).
+"""
+    hesse!(m::Minuit; kwargs...) -> Minuit
+
+Bang-named alias of [`hesse`](@ref): `hesse(m)` mutates `m` (it stores the
+refreshed covariance), so `hesse!` matches the `migrad!` / `minos!` convention.
+Identical behaviour — use whichever reads better.
+"""
+const hesse! = hesse
+
+# Public API surface.
 export MachinePrecision
 export Strategy
 export CovStatus
@@ -111,7 +120,7 @@ export n_pars, n_free, ext_index
 export int_to_ext_value, ext_to_int_value, dint2ext_value
 export int_to_ext_vector, ext_to_int_vector
 export initial_int_values, initial_int_errors
-export hesse, HesseResult
+export hesse, hesse!, HesseResult
 export squeeze_symmetric, squeeze_error
 export MnCross, MinosError, minos, minos_lower, minos_upper
 export ContoursError, contour, contour_exact, contour_parameter_sets

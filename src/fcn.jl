@@ -32,12 +32,11 @@ type rather than hitting Julia's `::Function` vtable.
 Mirrors `MnFcn` and `MnUserFcn` from C++ Minuit2, collapsed since Julia
 doesn't need the C++ inheritance hierarchy (the call counter is in the
 same struct as the user function; multiple dispatch handles
-gradient-vs-no-gradient via a separate `CostFunctionWithGradient` type
-which lands in Phase 1).
+gradient-vs-no-gradient via a separate `CostFunctionWithGradient` type).
 
-In Phase 0 the call to `f(x)` passes the parameter vector unchanged
-(identity transform: no bounds). Phase 1 inserts the internal→external
-sin/sqrt transform via [`Transformation`](@ref) on the same call boundary.
+For an unbounded fit the call to `f(x)` passes the parameter vector
+unchanged; for a bounded fit the internal→external sin/√ transform is
+applied on the same call boundary (see `transform.jl`).
 
 # Fields
 

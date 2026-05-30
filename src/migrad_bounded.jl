@@ -311,7 +311,8 @@ Parameters/Transformation wired in.
 
 # Keyword arguments
 
-- `strategy::Strategy=Strategy(0)` — Phase 1 first cut Phase-0-locked.
+- `strategy::Strategy=Strategy(0)` — Strategy level; 0/1/2 all supported
+  (the `Minuit` front end defaults to `Strategy(1)`).
 - `tol::Real=0.1` — convergence tolerance.
 - `maxfcn::Union{Integer,Nothing}=nothing` — defaults to the standard
   `200 + 100·n + 5·n²` where n is the number of free parameters.

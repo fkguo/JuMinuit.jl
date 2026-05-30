@@ -64,6 +64,36 @@ JuMinuit.ContoursError
 
 ```@docs
 JuMinuit.Minuit
+JuMinuit.migrad!
+JuMinuit.minos!
+JuMinuit.hesse!
+JuMinuit.HesseResult
+```
+
+## Other minimizers
+
+```@docs
+JuMinuit.simplex
+JuMinuit.scan
+```
+
+## Per-parameter mutators
+
+```@docs
+JuMinuit.fix!
+JuMinuit.release!
+JuMinuit.set_value!
+JuMinuit.set_error!
+JuMinuit.set_limits!
+JuMinuit.remove_limits!
+```
+
+## IMinuit.jl compatibility
+
+```@docs
+JuMinuit.Data
+JuMinuit.chisq
+JuMinuit.model_fit
 ```
 
 ## Strategy & precision

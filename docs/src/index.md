@@ -33,8 +33,8 @@ show(stdout, MIME"text/plain"(), m)
 ┌───────────────────────────────────────────────────────────────────────┐
 │                                Migrad                                 │
 ├───────────────────────────────────┬───────────────────────────────────┤
-│ FCN = 4.196e-16                   │             Nfcn = 18             │
-│ EDM = 4.196e-16 (Goal: 0.002)     │                                   │
+│ FCN = 2.257e-18                   │             Nfcn = 26             │
+│ EDM = 2.257e-18 (Goal: 0.002)     │                                   │
 ├───────────────────────────────────┼───────────────────────────────────┤
 │           Valid Minimum           │  Below EDM threshold (goal x 10)  │
 ├───────────────────────────────────┼───────────────────────────────────┤
@@ -53,7 +53,7 @@ m = Minuit(x -> sum(abs2, x .- [1.0, 2.0, 3.0, 4.0]), zeros(4);
 migrad!(m)
 minos!(m)
 m.values        # ≈ [1, 2, 3, 4]
-m.minos_errors  # asymmetric ±σ per parameter
+m.merrors       # asymmetric ±σ per parameter (name-keyed Dict)
 ```
 
 ## What's included

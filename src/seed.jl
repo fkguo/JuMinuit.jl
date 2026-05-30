@@ -84,7 +84,8 @@ Build the initial `MinimumState` for a MIGRAD fit. Mirrors
 - `errs::AbstractVector{<:Real}` — initial step sizes (per-parameter
   "error" estimates). Should be non-negative; the gradient algorithm
   uses `|werr|`.
-- `strategy::Strategy` — Phase 0 must be `Strategy(0)`.
+- `strategy::Strategy` — Strategy level (0/1/2); level 2 runs the seed-time
+  MnHesse bootstrap (step 7 above).
 - `prec::MachinePrecision`.
 
 # Keyword arguments

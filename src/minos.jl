@@ -141,10 +141,10 @@ Compute asymmetric ±σ errors for parameter `par_idx`. Mirrors
 `MnMinos::Minos(unsigned int, ...)` from
 `reference/Minuit2_cpp/src/MnMinos.cxx`.
 
-# Phase 1 first cut
+# Notes
 
-- Unbounded parameters only (par_limit reserved for Phase 1+ bounds
-  integration).
+- Bounded parameters are supported; hitting a bound is a clean termination
+  (recorded in `upper_par_limit` / `lower_par_limit`).
 - Inner MIGRAD uses Strategy(0) by default. Strategy 1/2 affects the
   `tlr` propagation but not HESSE refinement.
 - `sigma::Real=1` — confidence level in σ-units (P5). Threads

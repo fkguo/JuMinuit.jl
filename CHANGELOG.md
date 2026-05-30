@@ -3,6 +3,43 @@
 All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 + [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-05-30
+
+First public release. A complete error-analysis suite, a Julia-native
+cost-function family, and an Optim.jl bridge land on top of the
+now-C++-fidelity-audited core.
+
+### Added
+
+- **Julia-native cost functions** — `LeastSquares`, `UnbinnedNLL`, `BinnedNLL`,
+  `ExtendedUnbinnedNLL`, `ExtendedBinnedNLL`, composable with `CostSum` (`+`),
+  each carrying its `errordef`. Interoperate with the IMinuit.jl `chisq` / `Data`.
+- **Error analysis beyond HESSE/MINOS** — Monte-Carlo Δχ² confidence regions
+  (`get_contours_samples` / `contour_df_samples`, with `delta_chisq` / `chisq_cl`),
+  data-resampling errors (`bootstrap`, `jackknife`, `correlation`), and
+  **multi-modal solution detection** (`find_solution_modes`, via a Clustering.jl
+  extension). `contour_parameter_sets` exposes the full parameter vector at every
+  contour point.
+- **Alternative-minimizer bridge** — `optim(m)` / `minimize_with(m, opt)` route a
+  fit through any Optim.jl optimizer (the Julia analogue of iminuit's `scipy()`),
+  via an Optim.jl extension.
+- `hesse!` as a bang-named alias of `hesse` (consistent with `migrad!` / `minos!`).
+- Threaded numerical gradient (`threaded_gradient=true`) with a thread-safety
+  pre-flight (`is_thread_safe`, `ThreadSafetyError`).
+
+### Changed
+
+- Defaults aligned with iminuit: `Strategy(1)` and `4·eps` machine precision.
+- Documentation reorganised for a public release — a Documenter manual
+  (tutorials, cost functions, error analysis, API reference); development and
+  audit notes moved under `docs/dev/`.
+
+### Fixed
+
+- C++ Minuit2 v6.24.0 fidelity audit closed end to end: `MnMachinePrecision`
+  (`4·ε`), Simplex / negative-g2 / positive-definite handling, the MnContours
+  direction-switch retry, CheckGradient diagnostics, and covariance squeeze.
+
 ## [0.2.0-alpha] — 2026-05-25
 
 Phase 1.x deep refinements + Phase 1 exit-gate + Phase 3 polish.
@@ -222,4 +259,6 @@ tests passing. Aqua + JET clean.
 - `m.errors[name] = ...` setter API.
 - Documentation site (Documenter.jl).
 
-[0.1.0-alpha]: https://github.com/fkguo/JuMinuit.jl/compare/main...HEAD
+[0.3.0]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.3.0
+[0.2.0-alpha]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.2.0-alpha
+[0.1.0-alpha]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.1.0-alpha
