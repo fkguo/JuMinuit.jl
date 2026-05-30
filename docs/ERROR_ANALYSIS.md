@@ -163,6 +163,13 @@ error); **(ii)** `model` + `Data` + start (shown above); and **(iii)** a generic
 `refit(subdata) -> θ̂` callback over any indexable `data`. The cost-object form is
 bit-identical to the `model` + `Data` form for the equivalent `LeastSquares` fit.
 
+Note that for an `ExtendedUnbinnedNLL`, the nonparametric cost-object bootstrap
+conditions on the sample size — every resample draws exactly `N` points — so the
+fitted total-count / normalization parameter is pinned and its bootstrap `σ`
+collapses to `≈ 0` rather than the Poisson `√N`; take that count error from
+HESSE/MINOS, or from a parametric / Poisson-count bootstrap (see the
+`bootstrap(cost, start)` docstring).
+
 ### Jackknife — `jackknife(model, data, start; ...)`
 Deletes one point (delete-1, the default) — or one consecutive block
 (`d > 1`) — re-fits, and aggregates the leave-one-out estimates θ̂₍ⱼ₎ into a
