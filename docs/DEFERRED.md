@@ -26,16 +26,43 @@ that this file documents.
   speedup matters), or when Phase 3 IMinuit.jl-compat scripts in the
   wild use Fumili and break.
 
-### MPI support
+### Multi-node (cluster) gradient parallelism — `Distributed.jl`, NOT MPI
 
-`MPIProcess.h/.cxx`, `MPI_SYNCH_PROC` guards in
-`Numerical2PGradientCalculator.cxx:102–214` and `MnHesse.cxx:240`.
+C++ analog: `MPIProcess.h/.cxx`, `MPI_SYNCH_PROC` guards in
+`Numerical2PGradientCalculator.cxx:102–214` and `MnHesse.cxx:240` — C++
+splits the per-coordinate numerical gradient + HESSE probes across MPI
+ranks.
 
-- **Why deferred**: HEP-specific use case (multi-node fits) addressed
-  natively in Julia by `Distributed.jl`. Hooking MPI requires
-  MPI.jl + careful build configuration.
-- **Revisit when**: a user with a real >1-node fit needs cross-node
-  gradient parallelism. Phase 2.2 (Threads gradient) usually suffices.
+- **Why deferred**: no cluster in use yet. Building cluster parallelism
+  with no multi-node hardware to validate against is premature — it
+  should be designed + benchmarked against a real cluster + a real
+  expensive fit when the need is concrete.
+- **DECISION (locked) — use `Distributed.jl`, not MPI.jl**, when this is
+  built. Reasoning:
+  - The parallelised work is the per-iteration gradient/HESSE: an
+    embarrassingly-parallel map over parameter indices with a small
+    gather (the gradient vector) each MIGRAD iteration.
+  - This parallelism only pays off for an **expensive FCN** (cheap-FCN
+    communication overhead dominates — exactly why C++ gates it behind
+    `#ifdef`). In that expensive regime, FCN **compute dominates** and
+    the per-iteration sync latency is amortised, so MPI's low-latency
+    collective advantage does **not** materialise. Minuit's design range
+    (n ≤ ~50) keeps the per-gradient message modest, reinforcing this.
+  - `Distributed.jl` is **stdlib (zero external dependency)** → lowest
+    adoption friction for the open-source community (no system-MPI build
+    headache); composes with `SlurmClusterManager.jl` for HEP Slurm
+    clusters; is GC-aware and testable by spinning workers on one machine
+    in CI. MPI.jl wins only in a narrow "very-many-params + moderate FCN
+    + latency-bound" window or when slotting into an existing MPI
+    workflow — neither is JuMinuit's target.
+  - Build on the **Phase G threaded-gradient abstraction** (the
+    parallel-gradient executor already exists for threads): add a
+    pluggable `:distributed` executor rather than a parallel code path
+    from scratch.
+- **Revisit when**: a real >1-node cluster fit (expensive FCN, many
+  params) is in hand to design + benchmark against. Single-machine fits
+  are already covered by Phase G threads — MPI/Distributed give nothing
+  there.
 
 ### BFGS Hessian updator
 
