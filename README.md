@@ -276,6 +276,20 @@ site at compile time, whereas C++ Minuit2 pays for `shared_ptr` ref-counting and
 - **[`docs/UPSTREAM.md`](docs/UPSTREAM.md)** — upstream provenance and LGPL
   attribution.
 
+## Citation
+
+If you use JuMinuit.jl in a publication, please cite **both** JuMinuit.jl and the
+upstream Minuit algorithms it ports. JuMinuit.jl ships a
+[`CITATION.cff`](CITATION.cff) — use GitHub's **"Cite this repository"** button
+for APA / BibTeX, or:
+
+> F.-K. Guo and contributors, *JuMinuit.jl: a native-Julia port of Minuit2*,
+> v0.3.0, https://github.com/fkguo/JuMinuit.jl (2026).
+>
+> F. James and M. Roos, "MINUIT: A system for function minimization and analysis
+> of the parameter errors and correlations", Comput. Phys. Commun. **10** (1975)
+> 343–367. [doi:10.1016/0010-4655(75)90039-9](https://doi.org/10.1016/0010-4655(75)90039-9)
+
 ## Acknowledgements
 
 - **C++ Minuit2** by M. Winkler, F. James, L. Moneta, A. Zsenei (CERN PH/SFT,
