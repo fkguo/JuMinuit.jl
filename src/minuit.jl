@@ -2002,8 +2002,9 @@ end
     set_precision(m::Minuit, p::Real) -> Minuit
 
 IMinuit.jl-compatible: override the floating-point precision used by
-MIGRAD/HESSE/MINOS. The default `MachinePrecision()` is `eps(Float64)`;
-override only when fitting with synthetic-precision FCN models.
+MIGRAD/HESSE/MINOS. The default `MachinePrecision()` uses `4·eps(Float64)`
+(matching C++ Minuit2's `fEpsMac = 4·ε`, audit §14); override only when
+fitting with synthetic-precision FCN models.
 """
 function set_precision(m::Minuit, p::Real)
     m.prec = MachinePrecision(Float64(p))
