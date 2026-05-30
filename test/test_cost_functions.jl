@@ -312,6 +312,52 @@ _mean(v) = sum(v) / length(v)
         @test chisq(linmodel, d2, [2.0, 1.0]; fitrange = 2:2:4) ≈ 0.0 atol = 1e-12
     end
 
+    # ───────────────────────────────────────────────────────────────────
+    # Review follow-ups: NLL log(0) safeguard + cost copy-constructor
+    # ───────────────────────────────────────────────────────────────────
+    @testset "UnbinnedNLL: pdf=0 gives a finite (not Inf) term" begin
+        # A pdf that is exactly 0 at one sample must not Inf/NaN the cost
+        # (iminuit _TINY_FLOAT parity). Normal values are unaffected.
+        zpdf(x, p) = x == 0.0 ? 0.0 : gpdf(x, p)
+        c = UnbinnedNLL([0.0, 0.5, -0.5], zpdf)
+        v = c([0.0, 1.0])
+        @test isfinite(v)
+        # the value-identity test still holds for a strictly-positive pdf
+        cpos = UnbinnedNLL(gsamp, gpdf)
+        @test cpos([0.0, 1.0]) ≈ -sum(log.(gpdf.(gsamp, Ref([0.0, 1.0]))))
+    end
+
+    @testset "Binned NLLs: degenerate μ≤0 stays finite (no DomainError)" begin
+        # A non-monotonic cdf drives a negative per-bin probability — without
+        # the _NLL_TINY clamp this throws DomainError(log(<0)) and hard-crashes
+        # MIGRAD. With the clamp it is a large-but-finite penalty.
+        weird_cdf(x, p) = x <= 0 ? 0.0 : x <= 1 ? 0.6 : x <= 2 ? 0.5 : 1.0
+        edges = [0.0, 1.0, 2.0, 3.0]
+        counts = [5.0, 2.0, 3.0]                  # middle bin: p = 0.5-0.6 = -0.1
+        @test isfinite(BinnedNLL(counts, edges, weird_cdf)([1.0]))
+        @test isfinite(ExtendedBinnedNLL(counts, edges, weird_cdf)([1.0]))
+        # the value-identity (vs 0.5·*_chi2) is unaffected for valid cdfs —
+        # already covered in the BinnedNLL / ExtendedBinnedNLL testsets above.
+    end
+
+    @testset "Minuit(cost, fit) copy-constructor carries errordef" begin
+        d = Data(xlin, ylin, elin)
+        m1 = Minuit(LeastSquares(d, linmodel), [1.0, 0.0]; name = ["a", "b"])
+        migrad!(m1)
+        # Rebuild a DIFFERENT-errordef cost from the old fit: errordef must
+        # come from the new cost (0.5), not be inherited from m1 (1.0).
+        un = UnbinnedNLL(gsamp, gpdf; name = ["mu", "sig"])
+        m2 = Minuit(un, m1)
+        @test m2.fcn.up == 0.5                  # errordef(UnbinnedNLL), not m1's 1.0
+        @test m2.parameters == ("a", "b")       # names reused from m1
+        @test collect(m2.values) ≈ collect(m1.values)  # starts at m1's latest
+        @test m2.fmin === nothing               # fresh, not yet minimised
+        # same-type rebuild keeps errordef 1
+        m3 = Minuit(LeastSquares(d, linmodel), m1)
+        @test m3.fcn.up == 1.0
+        @test m3.ndata == d.ndata
+    end
+
     # show -----------------------------------------------------------------
     @testset "show methods" begin
         s = repr(LeastSquares(xlin, ylin, elin, linmodel; name = [:a, :b]))

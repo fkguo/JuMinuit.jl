@@ -170,9 +170,20 @@ end
 # differs by the factor 2. JuMinuit follows IMinuit.jl's 0.5 choice.)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Smallest normal Float64 — the floor inside every `log` so a degenerate
+# evaluation (a `pdf`/`μ` that hits 0 at the edge of support, or a
+# transient non-positive value while the optimizer probes a bad region)
+# yields a large-but-finite term instead of `-Inf`/`NaN`-ing the gradient
+# or throwing `DomainError`. Applied as `log(max(·, _NLL_TINY))`: a no-op
+# for any valid positive value (`max` returns it unchanged), and it also
+# tolerates a tiny negative undershoot (which iminuit's purely-additive
+# `_TINY_FLOAT` would not). Same spirit as iminuit's `_TINY_FLOAT`
+# (= np.finfo(float).tiny) safeguard.
+const _NLL_TINY = floatmin(Float64)
+
 # Σ log(pdf(xᵢ, par)) over `eachindex(x)` (x a Vector or a @view). When
-# `islog`, `pdf` already returns the log-density. Shared by UnbinnedNLL
-# and ExtendedUnbinnedNLL.
+# `islog`, `pdf` already returns the log-density (assumed finite — the
+# caller owns that path). Shared by UnbinnedNLL and ExtendedUnbinnedNLL.
 @inline function _nll_logsum(pdf::F, x, par, islog::Bool) where {F}
     s = 0.0
     if islog
@@ -181,7 +192,7 @@ end
         end
     else
         @inbounds @simd for i in eachindex(x)
-            s += log(pdf(x[i], par))
+            s += log(max(pdf(x[i], par), _NLL_TINY))
         end
     end
     return s
@@ -262,7 +273,13 @@ function (c::ExtendedUnbinnedNLL)(par)
 end
 
 # Evaluate the cdf at every bin edge once (nb+1 calls) into a fresh
-# buffer. Fresh-per-call ⇒ thread-safe under `threaded_gradient`.
+# buffer, so each bin's two edges are computed once (not once per adjacent
+# bin) — important when `cdf` is expensive (the HEP norm). The buffer is
+# fresh per call ⇒ thread-safe under `threaded_gradient` (a pooled/cached
+# buffer would race); and it lets the multinomial path do its two passes
+# (normalise to `ptot`, then accumulate) without re-evaluating the cdf.
+# The cost is one small `O(nb)` array per FCN call — measured negligible
+# (≈0.5 KB for 50 bins; a full 50-bin MIGRAD allocates ~0.02 MB total).
 @inline function _edge_cdf(cdf::F, xe, par, nb::Int) where {F}
     v = Vector{Float64}(undef, nb + 1)
     @inbounds for k in 1:(nb + 1)
@@ -281,10 +298,11 @@ function _binned_multinomial(n, cdfv, idx)
         ptot += cdfv[i + 1] - cdfv[i]
         ntot += n[i]
     end
+    ptot = max(ptot, _NLL_TINY)               # guard a degenerate cdf
     res = 0.0
     @inbounds for i in idx
         p_i = cdfv[i + 1] - cdfv[i]
-        mu_i = ntot * p_i / ptot
+        mu_i = max(ntot * p_i / ptot, _NLL_TINY)
         n_i = n[i]
         n_i > 0 && (res += n_i * log(n_i / mu_i))
     end
@@ -297,7 +315,7 @@ end
 function _binned_poisson(n, cdfv, idx)
     res = 0.0
     @inbounds for i in idx
-        mu_i = cdfv[i + 1] - cdfv[i]
+        mu_i = max(cdfv[i + 1] - cdfv[i], _NLL_TINY)   # guard log(n/μ), μ≥0
         n_i = n[i]
         if n_i > 0
             res += mu_i - n_i + n_i * log(n_i / mu_i)
@@ -542,6 +560,37 @@ function Minuit(cost::AbstractCost, x0::AbstractVector{<:Real}; kwargs...)
                up = up_resolved, name_kw..., fwd...)
     m.ndata = _cost_ndata(cost)
     return m
+end
+
+"""
+    Minuit(cost::AbstractCost, fit::Minuit; kwargs...) -> Minuit
+
+Rebuild a fresh fit of `cost` reusing `fit`'s latest values, names,
+errors, bounds and tuning as the starting point — the cost-object
+counterpart of `Minuit(fcn, ::Minuit)`. Routes through `Minuit(cost, x0)`
+so the ErrorDef and data count come from `errordef(cost)` / `cost`, not
+from `fit` (which may have been built with a different cost type).
+"""
+function Minuit(cost::AbstractCost, fit::Minuit; kwargs...)
+    # Recover the start config from `fit` (mirrors Minuit(fcn, ::Minuit)),
+    # then route through Minuit(cost, x0) so up = errordef(cost) + ndata.
+    x0 = fit.fmin === nothing ? [p.value for p in fit.params.pars] :
+                                fit.fmin.ext_values
+    nm = [p.name for p in fit.params.pars]
+    er = fit.fmin === nothing ? [p.error for p in fit.params.pars] :
+                                fit.fmin.ext_errors
+    fx = [is_fixed(p) for p in fit.params.pars]
+    lim = Vector{Any}(undef, n_pars(fit.params))
+    for (i, p) in enumerate(fit.params.pars)
+        lo = isnan(p.lower) ? nothing : p.lower
+        hi = isnan(p.upper) ? nothing : p.upper
+        lim[i] = (lo === nothing && hi === nothing) ? nothing : (lo, hi)
+    end
+    return Minuit(cost, x0; name = nm, error = er, fixed = fx, limits = lim,
+                  prec = fit.prec, strategy = fit.strategy, tol = fit.tol,
+                  print_level = fit.print_level,
+                  threaded_gradient = fit.threaded_gradient,
+                  verify_threading = fit.verify_threading, kwargs...)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
