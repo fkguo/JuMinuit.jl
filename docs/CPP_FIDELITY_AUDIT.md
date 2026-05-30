@@ -435,10 +435,25 @@ Findings:
   InitialGradient + Numerical2P refine, the `1/g2` (eps2-clamped) diagonal, the
   EDM, the unconditional negative-G2 check, the `HasCovariance`/`prior_cov`
   branch, and the **Strategy(2) seed-time MnHesse bootstrap** all map 1:1.
-- minor (AD overload only): the `CheckGradient()` user-gradient discrepancy
-  check (~15 LOC) and the negative-G2 refine (~10 LOC, = §7) are Phase-2.1 stubs.
+- **✓ RESOLVED — the AD-overload Phase-2.1 stubs.** Both seed-time gaps in the
+  analytical overload (C++ `MnSeedGenerator.cxx:103-174`) are now closed:
+  - the negative-G2 refine (= §7) — PR #21 `c28ec98`;
+  - the `CheckGradient()` user-gradient discrepancy check (C++ lines 124-144) —
+    `feat/audit-residue-checkgrad-covsqueeze`. `_check_user_gradient`
+    (ad_gradient.jl) recomputes the gradient numerically at the seed via the
+    already-ported `hessian_gradient` (`HessianGradientCalculator::DeltaGradient`
+    at `MnStrategy(2)`) and flags component `i` when
+    `|numerical_i − user_i| > dgrd_i` — the exact C++ tolerance (the
+    `DeltaGradient` per-component uncertainty). C++ warns per component then
+    `assert(good)` (a no-op in release / iminuit builds); JuMinuit **warns and
+    continues** — a wrong-gradient user is told, never crashed. Gated on
+    `CostFunctionWithGradient.check_gradient` (default `true`, mirroring C++
+    `FCNGradientBase::CheckGradient()`); the MINOS/contour cross-search probe
+    wrappers set it `false` (the user gradient is already validated at the
+    top-level seed — re-checking each probe re-seed is redundant).
 
-Verdict: numerical seed faithful; only the AD-overload Phase-2.1 stubs diverge.
+Verdict: **RESOLVED** — numerical seed faithful; the AD-overload stubs
+(negative-G2 + CheckGradient) are now both implemented.
 
 ## 9. Gradient calculators (Initial / Numerical2P / Hessian / Analytical)
 
@@ -458,11 +473,13 @@ Findings:
   net result identical (diagonal transform, component-wise chain rule exact).
 - minor: the `if HasLimits && step>0.5` clamps are unported but **architecturally
   unreachable** (bounded fits wrap to an unbounded internal `CostFunction`, so
-  the calculators never see limit metadata) — zero behavioral gap; `CheckGradient()`
-  helper not ported (uncalled in the operator path).
+  the calculators never see limit metadata) — zero behavioral gap. The
+  `AnalyticalGradientCalculator::CheckGradient()` accessor is uncalled in the
+  calculator's own `operator()` path; the seed-time discrepancy check it gates
+  in `MnSeedGenerator` **is now ported** — see §8 (`_check_user_gradient`).
 
-Verdict: all four faithful — exact gradient math; only unreachable clamps + an
-uncalled helper diverge.
+Verdict: all four faithful — exact gradient math; only the unreachable
+limit-clamps diverge (the seed-time CheckGradient is now implemented — §8).
 
 ## 10. DavidonErrorUpdator + VariableMetricEDMEstimator
 
@@ -513,15 +530,26 @@ Findings:
 - ✓ **MnGlobalCorrelationCoeff** faithful — `ρᵢ = √(1 − 1/(Cᵢᵢ·C⁻¹ᵢᵢ))` is
   byte-identical; the `denom≤0` clamp difference is unreachable under real C++
   control flow (that path already set `valid=false`).
-- **✗ minor (latent) — MnCovarianceSqueeze.** The first-inversion-failure
-  fallback returns the same diagonal values but tags **`MnInvertFailed`** where
-  C++ would relabel **Valid** (status-enum divergence). And the **`MnUserCovariance`
-  overload is not ported** (the one C++ calls from `MnUserParameterState` on
-  parameter-fix) — but JuMinuit has no `MnUserParameterState` analog, so both are
-  **latent** (squeeze has no non-test caller).
+- **✓ RESOLVED (status-enum) — MnCovarianceSqueeze.** The first-inversion
+  (`V → H`) failure fallback now tags the diagonal recovery **Valid** carrying
+  `err.dcovar` (was `MnInvertFailed`) —
+  `feat/audit-residue-checkgrad-covsqueeze`. This matches C++: that inversion
+  lives inside `err.Hessian()` (`BasicMinimumError.cxx:20-35`), whose diagonal
+  fallback `diag(1/V[i,i])` squeezes and re-inverts cleanly, so
+  `MnCovarianceSqueeze` returns the valid `MinimumError(squeezed, err.Dcovar())`
+  (diagonal `diag(V[i,i])`). The second-inversion (squeezed `H → V`) failure
+  still tags **`MnInvertFailed`** (`MnCovarianceSqueeze.cxx:76-84`), unchanged.
+  Still **latent** (squeeze has no non-test caller — JuMinuit has no
+  `MnUserParameterState` analog), so this is a fidelity / future-proofing fix.
+  The **`MnUserCovariance` overload** (`MnCovarianceSqueeze.cxx:19-63`, called
+  from `MnUserParameterState` on parameter-fix) remains **intentionally
+  unported** — no caller exists in JuMinuit; documented as a deliberate
+  deferral.
 
-Verdict: MnEigen + global-cc faithful; CovSqueeze happy-path faithful with a
-latent status-enum divergence + an unported (currently-unused) overload.
+Verdict: MnEigen + global-cc faithful; CovSqueeze faithful — the latent
+first-inversion status-enum divergence is **RESOLVED**
+(`feat/audit-residue-checkgrad-covsqueeze`); the back-inversion fallback is
+unchanged and the unused `MnUserCovariance` overload is an intentional deferral.
 
 ## 13. MnScan
 
@@ -601,8 +629,8 @@ specific, located, mostly-small item. Sorted by severity:
 | **✓ RESOLVED** | §2 MIGRAD | 2nd-pass-invalid early-bail (efficiency, S≥1 non-converging) — PR #20 `e256506` | done |
 | **✓ RESOLVED** | §3 MnMinos | default budget n-scaled `2·(nvar+1)·(200+100n+5n²)` — PR #20 `88bceea` | done |
 | **✓ RESOLVED** | §11 MnPosDef | `MnMadePosDef` dcovar→1.0 + eigenvalue-gate forces valid+posdef — PR #21 `a56d87a` | done |
-| minor (latent) | §12 CovSqueeze | fallback status-enum (Valid vs MnInvertFailed); `MnUserCovariance` overload unported | — |
-| minor (deferred) | §8/§9 AD seed/grad | `CheckGradient` discrepancy-check stub (the AD negative-G2 stub is now resolved — §7 `c28ec98`) | ~15 LOC |
+| **✓ RESOLVED** | §12 CovSqueeze | first-inversion fallback status-enum now Valid (was MnInvertFailed), `err.dcovar` preserved — `feat/audit-residue-checkgrad-covsqueeze`; back-inversion fallback unchanged; `MnUserCovariance` overload intentionally unported (no caller) | done |
+| **✓ RESOLVED** | §8/§9 AD seed/grad | `CheckGradient` discrepancy-check ported (warns, never crashes; default-on, `check_gradient=false` opt-out) — `feat/audit-residue-checkgrad-covsqueeze`; AD negative-G2 already resolved (§7 `c28ec98`) | done |
 | **none** | §6 LineSearch, §10 Davidon/EDM, §14 transforms+strategy | fully faithful (parabola ≡ to 4e-11; DFP/EDM term-by-term; 21 strategy constants exact) | — |
 
 **Headline:** the comprehensive pass found **one MAJOR** item — the machine-precision

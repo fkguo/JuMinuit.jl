@@ -175,6 +175,12 @@ function Minuit(
     # to use analytical / AD-backed gradients instead of central-difference.
     # Typically 5-10× fewer FCN evaluations on cheap FCNs.
     grad::Union{Function,Nothing} = nothing,
+    # When a `grad=` is supplied, validate it against a numerical 2-point
+    # estimate at the seed and warn on disagreement (the C++ Minuit2
+    # `CheckGradient` discrepancy check; MnSeedGenerator.cxx:124-144).
+    # Default `true` matches C++ `FCNGradientBase::CheckGradient()`; set
+    # `false` to skip the (one-time, seed) check. No-op without `grad=`.
+    check_gradient::Bool = true,
     # IMinuit.jl-compatible stored settings. These become `m.strategy`,
     # `m.tol`, `m.print_level` and feed into subsequent migrad! calls
     # when not explicitly overridden.
@@ -290,7 +296,8 @@ function Minuit(
     # Build cached CFwG when grad provided — share nfcn Ref so call
     # count is consistent across both views into the user FCN.
     cfwg = grad === nothing ? nothing :
-        CostFunctionWithGradient(fcn, grad, up_resolved, cf.nfcn, Ref(0))
+        CostFunctionWithGradient(fcn, grad, up_resolved, cf.nfcn, Ref(0);
+                                 check_gradient = check_gradient)
     strat = strategy isa Strategy ? strategy : Strategy(Int(strategy))
     return Minuit(cf, params, nothing, Dict{Int,MinosError}(), prec,
                   cfwg, strat, Float64(tol), Int(print_level),
@@ -323,6 +330,11 @@ function Minuit(fcn;
                 print_level::Integer = 0,
                 threaded_gradient::Bool = false,
                 verify_threading::Bool = threaded_gradient,
+                # Seed-time gradient-check toggle — see the Minuit(fcn, x0)
+                # constructor. Declared explicitly (not left to `kwargs...`)
+                # so a `check_gradient=false` is NOT mis-parsed as a
+                # parameter-value kwarg (since `false isa Real`).
+                check_gradient::Bool = true,
                 kwargs...)
     # Separate `error_*`, `fix_*`, `limit_*`, and meta from the
     # parameter-name kwargs.
@@ -360,6 +372,7 @@ function Minuit(fcn;
                   print_level = print_level,
                   threaded_gradient = threaded_gradient,
                   verify_threading = verify_threading,
+                  check_gradient = check_gradient,
                   other_kws...)
 end
 
@@ -1388,7 +1401,8 @@ function Base.setproperty!(m::Minuit, name::Symbol, val)
         if m.cfwg !== nothing
             setfield!(m, :cfwg,
                 CostFunctionWithGradient(m.cfwg.f, m.cfwg.g, new_up,
-                                          m.cfwg.nfcn, m.cfwg.ngrad))
+                                          m.cfwg.nfcn, m.cfwg.ngrad;
+                                          check_gradient = m.cfwg.check_gradient))
         end
     elseif name === :values
         # iminuit-style `m.values = [...]`: replaces the per-parameter

@@ -163,9 +163,13 @@ function _wrap_fcn_internal_to_external(cf::CostFunctionWithGradient,
     end
     # Share the user-facing CFwG's nfcn + ngrad Refs so call counters
     # surfaced via `m.nfcn` / `m.ngrad` reflect ALL calls (the wrap
-    # closure is what the inner MIGRAD actually drives).
+    # closure is what the inner MIGRAD actually drives). `check_gradient`
+    # must be forwarded too — this wrap is on the path EVERY `migrad!(m;
+    # grad=…)` takes, so dropping it would silently re-enable the
+    # CheckGradient seed check and defeat the `check_gradient=false` opt-out.
     return CostFunctionWithGradient(wrapped_f, wrapped_g, up,
-                                     cf.nfcn, cf.ngrad)
+                                     cf.nfcn, cf.ngrad;
+                                     check_gradient = cf.check_gradient)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

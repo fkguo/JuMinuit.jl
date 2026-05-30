@@ -48,13 +48,29 @@ end
     squeeze_error(err::MinimumError, n::Integer; prec=MachinePrecision())
         -> MinimumError
 
-Remove parameter `n` from a `MinimumError`. The error matrix is
-inverted to get the Hessian, the Hessian is squeezed, then re-inverted.
-On inversion failure returns a diagonal-only `MinimumError` tagged
-`MnInvertFailed` (matches C++ behavior at
-`reference/Minuit2_cpp/src/MnCovarianceSqueeze.cxx:76-84`).
+Remove parameter `n` from a `MinimumError`. The error matrix (inverse
+Hessian `V`) is inverted to get the Hessian `H`, `H` is squeezed, then
+re-inverted to the new error matrix.
 
-The returned `MinimumError`'s `dcovar` is preserved from the input
+Two inversion-failure fallbacks, each matching C++
+`MnCovarianceSqueeze::operator()(const MinimumError&, unsigned int)`
+(`reference/Minuit2_cpp/src/MnCovarianceSqueeze.cxx:65-87`):
+
+- **First inversion (`V → H`) fails.** In C++ this inversion lives
+  *inside* `err.Hessian()` (`BasicMinimumError::Hessian()`,
+  `BasicMinimumError.cxx:20-35`), which on failure returns the diagonal
+  Hessian `diag(1/V[i,i])`. `MnCovarianceSqueeze` then squeezes that
+  diagonal and re-inverts it — a diagonal is trivially invertible — so
+  the overall result is the **valid** `MinimumError(squeezed,
+  err.Dcovar())`, *not* a failure. We short-circuit to the
+  algebraically-identical diagonal `diag(V[i,i])` (the `1/(1/V[i,i])`
+  round-trip) and tag it **valid** carrying `err.dcovar`, matching C++
+  (audit §12 — this path was previously mis-tagged `MnInvertFailed`).
+- **Second inversion (squeezed `H → V`) fails.** Returns a diagonal
+  `MinimumError` of `1/H_squeezed[i,i]` tagged `MnInvertFailed`
+  (`MnCovarianceSqueeze.cxx:76-84`).
+
+The valid-path `MinimumError`'s `dcovar` is preserved from the input
 (matches C++ line 86: `MinimumError(squeezed, err.Dcovar())`).
 """
 function squeeze_error(err::MinimumError, n::Integer;
@@ -70,18 +86,25 @@ function squeeze_error(err::MinimumError, n::Integer;
     end
 
     if !inv_ok_1
-        # Diagonal fallback per C++ MnCovarianceSqueeze.cxx:76-84.
-        # Mark MnInvertFailed; diagonal = inverted-diagonal of the
-        # original error.
+        # First inversion (V → H) failed. C++ does NOT bail to a failure
+        # status here: this inversion lives inside `err.Hessian()`
+        # (BasicMinimumError.cxx:20-35), which on failure returns the
+        # diagonal Hessian diag(1/V[i,i]). MnCovarianceSqueeze then
+        # squeezes that diagonal and re-inverts it (a diagonal inverts
+        # cleanly), yielding the VALID `MinimumError(squeezed, err.Dcovar())`
+        # whose diagonal is diag(1/(1/V[i,i])) = diag(V[i,i]). We produce
+        # the same diagonal directly and tag it VALID carrying `err.dcovar`
+        # — matching C++ (audit §12; this was previously mis-tagged
+        # MnInvertFailed).
         n_in = LinearAlgebra.checksquare(parent(err.inv_hessian))
         diag = zeros(Float64, n_in - 1, n_in - 1)
         oi = 0
         for i in 1:n_in
             i == n && continue
             oi += 1
-            diag[oi, oi] = err.inv_hessian[i, i]  # keep original diagonal entry
+            diag[oi, oi] = err.inv_hessian[i, i]  # = 1/(1/V[i,i]) round-trip
         end
-        return MinimumError(Symmetric(diag, :U), MnInvertFailed)
+        return MinimumError(Symmetric(diag, :U), err.dcovar)
     end
 
     # Step 2: squeeze the Hessian

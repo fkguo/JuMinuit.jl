@@ -620,7 +620,12 @@ function _fix_one_param(cf::CostFunctionWithGradient, i::Integer, v::Float64, n:
             return out_buf
         end
     end
-    return CostFunctionWithGradient(f_wrapped, g_wrapped, up)
+    # `check_gradient=false`: the user gradient is validated once at the
+    # top-level fit's seed; re-running the CheckGradient discrepancy check
+    # on every MINOS/contour cross-search re-seed (this fixed-param probe)
+    # would be redundant and cost extra FCN calls. The probe gradient is
+    # derived from the same already-validated user gradient.
+    return CostFunctionWithGradient(f_wrapped, g_wrapped, up; check_gradient = false)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -705,7 +710,12 @@ function _fix_multi_params(
             return out_buf
         end
     end
-    return CostFunctionWithGradient(f_wrapped, g_wrapped, up)
+    # `check_gradient=false`: the user gradient is validated once at the
+    # top-level fit's seed; re-running the CheckGradient discrepancy check
+    # on every MINOS/contour cross-search re-seed (this fixed-param probe)
+    # would be redundant and cost extra FCN calls. The probe gradient is
+    # derived from the same already-validated user gradient.
+    return CostFunctionWithGradient(f_wrapped, g_wrapped, up; check_gradient = false)
 end
 
 function _fix_multi_params(
