@@ -363,7 +363,7 @@
         # a regression to V3-only allocation patterns (1240+ KB) but
         # tolerates the post-gap-closure overhead. Tighten back toward
         # 850 KB after a dedicated alloc-shave pass on the new code
-        # paths (follow-up: see docs/GAP_AUDIT.md if reopened).
+        # paths (follow-up: see docs/dev/GAP_AUDIT.md if reopened).
         n_bytes = @allocated contour_exact(fmin, cf, 1, 2; npoints = 30)
         @test n_bytes > 0           # sanity: some allocs still happen
         @test n_bytes < 1_000_000   # < 1 MB — still well under V3's 1240 KB

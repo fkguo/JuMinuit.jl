@@ -152,7 +152,7 @@ function hesse(
     # cycles regardless of seed, so the observable g2/gstep output
     # matches C++ to within FP precision. For pathological FCNs where
     # convergence depends on the initial step, the two paths can
-    # diverge — see [docs/GAP_AUDIT.md] P2 follow-up note for the fix
+    # diverge — see [docs/dev/GAP_AUDIT.md] P2 follow-up note for the fix
     # (propagate seed-time errors through `MinimumState`).
     #
     # NOTE — gate fidelity vs C++:
@@ -361,13 +361,23 @@ function hesse(
     # design choice perturbs H's diagonal which bounds V's eigenvalues
     # by `1/(λ_H + δ)` rather than perturbing V by `δ` directly — the
     # conservative choice for covariance reporting. Parallel-review #2 C6.
-    err_tmp = make_posdef(MinimumError(Symmetric(vhmat, :U), 1.0), prec)
-    vhmat_pd = copy(parent(err_tmp.inv_hessian))
+    # In-place pos-def enforcement: `vhmat` is a transient (its values are
+    # not read after this point except through the matrix `new_err` keeps),
+    # so `make_posdef!` perturbs it in place and reports whether the
+    # MnMadePosDef tag would apply — bit-identical to the allocating
+    # `make_posdef(MinimumError(Symmetric(vhmat,:U),1.))` it replaces, but
+    # without that call's input copy, p/s scratch, and result wrapper.
+    made_pd = make_posdef!(Symmetric(vhmat, :U), prec)
 
-    # ── Symmetric invert ──────────────────────────────────────────
+    # ── Symmetric invert (in place) ───────────────────────────────
+    # Invert `vhmat` in its own storage → it now holds V = H⁻¹. The
+    # pre-invert pos-def Hessian is not needed afterwards, which removes
+    # the previous `vhmat_pd = copy(...)` round-trip. On factorization
+    # failure the partial Bunch–Kaufman state in `vhmat` is discarded by
+    # the `_hesse_diagonal_failure` path (which rebuilds V from `g2`).
     inv_ok = true
     try
-        sym_invert!(Symmetric(vhmat_pd, :U))
+        sym_invert!(Symmetric(vhmat, :U))
     catch _
         inv_ok = false
     end
@@ -378,9 +388,9 @@ function hesse(
 
     # ── New EDM with the refined error ────────────────────────────
     refined_grad = FunctionGradient(grd, g2, gst)
-    new_err_status = is_made_pos_def(err_tmp) ? MnMadePosDef : MnHesseValid
-    new_dcov = is_made_pos_def(err_tmp) ? 1.0 : 0.0
-    new_err = MinimumError(Symmetric(vhmat_pd, :U), new_dcov, new_err_status, true)
+    new_err_status = made_pd ? MnMadePosDef : MnHesseValid
+    new_dcov = made_pd ? 1.0 : 0.0
+    new_err = MinimumError(Symmetric(vhmat, :U), new_dcov, new_err_status, true)
     # In-place EDM — reuse `yy` (already length n, contents no longer needed
     # after the off-diagonal pass completed above).
     new_edm = estimate_edm!(yy, refined_grad, new_err)
@@ -425,7 +435,7 @@ replaces the meaningful `1/g2` with `1.0`. The intuition "1/g2 = 1e-10
 means the parameter is well determined" suggests the second clamp is
 counterproductive — and PR #6 (commit a1fa015) acted on that
 intuition, removing it. But the empirical IAM x_jm warm-start audit
-(docs/DAVIDON_CXX_AUDIT.md) revealed the opposite: that clamp is
+(docs/dev/DAVIDON_CXX_AUDIT.md) revealed the opposite: that clamp is
 **load-bearing** for cross-basin convergence. The story:
 
 - At the IAM x_jm warm start, all 8 active LECs have `g2 ≈ 1e10` and
@@ -461,8 +471,7 @@ avoids the paras0+S=2 trap.
   the first check; for `g2 < 0` the first check `g2 < eps2` is true
   → C++ falls back to 1 immediately).
 
-See `scratch/iam_seed_at_failed.jl` and `docs/DAVIDON_CXX_AUDIT.md`
-for the live reproduction and audit trail.
+See `docs/dev/DAVIDON_CXX_AUDIT.md` for the audit trail.
 """
 function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
                                   prec::MachinePrecision, nfcn::Integer,
@@ -477,7 +486,7 @@ function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
     # large, > 1/eps2 ≈ 3e7) and falls back to V[j,j] = 1. PR #6
     # (commit a1fa015) had removed this clamp on the theory it was a
     # C++ bug; the empirical IAM x_jm + iminuit cross-check audit
-    # (docs/DAVIDON_CXX_AUDIT.md) showed the clamp is what produces
+    # (docs/dev/DAVIDON_CXX_AUDIT.md) showed the clamp is what produces
     # the iminuit-style V ≈ I that walks the warm start across basins
     # to χ²=322.59 in 8 DFP iters. Restored here for C++ parity.
     @inbounds for j in 1:n

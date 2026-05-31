@@ -136,7 +136,7 @@ profiled rest) at no extra cost — the native analogue of IMinuit.jl's
 
 ### Bootstrap — `bootstrap(model, data, start; ...)`
 Resamples the dataset and re-fits `nresample` times, returning a
-[`BootstrapResult`](../src/resampling.jl):
+[`BootstrapResult`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/resampling.jl):
 
 - **Nonparametric** (`kind = :nonparametric`, default): draws `N` data points
   **with replacement** and re-fits. The spread of θ̂ over the resamples is the
@@ -173,7 +173,7 @@ HESSE/MINOS, or from a parametric / Poisson-count bootstrap (see the
 ### Jackknife — `jackknife(model, data, start; ...)`
 Deletes one point (delete-1, the default) — or one consecutive block
 (`d > 1`) — re-fits, and aggregates the leave-one-out estimates θ̂₍ⱼ₎ into a
-[`JackknifeResult`](../src/resampling.jl):
+[`JackknifeResult`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/resampling.jl):
 
 - **variance** `((g−1)/g)·Σⱼ(θ̂₍ⱼ₎ − θ̄)²` (with `g = N` groups for delete-1) —
   comparable to the HESSE error²;
@@ -287,7 +287,7 @@ SolutionModes: 2 distinct solution(s) from 500 accepted sample(s)
     them independently; do NOT merge into a single error bar.
 ```
 
-Each [`SolutionMode`](../src/solution_modes.jl) carries: the minimum-χ²
+Each [`SolutionMode`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/solution_modes.jl) carries: the minimum-χ²
 **representative** sample of its cluster, that χ² and its **Δχ²** versus the
 global best, the per-parameter **(min, max)** range over the cluster, the point
 count and **fraction**, and the member row indices. Modes are sorted by χ²
@@ -364,11 +364,11 @@ prominently:
 ```
 
 The flag is exposed as `mode.new_min`. This connects directly to the IAM
-cold-start convergence gap (see [`IAM_CONVERGENCE_GAP.md`](IAM_CONVERGENCE_GAP.md)):
+cold-start convergence gap (see [`IAM_CONVERGENCE_GAP.md`](https://github.com/fkguo/JuMinuit.jl/blob/main/docs/dev/IAM_CONVERGENCE_GAP.md)):
 a separated cluster can be exactly the basin a stiff cold-start fit failed to
 reach. Per-mode re-fits are parallelized across threads when the fit opts into
 threading (`m.threaded_gradient`, honoring the same FCN thread-safety contract as
-Phase G/H threaded gradients).
+JuMinuit's threaded gradient).
 
 ### Clustering backends
 
@@ -399,6 +399,39 @@ Phase G/H threaded gradients).
   sampled set*; it cannot prove that every basin was sampled. It is a diagnostic
   layer on top of MC-Δχ² sampling, not a global optimizer.
 
+## Visualizing the results
+
+Every error-analysis output above ships a [RecipesBase](https://github.com/JuliaPlots/RecipesBase.jl)
+recipe, so `plot(...)` works from either Plots.jl or Makie.jl with no extra glue
+(JuMinuit itself depends on neither). A parameter pair is chosen with `vars`
+(indices or names; default the first two free parameters) and a single parameter
+with `par`.
+
+```julia
+using JuMinuit, Plots
+
+# MC-Δχ² sample cloud — a 2D scatter of the accepted set, coloured by Δχ².
+r = get_contours_samples(m; nsamples = 20_000, cl = 1, seed = 1)
+plot(r)                          # first two free parameters
+plot(r; vars = ("mass", "g"))    # pick the pair by name
+
+# Bootstrap / jackknife — histogram of a parameter's resampled distribution
+# (estimate and percentile-CI / mean drawn as reference lines). Its asymmetry
+# about the estimate is exactly what a symmetric error bar cannot show.
+plot(bootstrap(model, data, m; nresample = 2000, seed = 1))   # first free parameter
+plot(jackknife(model, data, m); par = "k")
+
+# Multi-modal solutions — colour one series per mode, mark each representative.
+# Pass the same sample matrix used for clustering to scatter the point cloud:
+S = r.samples
+modes = find_solution_modes(S, m)
+plot(modes, S)                   # cluster cloud, one colour per mode
+plot(modes)                      # no samples → per-mode bounding boxes + reps
+```
+
+The recipes are backend-agnostic; pick a backend (`gr()`, `plotlyjs()`, …) as
+usual. See [`src/plot_recipes.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/plot_recipes.jl).
+
 ## A short decision guide
 
 1. **Default:** quote the **HESSE** error. If the fit is non-parabolic but valid,
@@ -415,10 +448,10 @@ Phase G/H threaded gradients).
 
 ## See also
 
-- Resampling implementation: [`src/resampling.jl`](../src/resampling.jl);
-  tests [`test/test_resampling_errors.jl`](../test/test_resampling_errors.jl)
+- Resampling implementation: [`src/resampling.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/resampling.jl);
+  tests [`test/test_resampling_errors.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/test/test_resampling_errors.jl)
 - MC-Δχ² / `delta_chisq` implementation:
-  [`src/error_sampling.jl`](../src/error_sampling.jl); tests
-  [`test/test_error_sampling.jl`](../test/test_error_sampling.jl)
-- HESSE / MINOS / contours: [`src/hesse.jl`](../src/hesse.jl),
-  [`src/minos.jl`](../src/minos.jl), [`src/contours.jl`](../src/contours.jl)
+  [`src/error_sampling.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/error_sampling.jl); tests
+  [`test/test_error_sampling.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/test/test_error_sampling.jl)
+- HESSE / MINOS / contours: [`src/hesse.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/hesse.jl),
+  [`src/minos.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/minos.jl), [`src/contours.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/contours.jl)

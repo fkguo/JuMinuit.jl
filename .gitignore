@@ -7,6 +7,7 @@
 *.jl.mem
 /Manifest.toml
 /docs/build/
+/docs/Manifest.toml
 /docs/site/
 
 # OS / editor
@@ -14,8 +15,10 @@
 .idea/
 .vscode/
 *.swp
+.ipynb_checkpoints/
 
 # Local dev
+/.claude/
 /scratch/
 
 # C++ harness build artifacts (regenerable via tools/regen_reference.sh)

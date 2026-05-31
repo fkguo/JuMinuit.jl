@@ -368,7 +368,7 @@ end
 
 Cluster a set of Δχ²-accepted parameter samples into DISTINCT solution modes —
 a "beyond iminuit" capability for multi-modal posteriors. See the file header
-and `docs/ERROR_ANALYSIS.md` for the full rationale.
+and `docs/src/error_analysis.md` for the full rationale.
 
 # Arguments
 
@@ -512,7 +512,7 @@ function find_solution_modes(samples::AbstractMatrix, m::Minuit;
 
     # ── Cluster in whitened space ──
     do_parallel = parallel === nothing ?
-        (m.threaded_gradient && Threads.nthreads() > 1) : parallel
+        (_use_threads(m) && Threads.nthreads() > 1) : parallel
     labels, n_noise = if method === :components
         raw, nraw = _connected_components(Z, threshold)
         l, _, nn = _apply_min_size(raw, nraw, Int(min_size))

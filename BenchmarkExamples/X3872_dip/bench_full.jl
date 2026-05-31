@@ -215,7 +215,7 @@ println("└─")
 # `jm_num` at a marginally deeper fval, so the 1e-3 threshold below
 # prints "⚠ MISMATCH" for the AD path. This is NOT a regression — it is
 # inherent to this weakly-constrained fit and is documented in full in
-# `docs/AD_OFFSET_X3872.md`. In short:
+# `docs/dev/AD_OFFSET_X3872.md`. In short:
 #   • The numerical and AD MIGRAD seeds use different diagonal 2nd-deriv
 #     estimates (g2): numerical refines g2 by finite differences; the AD
 #     path uses the rough 2·up/dirin² estimate. This is C++ Minuit2-
@@ -251,7 +251,7 @@ for (lab, m) in fits
             " Δfval=", round(Δf; sigdigits=3), " → ", verdict)
 end
 println("  (note: jm_ad ⚠ MISMATCH is EXPECTED & negligible here — flat",
-        " degenerate valley + C++-faithful AD seed g2; see docs/AD_OFFSET_X3872.md)")
+        " degenerate valley + C++-faithful AD seed g2; see docs/dev/AD_OFFSET_X3872.md)")
 
 # ─────────────────────────────────────────────────────────────────────
 # Stage 2: MINOS — all parameters, all schemes (reuses pre-fit Minuit

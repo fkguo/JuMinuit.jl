@@ -3,7 +3,7 @@
 Date: 2026-05-27 · Reference: GooFit/Minuit2 v6.24.0 @ 57dc936 ·
 Comparison: `reference/Minuit2_cpp/{inc,src}/*` vs `src/*.jl`
 
-This document supplements [ROADMAP §9 "Deferred"](../ROADMAP.md) — it
+This document supplements [ROADMAP §9 "Deferred"](ROADMAP.md) — it
 lists items that are **either intentionally deferred (cross-listed
 with ROADMAP §9) or NOT yet documented as deferred** and may need
 attention.
@@ -267,7 +267,7 @@ relative to C++:
 
 ## See also
 
-- [ROADMAP.md §9 "Deferred"](../ROADMAP.md) — items intentionally not
+- [ROADMAP.md §9 "Deferred"](ROADMAP.md) — items intentionally not
   ported with rationale.
 - [BenchmarkExamples/RESULTS.md](../BenchmarkExamples/RESULTS.md) —
   two algorithm bugs discovered via real-fit benchmarks, tracked

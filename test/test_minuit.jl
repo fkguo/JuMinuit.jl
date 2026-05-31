@@ -18,7 +18,7 @@
     end
 
     @testset "Default strategy = 1 (iminuit Minuit-class parity)" begin
-        # Regression for docs/IAM_CONVERGENCE_GAP.md: the high-level
+        # Regression for docs/dev/IAM_CONVERGENCE_GAP.md: the high-level
         # Minuit(fcn, x0) constructor must default to Strategy(1) — the
         # iminuit `Minuit` class default and C++ Minuit2 `MnStrategy()`
         # default — so a bare `migrad!(m)` is drop-in-equivalent to
@@ -575,6 +575,18 @@
         m = Minuit(x -> sum(abs2, x), [1.0, 2.0])
         @test_throws ArgumentError minos!(m, 1)  # no migrad! yet
         @test_throws ArgumentError JuMinuit.hesse(m)  # no migrad! yet
+    end
+
+    @testset "hesse! is the exported bang alias of hesse" begin
+        @test JuMinuit.hesse! === JuMinuit.hesse
+        @test :hesse! in names(JuMinuit)
+        cf_fn = x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2
+        m = Minuit(cf_fn, [0.0, 0.0]; errors = [0.1, 0.1])
+        migrad!(m)
+        ret = hesse!(m)                  # bang alias: mutates m, returns m
+        @test ret === m
+        @test m.is_valid
+        @test m.covariance !== nothing
     end
 
     @testset "hesse(m) refreshes the covariance (was placeholder)" begin

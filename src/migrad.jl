@@ -131,7 +131,7 @@ end
 # corrupted gradients; MIGRAD then slides to a different local minimum
 # than the sequential run, SILENTLY giving a wrong answer.
 #
-# The IAM 2π form-factor fit (BenchmarkExamples/IAM_2Pformfactor/)
+# The inverse-amplitude-method (IAM) fit (BenchmarkExamples/IAM_2Pformfactor/)
 # exhibits this: `St4_00!` mutates `const c_00_4 = zeros(ComplexF64, 3, 3)`.
 # Single-thread converges to χ²≈614; threaded "converges" to χ²≈987.
 #
@@ -328,11 +328,10 @@ Native-Julia MIGRAD minimization of the user FCN `cf` starting from
 `x0` with per-parameter step sizes `errs`. Returns a
 [`FunctionMinimum`](@ref).
 
-Phase 0 — see ROADMAP §3:
-- Unconstrained (no bounds, no fixed parameters).
-- Numerical gradient only (no analytical FCN gradient yet).
-- Strategy(0) only (Strategy ≥ 1 needs Phase 1's `MnHesse`).
-- Default `maxfcn` matches C++ `MnApplication.cxx:43`.
+This is the low-level unconstrained core — bounds and fixed parameters are
+handled by the [`Minuit`](@ref) front end, and analytical/AD gradients via the
+cost-function type. All Strategy levels 0/1/2 are supported (Strategy ≥ 1 runs
+the inner-HESSE refinement). Default `maxfcn` matches C++ `MnApplication.cxx:43`.
 - Convergence: stop when `edm ≤ tol · 0.002` (`VariableMetricBuilder.cxx:66`),
   or when `nfcn ≥ maxfcn`.
 
@@ -345,7 +344,7 @@ Phase 0 — see ROADMAP §3:
 
 # Keyword arguments
 
-- `strategy::Strategy=Strategy(0)` — Phase 0 only supports level 0.
+- `strategy::Strategy=Strategy(0)` — Strategy level; 0/1/2 all supported.
 - `tol::Real=0.1` — convergence tolerance on EDM (after `*0.002` factor).
 - `maxfcn::Integer=200+100·n+5·n²` — call-count limit.
 - `prec::MachinePrecision=MachinePrecision()` — floating-point precision.
@@ -729,7 +728,7 @@ function _migrad_loop(
         # lets the IAM x_jm warm start reach χ²=322.59 like iminuit does.
         #
         # **Status-gated entry shortcut** (JuMinuit-only optimization, see
-        # `docs/DAVIDON_CXX_AUDIT.md` option B): when (a) edm is already
+        # `docs/dev/DAVIDON_CXX_AUDIT.md` option B): when (a) edm is already
         # below tolerance AND (b) the current V has status `MnHesseValid`
         # (i.e., came from a real Hesse / DFP-update, NOT a placeholder),
         # skip the body. Preserves the historical "warm-restart at

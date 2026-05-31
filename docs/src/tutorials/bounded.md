@@ -1,6 +1,6 @@
 # Bounded parameters
 
-Phase 1 ships the iminuit-style **named-parameter API**: `MinuitParameter`
+JuMinuit provides the iminuit-style **named-parameter API**: `MinuitParameter`
 + `Parameters`, with per-parameter `lower`/`upper`/`fixed` flags.
 Bounds are implemented via internal `sin`/`sqrt` coordinate transforms
 mirroring C++ Minuit2 (no L-BFGS-B-style projected gradient).
@@ -81,5 +81,5 @@ shrinks toward zero at the boundary).
 ## Bound saturation
 
 If MIGRAD ends with a parameter pinned at its `lower` or `upper` limit,
-the pretty-print will reflect "Some parameters at limit" (Phase 3
-extension; current minimal output flags this in the box header).
+the status box flags it — the "parameters at limit" row switches to a
+warning.

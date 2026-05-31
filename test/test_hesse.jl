@@ -92,7 +92,7 @@
         # `feat/davidon-cxx-audit` option-1 revert) applies a SECOND
         # CLAMP `tmp < eps2 ? 1 : tmp`: for x[1] with `1/g2 = 5e-10`
         # which is below `eps2 = 2.98e-8`, V[1,1] gets clamped to 1.0.
-        # See docs/DAVIDON_CXX_AUDIT.md for the audit that motivated
+        # See docs/dev/DAVIDON_CXX_AUDIT.md for the audit that motivated
         # restoring this clamp — it's what lets IAM x_jm warm-start
         # walk to χ²=322.59 via the V≈I-induced large Newton step.
         cf = CostFunction(x -> 1e9 * x[1]^2 + 0.0 * x[2], 1.0)

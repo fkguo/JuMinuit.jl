@@ -64,6 +64,36 @@ JuMinuit.ContoursError
 
 ```@docs
 JuMinuit.Minuit
+JuMinuit.migrad!
+JuMinuit.minos!
+JuMinuit.hesse!
+JuMinuit.HesseResult
+```
+
+## Other minimizers
+
+```@docs
+JuMinuit.simplex
+JuMinuit.scan
+```
+
+## Per-parameter mutators
+
+```@docs
+JuMinuit.fix!
+JuMinuit.release!
+JuMinuit.set_value!
+JuMinuit.set_error!
+JuMinuit.set_limits!
+JuMinuit.remove_limits!
+```
+
+## IMinuit.jl compatibility
+
+```@docs
+JuMinuit.Data
+JuMinuit.chisq
+JuMinuit.model_fit
 ```
 
 ## Strategy & precision
@@ -71,6 +101,54 @@ JuMinuit.Minuit
 ```@docs
 JuMinuit.Strategy
 JuMinuit.MachinePrecision
+```
+
+## Cost functions
+
+```@docs
+JuMinuit.AbstractCost
+JuMinuit.LeastSquares
+JuMinuit.UnbinnedNLL
+JuMinuit.ExtendedUnbinnedNLL
+JuMinuit.BinnedNLL
+JuMinuit.ExtendedBinnedNLL
+JuMinuit.CostSum
+JuMinuit.errordef
+```
+
+## Error analysis (sampling & confidence regions)
+
+```@docs
+JuMinuit.delta_chisq
+JuMinuit.chisq_cl
+JuMinuit.get_contours_samples
+JuMinuit.contour_df_samples
+JuMinuit.contour_parameter_sets
+```
+
+## Resampling (bootstrap & jackknife)
+
+```@docs
+JuMinuit.bootstrap
+JuMinuit.jackknife
+JuMinuit.BootstrapResult
+JuMinuit.JackknifeResult
+JuMinuit.correlation
+```
+
+## Multi-modal solution detection
+
+```@docs
+JuMinuit.find_solution_modes
+JuMinuit.SolutionMode
+JuMinuit.SolutionModes
+```
+
+## Alternative minimizers (Optim.jl bridge)
+
+```@docs
+JuMinuit.optim
+JuMinuit.minimize_with
 ```
 
 ## Common accessors

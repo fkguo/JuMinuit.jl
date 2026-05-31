@@ -12,7 +12,7 @@
 #
 # They agree for a well-specified Gaussian model and diverge precisely when the
 # error model is wrong or the estimator is biased — which is what makes them a
-# useful cross-check. See docs/ERROR_ANALYSIS.md for the unified comparison.
+# useful cross-check. See docs/src/error_analysis.md for the unified comparison.
 #
 # No C++ Minuit2 analogue (C++ Minuit2 has no resampling layer); this is a
 # JuMinuit extension built on top of `Data` / `model_fit` / `migrad!`. Three

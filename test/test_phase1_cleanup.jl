@@ -2,7 +2,7 @@
 
 # ─────────────────────────────────────────────────────────────────────────────
 # test_phase1_cleanup.jl — focused tests for the four Phase-1 cleanup items
-# tracked in docs/GAP_AUDIT.md (M4, M5, M6, P5).
+# tracked in docs/dev/GAP_AUDIT.md (M4, M5, M6, P5).
 #
 # Coverage:
 #   M4: MinosError.upper_state / lower_state populated at the ±σ crossing

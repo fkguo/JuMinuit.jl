@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Copyright (C) 2026 fkguo and JuMinuit.jl contributors
+# Copyright (C) 2026 Feng-Kun Guo
 #
 # Derivative work of C++ Minuit2 (GooFit/Minuit2 @ v6.24.0); see LICENSE
 # and docs/UPSTREAM.md.
@@ -7,18 +7,33 @@
 """
     JuMinuit
 
-Native-Julia port of the C++ Minuit2 function-minimization library, the
-algorithm at the heart of every HEP fit. Targets drop-in replacement of
-the iminuit/IMinuit.jl stack with C++-comparable performance.
+Native-Julia port of the C++ Minuit2 function-minimization library — the
+algorithm at the heart of every HEP fit. A drop-in replacement for IMinuit.jl
+(the Julia Minuit2 wrapper), with an iminuit-style API and C++-comparable
+(often better) performance.
 
-Status: **Phase 0 (proof of concept)** — see [`ROADMAP.md`](../ROADMAP.md).
-Phase 0 ships unconstrained MIGRAD with numerical gradient and
-`Strategy(0)` only. Bounds, fixed parameters, MINOS, contours, and HESSE
-land in Phase 1.
+# What's included
+- **MIGRAD** (variable-metric / DFP), **HESSE**, **MINOS** (asymmetric
+  errors), **MnContours**, **Simplex** and **Scan** — ported from C++
+  Minuit2 v6.24.0 with line-by-line fidelity.
+- Bounds, fixed parameters and Strategy levels 0/1/2, using the same
+  sin/√ transforms as C++; the user FCN always sees external coordinates.
+- An iminuit-style `Minuit` front end (`m.values`, `m.errors`, `migrad!`,
+  `minos!`, …) plus IMinuit.jl-compatible `Fit` / `ArrayFit`.
+- A Julia-native cost-function family (`LeastSquares`, `UnbinnedNLL`,
+  `BinnedNLL`, …) composable with `CostSum`.
+- Error analysis beyond HESSE/MINOS: Monte-Carlo Δχ² regions, bootstrap,
+  jackknife and multi-modal solution detection (see `docs/src/error_analysis.md`).
+- AD-backed gradients (ForwardDiff extension), an opt-in threaded numerical
+  gradient, and an `Optim.jl` alternative-minimizer bridge (`optim`).
 
-The implementation mirrors `reference/Minuit2_cpp/` (pinned to
-`57dc936`, v6.24.0). Each src/ file maps 1-to-1 to a C++ translation
-unit so audits diff cleanly. See `docs/PORTING.md` for the mapping.
+The implementation mirrors `reference/Minuit2_cpp/` (pinned to GooFit/Minuit2
+`57dc936`, v6.24.0); each src/ file maps to a C++ translation unit so audits
+diff cleanly. Development history, the C++-fidelity audit, and the
+deferred-feature list live in `docs/dev/`.
+
+See the [manual](https://fkguo.github.io/JuMinuit.jl) for tutorials and the
+full API.
 """
 module JuMinuit
 
@@ -68,7 +83,16 @@ include("plot_recipes.jl")
 include("plot_text.jl")
 include("precompile_workload.jl")
 
-# Phase 0 public surface (will grow as files are added).
+"""
+    hesse!(m::Minuit; kwargs...) -> Minuit
+
+Bang-named alias of [`hesse`](@ref): `hesse(m)` mutates `m` (it stores the
+refreshed covariance), so `hesse!` matches the `migrad!` / `minos!` convention.
+Identical behaviour — use whichever reads better.
+"""
+const hesse! = hesse
+
+# Public API surface.
 export MachinePrecision
 export Strategy
 export CovStatus
@@ -96,7 +120,7 @@ export n_pars, n_free, ext_index
 export int_to_ext_value, ext_to_int_value, dint2ext_value
 export int_to_ext_vector, ext_to_int_vector
 export initial_int_values, initial_int_errors
-export hesse, HesseResult
+export hesse, hesse!, HesseResult
 export squeeze_symmetric, squeeze_error
 export MnCross, MinosError, minos, minos_lower, minos_upper
 export ContoursError, contour, contour_exact, contour_parameter_sets
@@ -148,7 +172,7 @@ export SolutionMode, SolutionModes, find_solution_modes
 export mncontour, profile, mnprofile
 export draw_contour, draw_mncontour, draw_profile, draw_mnprofile, draw_mnmatrix
 # Alternative-minimizer bridge (Optim.jl extension — `using Optim` to enable)
-export scipy, minimize_with
+export optim, minimize_with
 
 # Terminal / SSH / headless-CI ASCII renderer (plot_text.jl, gap M2)
 export mn_plot_text

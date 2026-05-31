@@ -132,7 +132,7 @@
 
         # Pin Strategy(0) (quick mode) so the comparison to iminuit's S0 plain
         # migrad is apples-to-apples. (The high-level default is now Strategy(1)
-        # for iminuit parity, see docs/IAM_CONVERGENCE_GAP.md.)
+        # for iminuit parity, see docs/dev/IAM_CONVERGENCE_GAP.md.)
         m1 = Minuit(fcn, [-5.0, 5.0];
                      names = ["a", "b"], errors = [0.5, 0.5],
                      strategy = Strategy(0))

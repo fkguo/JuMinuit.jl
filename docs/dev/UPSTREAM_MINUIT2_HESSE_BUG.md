@@ -150,4 +150,4 @@ flip downstream rather than silently inverting `1/(−g2)` to `1`.
 * JuMinuit.jl benchmark and physics-impact documentation:
   [`BenchmarkExamples/RESULTS.md`](../BenchmarkExamples/RESULTS.md)
 * JuMinuit.jl gap audit listing this and other ports:
-  [`docs/GAP_AUDIT.md`](GAP_AUDIT.md)
+  [`GAP_AUDIT.md`](GAP_AUDIT.md)

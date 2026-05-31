@@ -13,7 +13,7 @@
 # For symmetric quadratic FCNs near the minimum (well-conditioned
 # fits), the ellipse is the exact 1σ contour. For non-quadratic FCNs
 # (Rosenbrock-like) the ellipse is an approximation; the true contour
-# requires the full MnContours port (Phase 1.x — see DEFERRED.md).
+# requires the full MnContours port (Phase 1.x — see docs/dev/DEFERRED.md).
 # ─────────────────────────────────────────────────────────────────────────────
 
 """

@@ -3,6 +3,59 @@
 All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 + [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-05-31
+
+First public release. A complete error-analysis suite, a Julia-native
+cost-function family, and an Optim.jl bridge land on top of the
+now-C++-fidelity-audited core.
+
+### Added
+
+- **Julia-native cost functions** — `LeastSquares`, `UnbinnedNLL`, `BinnedNLL`,
+  `ExtendedUnbinnedNLL`, `ExtendedBinnedNLL`, composable with `CostSum` (`+`),
+  each carrying its `errordef`. Interoperate with the IMinuit.jl `chisq` / `Data`.
+- **Error analysis beyond HESSE/MINOS** — Monte-Carlo Δχ² confidence regions
+  (`get_contours_samples` / `contour_df_samples`, with `delta_chisq` / `chisq_cl`),
+  data-resampling errors (`bootstrap`, `jackknife`, `correlation`), and
+  **multi-modal solution detection** (`find_solution_modes`, via a Clustering.jl
+  extension). `contour_parameter_sets` exposes the full parameter vector at every
+  contour point.
+- **Alternative-minimizer bridge** — `optim(m)` / `minimize_with(m, opt)` route a
+  fit through any Optim.jl optimizer (the Julia analogue of iminuit's `scipy()`),
+  via an Optim.jl extension.
+- `hesse!` as a bang-named alias of `hesse` (consistent with `migrad!` / `minos!`).
+- Threaded numerical gradient — a 3-way `threaded_gradient` switch
+  (`false` / `true` / `:auto`) with a thread-safety pre-flight (`is_thread_safe`,
+  `ThreadSafetyError`); `:auto` probes once (memoized), threading only when the
+  FCN is safe and otherwise falling back to serial with a single warning (#32).
+- **Plot recipes for the error-analysis suite** (RecipesBase, Plots/Makie-agnostic)
+  — `plot(...)` on Monte-Carlo Δχ² samples (`get_contours_samples`),
+  `BootstrapResult` / `JackknifeResult` distributions, and multi-modal
+  `SolutionModes`, alongside the existing contour / MINOS / `FunctionMinimum`
+  recipes (#35).
+
+### Performance
+
+- In-place `int_to_ext_vector!` removes the per-FCN-call allocation on the
+  bounded MIGRAD path — toy fits now run at ~1 allocation/fit (#34).
+- In-place `make_posdef!` reuse in HESSE, plus linalg / scratch micro-opts (#36).
+- Extended PrecompileTools workload covering the cost-function classes, the
+  error-analysis layer, and the package extensions — lower first-call latency
+  (TTFX) (#33).
+
+### Changed
+
+- Defaults aligned with iminuit: `Strategy(1)` and `4·eps` machine precision.
+- Documentation reorganised for a public release — a Documenter manual
+  (tutorials, cost functions, error analysis, API reference); development and
+  audit notes moved under `docs/dev/`.
+
+### Fixed
+
+- C++ Minuit2 v6.24.0 fidelity audit closed end to end: `MnMachinePrecision`
+  (`4·ε`), Simplex / negative-g2 / positive-definite handling, the MnContours
+  direction-switch retry, CheckGradient diagnostics, and covariance squeeze.
+
 ## [0.2.0-alpha] — 2026-05-25
 
 Phase 1.x deep refinements + Phase 1 exit-gate + Phase 3 polish.
@@ -179,9 +232,7 @@ tests passing. Aqua + JET clean.
 
 ### Audit trail
 
-- Four rounds of independent parallel multi-agent review (codex
-  gpt-5.5 xhigh + native Opus subagent), all archived under
-  `scratch/{codex,opus}_review_phase*.md`:
+- Four rounds of independent parallel review:
   1. v1 → v2 ROADMAP reconciliation (caught a real `sum_sym`
      signed-vs-absolute blocking bug in linalg).
   2. Phase 0 MIGRAD integration (caught `reached_call_limit` AND-gate
@@ -224,4 +275,6 @@ tests passing. Aqua + JET clean.
 - `m.errors[name] = ...` setter API.
 - Documentation site (Documenter.jl).
 
-[0.1.0-alpha]: https://github.com/fkguo/JuMinuit.jl/compare/main...HEAD
+[0.3.0]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.3.0
+[0.2.0-alpha]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.2.0-alpha
+[0.1.0-alpha]: https://github.com/fkguo/JuMinuit.jl/releases/tag/v0.1.0-alpha

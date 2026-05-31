@@ -1,28 +1,32 @@
 # JuMinuit.jl
 
+[![Dev docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://fkguo.github.io/JuMinuit.jl/dev)
+[![License: LGPL v2.1+](https://img.shields.io/badge/License-LGPL%20v2.1%2B-blue.svg)](LICENSE)
+[![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Fmonthly_downloads%2FJuMinuit&query=total_requests&suffix=%2Fmonth&label=downloads&color=brightgreen)](https://juliapkgstats.com/pkg/JuMinuit)
+[![GitHub stars](https://img.shields.io/github/stars/fkguo/JuMinuit.jl?style=flat&logo=github)](https://github.com/fkguo/JuMinuit.jl/stargazers)
+
 Native-Julia port of the C++ [Minuit2](https://root.cern.ch/doc/master/Minuit2Page.html)
-function-minimization library — the workhorse of every HEP fit.
-Designed as a drop-in replacement for the
-[iminuit](https://github.com/scikit-hep/iminuit) +
-[IMinuit.jl](https://github.com/fkguo/IMinuit.jl) stack with
-**C++-comparable or better performance** (typically 0.13× to 0.89× C++
-Minuit2 wall time on representative §3.3 benchmarks; Phase 0 §3.4 gate
-verified).
+function-minimization library — the workhorse of every HEP fit. JuMinuit is a
+drop-in replacement for [IMinuit.jl](https://github.com/fkguo/IMinuit.jl) (the
+Julia Minuit2 wrapper), with an [iminuit](https://github.com/scikit-hep/iminuit)-style
+API, **C++-comparable (often better) performance**, and error-analysis tools
+that go beyond what either offers.
 
-License: **LGPL 2.1 or later** (mirrors upstream Minuit2).
+License: **LGPL 2.1 or later** (mirrors upstream Minuit2). This is a derivative
+work of C++ Minuit2 — see [`LICENSE`](LICENSE) and [`docs/UPSTREAM.md`](docs/UPSTREAM.md).
 
-For functions defined, click
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://fkguo.github.io/JuMinuit.jl/dev)
-
-<!-- Binder badge — activates once the repo is public on GitHub.
-     mybinder.org needs to clone the repo (currently private → 503).
-     Restore by un-commenting the line below when fkguo/JuMinuit.jl
-     is made public; the `.binder/` config is already in place.
-
-For interactive examples, click
+<!-- Binder badge activates once the repo is public (mybinder needs to clone it):
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/fkguo/JuMinuit.jl/main?urlpath=lab%2Ftree%2Fdocs%2Fexample.ipynb)
 -->
 
+## Installation
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/fkguo/JuMinuit.jl")   # until registered in General
+```
+
+JuMinuit needs no compiled dependencies — it is pure Julia.
 
 ## Quick start
 
@@ -31,211 +35,192 @@ using JuMinuit
 
 # iminuit-style API
 m = Minuit(x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2,
-            [0.0, 0.0];
-            names = ["a", "b"],
-            errors = [0.1, 0.1],
-            limits = [(-5.0, 5.0), nothing])
+           [0.0, 0.0];
+           names  = ["a", "b"],
+           errors = [0.1, 0.1],
+           limits = [(-5.0, 5.0), nothing])
 migrad!(m)
 minos!(m)
 
 println(m.values)        # ≈ [1.0, 2.0]
-println(m.errors)        # external 1σ errors
+println(m.errors)        # parabolic (HESSE) 1σ errors
 println(m.fval)          # ≈ 0.0
 println(m.minos_errors)  # asymmetric ±σ per parameter
-println(m)               # pretty table
+m                        # rich table (HTML in Jupyter, text in the REPL)
 ```
+
+`Fit` and `ArrayFit` are exported as IMinuit.jl-compatible aliases, so existing
+IMinuit.jl scripts largely work unchanged.
 
 ## Features
 
-### Core (Phase 0 + 1)
+### Minuit2 algorithms (ported with line-by-line C++ fidelity)
 
-- **MIGRAD** — Variable-Metric (DFP) with central-difference numerical
-  gradient. Faster than C++ Minuit2 on every benchmark in the test
-  corpus.
+- **MIGRAD** — Variable-Metric (DFP) with a central-difference numerical
+  gradient. Faster than C++ Minuit2 on every benchmark in the test corpus.
 - **HESSE** — full numerical Hessian + Bunch–Kaufman inversion +
   positive-definite enforcement.
-- **MINOS** — asymmetric ±σ errors via parabolic root-find with inner
-  re-minimization.
-- **Contours** — 2D 1σ contour (Phase 1 first cut: ellipse approximation
-  from MINOS + off-diagonal covariance; multi-parameter `MnFunctionCross`
-  for the C++-exact contour is Phase 1.x).
-- **Bounds and fixed parameters** — sin/sqrt parameter transformations
-  matching C++ Minuit2 exactly; per-parameter `fixed` flags. The user
-  FCN always sees external (physical) coordinates.
-- **Named parameters** — `m.params`, `m["x"]`-style access from Phase 3.
+- **MINOS** — asymmetric ±σ errors via `MnFunctionCross` parabolic root-find
+  with inner re-minimization.
+- **MnContours** — exact multi-parameter confidence contours (not just the
+  HESSE ellipse), plus `profile` / `mnprofile`.
+- **Simplex** and **Scan** minimizers.
+- **Bounds, fixed parameters, and Strategy levels 0/1/2** — the same sin/√
+  parameter transforms as C++ Minuit2; the user FCN always sees external
+  (physical) coordinates. Defaults match iminuit (`Strategy(1)`, `4·ε`
+  machine precision).
 
-### Performance (Phase 0 §3.4 Criterion 2)
+### iminuit / IMinuit.jl-compatible front end
 
-| Benchmark | Julia (μs) | C++ (μs) | Julia / C++ |
-|---|---|---|---|
-| `quad_4d` | 1.27 | 9.71 | **0.131×** |
-| `rosenbrock_2d` | 17.1 | 63.7 | **0.268×** |
-| `rosenbrock_10d` | 98.1 | 270.2 | **0.363×** |
-| `gauss_ll_10_1000` | 55.6 | 78.2 | **0.710×** |
-| `gauss_ll_2_100` | 34.8 | 39.2 | **0.887×** |
+`m.values`, `m.errors`, `m.covariance`, `m.merrors`, `migrad!`, `hesse!`,
+`minos!`, `mncontour`, per-parameter `fix!`/`set_limits!`/…, named-parameter
+access, and Jupyter-first rich output (`to_latex`, HTML tables, plot recipes).
 
-Measured on Apple M3 / Julia 1.12 / OpenBLAS 0.3.29; Strategy(0),
-single-threaded BLAS on both sides. Reproduce via
-`benchmark/cpp/build/cpp_bench` + `benchmark/compare_cpp.jl`.
+### Julia-native cost functions
 
-**Why Julia wins**: parametric `CostFunction{F}` devirtualizes the FCN
-call site at compile time; C++ Minuit2 has overhead from `shared_ptr`
-ref-counting and ABObj expression-template dispatch.
+`LeastSquares`, `UnbinnedNLL`, `BinnedNLL`, `ExtendedUnbinnedNLL`,
+`ExtendedBinnedNLL`, composable with `CostSum` (`+`). Each carries the right
+`errordef`, so MINOS/HESSE scaling is automatic. Interoperates with IMinuit.jl's
+`chisq` / `Data` helpers.
 
-### Phase 2
+### Error analysis beyond HESSE and MINOS
 
-- **AD-backed gradients** (2.1) via `ForwardDiff.jl` or any
-  `gradient::Function` callback. Drop-in replacement for central diff —
-  typically 5-10× fewer FCN evaluations on cheap FCNs.
+When MINOS can't close a contour (flat or strongly non-Gaussian likelihoods —
+common in coupled-channel / amplitude fits), JuMinuit adds:
 
-  ```julia
-  using ForwardDiff
-  f = x -> sum(abs2, x .- [1.0, 2.0])
-  cf = CostFunctionWithGradient(f, x -> ForwardDiff.gradient(f, x))
-  m = migrad(cf, [0.0, 0.0], [0.1, 0.1])
-  ```
+- **Monte-Carlo Δχ² regions** (`get_contours_samples`) — sample the true
+  `Δχ² ≤ delta_chisq(cl, ndof)` region; captures non-Gaussian and joint
+  multi-parameter shapes. Over-coverage-aware (inflation, adaptive widening,
+  covariance-free box proposal).
+- **Bootstrap** and **jackknife** (`bootstrap`, `jackknife`) — data-resampling
+  errors that don't trust the quoted `σ`; with full covariance + `correlation`.
+- **Multi-modal solution detection** (`find_solution_modes`) — cluster the
+  accepted samples (in whitened/Mahalanobis coordinates) into **statistically
+  distinct solutions**, with optional per-mode re-fit and a "deeper-than-global"
+  flag. Detects when a fit has several physically different solutions of
+  comparable χ² that a single error bar would hide.
 
-- **Result serialization** (2.5) via `JuMinuit.to_dict(m)` for
-  JSON / JLD2 storage of fit results.
+See the [error-analysis guide](docs/src/error_analysis.md) for the full comparison
+table (which method, when) and worked examples.
 
-## Beyond C++ Minuit2 — Julia-only features
+### Alternative minimizers
 
-JuMinuit ships two capabilities that **C++ Minuit2 cannot offer**, both
-flowing directly from Julia's generic-function dispatch and lightweight
-multithreading. Useful for HEP fits where the FCN is expensive or
-contains complex-valued intermediates (amplitudes, propagators).
+`optim(m)` bridges to any [Optim.jl](https://github.com/JuliaNLSolvers/Optim.jl)
+optimizer (LBFGS/BFGS/NelderMead/Newton/…) and writes the result back into the
+`Minuit` so you can follow with `hesse!`/`minos!` — the Julia-native analogue of
+iminuit's `Minuit.scipy()`. Loads on `using Optim` (package extension).
 
-### Why these are Julia-only
+## Migrating from iminuit / IMinuit.jl
 
-C++ Minuit2's `MnFcn::operator()(const vector<double>&)` is a **virtual
-function**. Virtual functions cannot be templated, so the input type is
-locked to `double`. Generic AD (`ForwardDiff.Dual`, Enzyme, etc.) cannot
-promote through this signature, and threading a single call across
-parameters requires hand-written `vector<complex<double>>` overloads
-per FCN. **Julia has no such barrier**: user FCNs are generic on
-element type by default, so swapping `Vector{Float64}` for
-`Vector{Dual{...}}` or running `n` evaluations in parallel requires
-zero user-code changes.
+| iminuit / IMinuit.jl | JuMinuit |
+|---|---|
+| `Minuit(fcn, x0; ...)` | same — `Minuit(fcn, x0; names, errors, limits, ...)` |
+| `m.migrad()` / `migrad(m)` | `migrad!(m)` |
+| `m.hesse()` / `m.minos()` | `hesse!(m)` / `minos!(m)` |
+| `m.values`, `m.errors`, `m.covariance` | same |
+| `m.mncontour(a, b)` | `mncontour(m, a, b)` |
+| IMinuit.jl `Fit`, `ArrayFit` | exported aliases of `Minuit` |
+| IMinuit.jl `chisq`, `Data` | exported, same signatures |
+| `m.scipy(method=...)` | `optim(m; method=...)` (needs `using Optim`) |
 
-### 1. AD gradients via `CostFunctionAD` (Phase F)
+The API mirrors iminuit where it makes sense and leans on Julia's strengths
+(generic FCNs, multiple dispatch, package extensions) where that is better.
 
-Load `ForwardDiff` (or any AD library that returns `Vector{Float64}`)
-and the gradient routes through `ForwardDiff.gradient(f, x)` end-to-end
-— MIGRAD, MINOS, contour boundaries all use the AD path.
+## Beyond C++ Minuit2 — Julia-only gradient options
+
+Two capabilities flow directly from Julia's generic-function dispatch and
+lightweight threading — useful when the FCN is expensive or contains
+complex-valued intermediates (amplitudes, propagators). C++ Minuit2's
+`MnFcn::operator()` is a **virtual** function locked to `double`, so neither
+generic AD nor zero-copy threading is possible there.
+
+### 1. AD gradients via the ForwardDiff extension
+
+Load `ForwardDiff` (or any AD that returns `Vector{Float64}`) and the gradient
+routes through AD end-to-end — MIGRAD, MINOS, and contour boundaries all use it.
 
 ```julia
 using JuMinuit, ForwardDiff     # extension auto-activates
 
-# Real parameters, complex amplitude intermediate — typical HEP fit
 function chi2(par)
     mass, coupling, width = par
     χ² = 0.0
     for (sᵢ, yᵢ) in data
-        # Complex Breit-Wigner — note `complex(...)` keeps type generic
-        amp = coupling / (sᵢ - mass^2 - im * mass * width)
+        amp   = coupling / (sᵢ - mass^2 - im * mass * width)  # complex BW
         model = abs2(amp)
-        χ² += (model - yᵢ)^2
+        χ²   += (model - yᵢ)^2
     end
     return χ²
 end
 
-cf = CostFunctionAD(chi2, 0.5)   # 0.5 = NLL convention
-fmin = migrad(cf, x0, errs)
-# or via high-level Minuit API:
-m = Minuit(chi2, x0; error=errs, grad = x -> ForwardDiff.gradient(chi2, x))
+m = Minuit(chi2, x0; error = errs, grad = x -> ForwardDiff.gradient(chi2, x))
 migrad!(m)
 ```
 
-**Common pitfall — your FCN must be generic on element type**:
+> **Your FCN must be generic on element type** for AD to work: write `f(x)` not
+> `f(x::Vector{Float64})`, use `complex(...)` rather than `Complex{Float64}`
+> literals, and allocate scratch as `similar(x, eltype(x))`. If it can't be made
+> generic (mutates Float64 buffers, calls C libraries), use the threaded option.
 
-- ❌ `function f(x::Vector{Float64}) ... end` blocks `Dual`
-- ✓ `function f(x) ... end`
-- ❌ `c::Complex{Float64} = ...` type-locks the intermediate
-- ✓ `c = complex(...)` or `c = ... + im * something`
-- ❌ Pre-allocated `Vector{Float64}` scratch *inside* `f`
-- ✓ `scratch = similar(x, eltype(x))` or allocate fresh per call
+### 2. Threaded numerical gradient
 
-If your FCN can't be made generic (mutates Float64 buffers, calls C
-libraries, etc.), use option 2 below.
+Start Julia with `julia -t N` and pass `threaded_gradient=true`; the
+per-coordinate gradient loop runs in parallel. Works on **any thread-safe FCN**.
 
-### 2. Threaded numerical gradient (Phase G)
+`threaded_gradient` is a 3-way switch:
 
-Start Julia with multiple threads (`julia -t N`) and pass
-`threaded_gradient=true`. The per-coordinate `for i in 1:n` loop inside
-`numerical_gradient!` runs in parallel across `N` threads. Works on
-**any FCN that is thread-safe** (see ⚠ warning below).
+| value | behaviour |
+|-------|-----------|
+| `false` *(default)* | serial gradient — always safe, zero overhead. |
+| `true` | force the threaded gradient; on the first call it auto-verifies thread-safety and raises `ThreadSafetyError` if the FCN is not thread-safe (see the contract below). |
+| `:auto` | probe thread-safety **once** (memoized on the fit); if safe, use the threaded gradient, otherwise emit a single `@warn` and fall back to the serial gradient. Never throws, never returns a racy result. On single-thread Julia (`-t 1`) it is silently serial (no probe); no-op for AD (`grad=`) fits. |
+
+The default stays `false` because threading only pays off for expensive
+FCNs at higher `n`; `:auto` is the opt-in "thread it safely without me
+checking" switch.
 
 ```julia
-# Start: julia -t 8
-using JuMinuit
-m = Minuit(my_chi2, x0; error=errs, threaded_gradient=true)
-migrad!(m)
-mncontour(m, 1, 2)   # threading propagates through MINOS / contour too
+m = Minuit(my_chi2, x0; error = errs, threaded_gradient = true)
+migrad!(m)             # threading propagates through MINOS / contours too
 ```
 
-Measured speedups depend on FCN cost:
-- X3872 dip fit (n=3, 38 μs/call): no win (n too small)
-- IAM-style FCN (n=9, 85 μs/call): ~2× on `julia -t 8`
-- **Real IAM 2π form-factor fit (n=9, 9.5 ms/call): 10.2× on `julia -t 8`** — near-ideal scaling
+The win scales with FCN cost and parameter count: an expensive FCN at higher
+`n` benefits most, a sub-µs FCN not at all (threading overhead dominates), and a
+**thread-unsafe FCN is refused outright** (see the contract below).
 
-> **⚠ THREAD-SAFETY CONTRACT — read before opting in.**
->
-> Your FCN must NOT share mutable state across threads. The single most
-> common HEP-fit pattern that violates this:
->
-> ```julia
-> # ✗ ANTI-PATTERN — module-level mutable scratch buffer
-> const T_BUF = zeros(ComplexF64, 3, 3)
->
-> function chi2(par)
->     fill_T_matrix!(T_BUF, par)     # ← multiple threads race on T_BUF
->     return loss_from(T_BUF)
-> end
-> ```
->
-> With `threaded_gradient=true`, `n` parallel calls to `chi2(par)` all
-> mutate `T_BUF` simultaneously. The DFP loop then gets **corrupted
-> gradients** and silently converges to a **different minimum** (or
-> diverges).
->
-> The real IAM fit (`BenchmarkExamples/IAM_2Pformfactor/`) hits exactly
-> this: `St4_00!` mutates `const c_00_4 = zeros(ComplexF64, 3, 3)` in
-> `src/init_const.jl`. Single-thread converges to χ² ≈ 614; threaded
-> "converges" to χ² ≈ 987 — silently wrong.
->
-> **Mitigations**:
-> - Move scratch into `f`'s local scope (allocate per call, or pass via
->   closure but with one-buffer-per-thread).
-> - Use per-thread storage via
->   `[zeros(...) for _ in 1:Threads.maxthreadid()]` + index by
->   `Threads.threadid()`.
-> - **Use the built-in safety net** (Phase H):
->   - `migrad(..., threaded_gradient=true)` AUTO-VERIFIES on first call
->     (default `verify_threading=true` when threading is on). If the
->     FCN's threaded gradient disagrees with the sequential one,
->     `ThreadSafetyError` is raised with a full diagnostic pointing
->     at which parameter index broke and how to fix it.
->   - Standalone probe: `JuMinuit.is_thread_safe(cf, x0)::Bool` to
->     check before committing.
->
-> ```julia
-> using JuMinuit
-> cf = CostFunction(my_chi2)
-> if Threads.nthreads() > 1 && JuMinuit.is_thread_safe(cf, x0)
->     m = Minuit(my_chi2, x0; threaded_gradient=true)  # safe
-> else
->     m = Minuit(my_chi2, x0)                          # fall back
-> end
-> ```
->
-> JuMinuit's internal buffers (`MigradScratch`, `cf_fixed`'s `full_buf`)
-> are all per-thread — the framework is safe. The contract is on
-> **your** FCN. The IAM 2π form-factor fit
-> (`BenchmarkExamples/IAM_2Pformfactor/bench.jl`) is included as the
-> reference failure case: `is_thread_safe(cf_iam, paras0) = false`
-> detects in ~1 second; `migrad(..., threaded_gradient=true)` would
-> have silently converged to χ²≈987 (vs correct ≈614) without the
-> Phase H check.
+> **⚠ Thread-safety contract.** Your FCN must not share mutable state across
+> threads (module-level scratch buffers, RNG, file I/O). The classic HEP
+> anti-pattern is a `const T_BUF = zeros(ComplexF64, …)` mutated inside the FCN:
+> parallel calls race on it and MIGRAD silently converges to the **wrong**
+> minimum. JuMinuit ships a safety net — `threaded_gradient=true` auto-verifies
+> the threaded gradient against the sequential one on the first call (raises
+> `ThreadSafetyError` with a diagnostic), and `JuMinuit.is_thread_safe(cf, x0)`
+> probes it standalone. JuMinuit's own buffers are all per-thread; the contract
+> is on your FCN. See the manual for the full treatment and the worked failure
+> case (`BenchmarkExamples/IAM_2Pformfactor/`).
+
+**Fixing a thread-unsafe FCN — give each thread its own buffer.** Yes: replacing
+a shared `const` scratch with one buffer per thread makes the FCN thread-safe.
+Indexing the pool by `Threads.threadid()` is sound here because JuMinuit threads
+the gradient with `Threads.@threads :static`, which pins each iteration to a
+fixed thread — so `threadid()` is stable within a call (under the `:dynamic` /
+`@spawn` schedules it would *not* be). Size the pool with `maxthreadid()`, not
+`nthreads()` (Julia may hand out thread ids beyond `nthreads()`):
+
+```julia
+# Was:  const c_00_4 = zeros(ComplexF64, 3, 3)        # shared → racy
+const C_POOL = [zeros(ComplexF64, 3, 3) for _ in 1:Threads.maxthreadid()]
+function St4_00!(par)
+    c = C_POOL[Threads.threadid()]                    # this thread's private buffer
+    # ... fill and use c ...
+end
+```
+
+Simpler and always correct (any schedule): **allocate the scratch per call**
+inside the FCN — `c = zeros(ComplexF64, 3, 3)`, or `similar(par, ComplexF64, 3, 3)`
+to stay AD-generic. For a millisecond-scale FCN that allocation is negligible.
+Either way, confirm the fix with `JuMinuit.is_thread_safe(cf, x0)` (or just let
+`threaded_gradient=true` auto-verify on the first call).
 
 ### When to choose which
 
@@ -248,158 +233,98 @@ Measured speedups depend on FCN cost:
    5 < n ≤ 30   │ numerical  │ AD            │ AD or 8T-num  │
    n > 30       │ numerical  │ 8T-num or AD  │ **8T-num**    │
    ─────────────┴────────────┴───────────────┴───────────────┘
-
-   AD requires user FCN generic on element type.
-   8T = threaded_gradient=true under julia -t 8 (any FCN).
+   AD needs the FCN generic on element type.
+   8T = threaded_gradient=true under julia -t 8 (any thread-safe FCN).
 ```
 
-**Concrete decision tree** for a typical HEP fit:
+## Performance
 
-1. Does your FCN evaluate in less than ~1 μs? → numerical (default).
-   Threading overhead and AD bookkeeping would dominate.
-2. Is your FCN written generically (no `::Vector{Float64}` restrictions,
-   no `Complex{Float64}` literals)? → try **AD** (`CostFunctionAD(f)`).
-3. Does your FCN have non-generic parts you don't want to rewrite (C
-   library calls, `quadgk!` with fixed Float64 workspace, mutating
-   internal state)? → use **threaded_gradient=true** with `julia -t N`.
-4. n > 50 and FCN > 100 μs? → **threaded_gradient=true** wins even over
-   AD (parallelism beats Dual-stack overhead at high n).
+Wall time for a full **MIGRAD** minimization vs C++ Minuit2 on five standard
+test objectives — the FCN being minimized, *not* a Minuit operation (Apple M3 /
+Julia 1.12 / OpenBLAS 0.3.29; `Strategy(0)`, single-threaded BLAS on both sides):
 
-**Thread-safety contract for option 2**: the user FCN must not mutate
-hidden global state (RNG, file I/O, shared caches). Pre-allocated
-buffers inside the FCN's closure are fine if they're per-call (e.g.,
-`s = 0.0` reduction variables); avoid module-level mutable scratch.
+| Benchmark | Julia (μs) | C++ (μs) | Julia / C++ |
+|---|---|---|---|
+| `quad_4d` | 0.81 | 5.50 | **0.147×** |
+| `rosenbrock_2d` | 9.50 | 37.62 | **0.252×** |
+| `rosenbrock_10d` | 58.11 | 156.62 | **0.371×** |
+| `gauss_ll_10_1000` | 32.26 | 44.96 | **0.718×** |
+| `gauss_ll_2_100` | 20.16 | 22.71 | **0.888×** |
 
-### Known caveat — `Strategy(2)` from a cold seed
+The objectives (the user FCN that MIGRAD minimizes — these are standard
+optimization test problems, not Minuit operations) are:
 
-When invoking `migrad!(m; strategy = Strategy(2))` directly from a
-user-supplied raw seed where the FCN has a parameter with very small
-or zero 2nd derivative (`g2 ≈ 0`, e.g. an LEC the data is locally
-insensitive to), `MnHesse` at seed time fails on that coordinate and
-falls back to the C++ `_hesse_diagonal_failure` second clamp →
-`V ≈ I`. For large initial gradient (e.g. raw chi² ≈ 10³), the
-Newton step `−V·g` overshoots and line search bails on first iter —
-MIGRAD reports `fval = fval_initial` (no progress).
+- `quad_4d` — a 4-parameter quadratic (smooth and convex — the easy baseline).
+- `rosenbrock_2d` / `rosenbrock_10d` — the Rosenbrock "banana" function (a
+  curved, narrow valley; the classic hard test for a minimizer) in 2 and 10
+  dimensions.
+- `gauss_ll_<npar>_<ndata>` — a Gaussian negative-log-likelihood fit with
+  `<npar>` free parameters over `<ndata>` data points (a realistic
+  maximum-likelihood fit; e.g. `gauss_ll_10_1000` = 10 parameters, 1000 points).
 
-This is the standard C++ Minuit2 cold-seed pathology, reproduced
-exactly by `iminuit Strategy(2)` on the same input
-(`BenchmarkExamples/IAM_2Pformfactor` from `paras0`: both libraries
-stuck at χ² = 1268.65). **Standard HEP workflow** (and what
-`scratch/iam_cross_basin_test.jl` does by default):
+**Why Julia wins**: a parametric `CostFunction{F}` devirtualizes the FCN call
+site at compile time, whereas C++ Minuit2 pays for `shared_ptr` ref-counting and
+`ABObj` expression-template dispatch. Reproduce: build the C++ side
+(`cmake --build benchmark/cpp/build`), generate the Julia baseline
+(`scripts/run_gate.sh --save-baseline`), then `julia benchmark/compare_cpp.jl`.
 
-```julia
-# 1. From a cold seed: use Strategy(0) or Strategy(1)
-m = Minuit(chi2, x0; error = errs)
-m.strategy = Strategy(1)
-migrad!(m)                              # finds a basin
+### Real-world physics fits
 
-# 2. Polish at Strategy(2) ONLY after entering a basin
-m.strategy = Strategy(2)
-migrad!(m)                              # refines covariance + extra DFP iters
-hesse!(m)                               # full numerical Hessian
-```
+On actual HEP fits (vs `iminuit` via PyCall, `julia -t 8`):
 
-The `migrad!(m; iterate=5, use_simplex=true)` retry layer (default in
-PR #8) does **not** rescue the `Strategy(2)` cold-seed trap because
-the trapped first pass exhausts no budget that Simplex can hop over;
-the algorithm is already at a fixed point. Use the two-stage workflow
-above. See `docs/DAVIDON_CXX_AUDIT.md` for the audit trail.
+- **X(3872) dip line shape** (3 params, J/ψρ + DD̄* coupled channels) — JuMinuit
+  with AD gradients runs migrad+HESSE **1.6× faster than iminuit** (4.7 vs 7.4 ms)
+  and MINOS **2.1×** faster (72.8 vs 154.7 ms); the numerical path is ~1.2×
+  faster too. All schemes reach the published `fval = 0.0174`.
 
-### Known caveat — AD vs numerical minima on weakly-constrained fits
+(The IAM 2π form-factor fit — the thread-safety example above — is a stiff,
+ill-conditioned amplitude fit whose convergence is seed-sensitive; it is
+documented in [`BenchmarkExamples/RESULTS.md`](BenchmarkExamples/RESULTS.md)
+rather than cited as a speed comparison.)
 
-On a fit with a flat, degenerate χ² valley (e.g. the X(3872) dip fit,
-`BenchmarkExamples/X3872_dip/`), the AD and numerical MIGRAD paths can
-converge to slightly different — but equally valid — points on the valley
-floor. The numerical and analytical seeds use different diagonal 2nd-derivative
-(`g2`) estimates: the numerical seed refines `g2` by finite differences, while
-the analytical/AD seed uses the cheap `2·up/dirin²` estimate from the initial
-step sizes. This asymmetry is **C++ Minuit2-faithful**
-(`MnSeedGenerator.cxx:60` vs `:119-122`), so the two seed inverse-Hessians
-differ and steer the first DFP step differently. On a well-constrained fit both
-paths re-converge to the same minimum; on a degenerate valley they stop wherever
-`edm < goal` first holds.
+## Reliability
 
-For the X(3872) fit the resulting offset is `Δx ≈ 0.0149`, which is only
-**0.5–0.7 % of the 1σ parabolic error** — statistically negligible (MINOS
-cannot even close most 1σ contours there). The AD gradient itself is exact
-(chunk-size-invariant, agrees with finite differences to ~1e-8); only the seed
-*curvature* differs. This is expected, not a bug. Full analysis with traces:
-`docs/AD_OFFSET_X3872.md`.
+- **Full test suite passes** (2,400+ tests) — Aqua (no method ambiguities /
+  piracy) and JET clean. Run `julia --project=. -e 'using Pkg; Pkg.test()'`.
+- **C++ JSON oracle parity** — reference cases generated by a C++ Minuit2
+  harness are asserted in `test/test_cpp_oracle.jl`: unbounded Rosenbrock/Quad,
+  bounded sin/upper/lower transforms, fixed parameters.
+- **Line-by-line C++-fidelity audit** — every algorithm was diffed against
+  upstream Minuit2 v6.24.0 and reviewed against the source; the audit trail and
+  resolved findings live in [`docs/dev/`](docs/dev/).
 
-### Reliability
+## Documentation
 
-- **888/888 tests pass** (Aqua + JET clean).
-- **C++ JSON oracle parity**: 7 reference cases generated by the C++
-  Minuit2 harness, asserted in `test/test_cpp_oracle.jl` — covers
-  unbounded Rosenbrock/Quad, bounded Sin/upper/lower, fixed parameters.
-- **Four rounds of parallel multi-agent review** (codex gpt-5.5 xhigh
-  + native Opus subagent) caught a real `sum_sym` blocking bug
-  (covariance computation), a covariance asymmetric-read bug, an
-  alpha-convention sign bug in contours, an internal/external
-  coord-frame leak in bounded MINOS, and 8+ other surgical issues.
-  All applied as commits with explicit source-cited diffs.
+- **[Manual](https://fkguo.github.io/JuMinuit.jl/dev)** — tutorials (quickstart,
+  bounded parameters, MINOS & contours), error analysis, cost functions, and the
+  full API reference.
+- **[Error-analysis guide](docs/src/error_analysis.md)** — which uncertainty method
+  to use, when, and why (HESSE / MINOS / MC-Δχ² / bootstrap / jackknife /
+  multi-modal).
+- **[`docs/dev/`](docs/dev/)** — design notes, the C++-fidelity audit, the
+  roadmap, and the explicitly-deferred-features list.
+- **[`docs/UPSTREAM.md`](docs/UPSTREAM.md)** — upstream provenance and LGPL
+  attribution.
 
-## Phase status
+## Citation
 
-| Phase | Status | Notes |
-|---|---|---|
-| 0: PoC | ✅ Done | MIGRAD beats C++ on every §3.3 benchmark |
-| 1: Bounds + MINOS + Contours + HESSE | ✅ First cut | All algorithms in; Phase 1.x deeper parity below |
-| 2.1: AD-backed gradients | ✅ Done | ForwardDiff via package ext (`CostFunctionAD`), threads MINOS+contour |
-| 2.2: Threads-parallel gradient | ✅ Done | `threaded_gradient=true` opt-in, ~2× on `julia -t 8` for 50+ μs FCN |
-| 2.3: Plot recipes | ⏳ Deferred | |
-| 2.4: PrecompileTools | ⏳ Deferred | |
-| 2.5: Result serialization | ✅ Done | `to_dict` + `from_dict` |
-| 3: iminuit-style Minuit wrapper | ✅ First cut | `m.values`, `m.errors`, etc. |
+If you use JuMinuit.jl in a publication, please cite **both** JuMinuit.jl and the
+upstream Minuit algorithms it ports. JuMinuit.jl ships a
+[`CITATION.cff`](CITATION.cff) — use GitHub's **"Cite this repository"** button
+for APA / BibTeX, or:
 
-See `ROADMAP.md` for the full per-phase plan and `docs/DEFERRED.md`
-for explicitly-deferred features.
-
-## Layout
-
-```
-src/
-  JuMinuit.jl              # top-level
-  precision.jl, strategy.jl
-  state.jl                 # MinimumState, CovStatus, …
-  fcn.jl, ad_gradient.jl   # CostFunction, CostFunctionWithGradient
-  linalg.jl, gradient.jl   # symmetric BLAS + numerical gradient
-  davidon.jl, edm.jl       # DFP update + EDM
-  posdef.jl, negative_g2.jl
-  linesearch.jl, seed.jl   # parabolic line search + MnSeedGenerator
-  migrad.jl, result.jl     # MIGRAD loop + FunctionMinimum
-  hesse.jl                 # full MnHesse
-  transform.jl             # sin/sqrt bound transforms
-  parameters.jl            # MinuitParameter + Parameters
-  function_cross.jl, minos.jl, contours.jl
-  covariance_squeeze.jl
-  migrad_bounded.jl        # bound-aware MIGRAD wrapper
-  minuit.jl                # iminuit-style Minuit struct
-  serialize.jl             # to_dict / from_dict
-test/                      # 888 tests; Aqua + JET clean
-benchmark/                 # julia-perf + C++ wall-time comparison
-tools/                     # C++ Minuit2 harness (cpp_trace_harness.cxx)
-docs/                      # DESIGN.md, ROADMAP.md, etc.
-reference/Minuit2_cpp/     # upstream C++ source (gitignored;
-                           # pinned to GooFit/Minuit2 @ 57dc936 = v6.24.0)
-```
-
-## Reproducing the gate
-
-```bash
-# Phase 0 §3.4 Criterion 2 — Julia vs C++ wall time
-scripts/run_gate.sh --save-baseline       # first run installs baseline
-cd benchmark/cpp && mkdir -p build && cd build && cmake .. && make
-cd ../../.. && julia benchmark/compare_cpp.jl
-# Should print: Verdict: PASS, max ratio ≤ 0.89×
-```
+> F.-K. Guo, *JuMinuit.jl: a native-Julia port of Minuit2*,
+> v0.3.0, https://github.com/fkguo/JuMinuit.jl (2026).
+>
+> F. James and M. Roos, "MINUIT: A system for function minimization and analysis
+> of the parameter errors and correlations", Comput. Phys. Commun. **10** (1975)
+> 343–367. [doi:10.1016/0010-4655(75)90039-9](https://doi.org/10.1016/0010-4655(75)90039-9)
 
 ## Acknowledgements
 
-- **C++ Minuit2** by M. Winkler, F. James, L. Moneta, A. Zsenei
-  (CERN PH/SFT, 2003–) — the algorithmic basis. This Julia port is a
-  derivative work.
-- **[IMinuit.jl](https://github.com/fkguo/IMinuit.jl)** (Feng-Kun Guo)
-  — the Julia wrapper this port replaces.
+- **C++ Minuit2** by M. Winkler, F. James, L. Moneta, A. Zsenei (CERN PH/SFT,
+  2003–) — the algorithmic basis. This Julia port is a derivative work.
+- **[IMinuit.jl](https://github.com/fkguo/IMinuit.jl)** (Feng-Kun Guo, Yu Zhang)
+  — the Julia wrapper this package complements and can replace.
 - **[iminuit](https://github.com/scikit-hep/iminuit)** (Hans Dembinski,
-  scikit-hep) — the Python wrapper whose API Phase 3 mirrors.
+  scikit-hep) — the Python wrapper whose API JuMinuit mirrors.

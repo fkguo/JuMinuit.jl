@@ -5,6 +5,15 @@
 **FCN**: IAM 2π form-factor 9-LEC fit (`BenchmarkExamples/IAM_2Pformfactor`)
 **Seed**: `paras0 = [lecr0…, 1e-4]`, `error = fill(1e-6, 9)`, default tol.
 
+> **Update (JuMinuit 0.3.0, 2026-05-30 run):** the current default-config
+> benchmark reaches `fval = 404.15` — *deeper* than iminuit's `409.89` — i.e. the
+> shallow-`613` gap is closed. The specific fvals in this document (`325`,
+> `401.45`, `613`, …) are from the original 2026-05-29 investigation under
+> particular Strategy/retry configs and may not match the current default run.
+> See [`../../BenchmarkExamples/RESULTS.md`](../../BenchmarkExamples/RESULTS.md)
+> for the authoritative current numbers; the analysis below is kept as the
+> investigation record.
+
 ## Symptom (as reported)
 
 `bench_full.jl` `build_jm_num()` does `Minuit(chi2_iam, paras0; error=errs0)`
@@ -276,7 +285,7 @@ Full `Pkg.test` 2558/2558, retry-layer testset 98/98.
   MnHesse-fail fallback yields `V ≈ I` (the C++ second clamp restored in
   PR #10), so the first Newton step `−V·g` has magnitude ~1e6 and the line
   search cannot make progress. This confirms the
-  `docs/DAVIDON_CXX_AUDIT.md` "S=2 cold-seed pathology" note and is *not* a
+  `DAVIDON_CXX_AUDIT.md` "S=2 cold-seed pathology" note and is *not* a
   JuMinuit bug.
 
 ## Verification
@@ -309,7 +318,7 @@ Full `Pkg.test` 2558/2558, retry-layer testset 98/98.
   the retry S=2 bump, neither of which this change modifies. `test_cpp_oracle.jl`
   (low-level `migrad`, `strategy_level == 0`) is likewise unaffected.
 
-## Relationship to `docs/DAVIDON_CXX_AUDIT.md`
+## Relationship to `DAVIDON_CXX_AUDIT.md`
 
 That audit studied the **x_jm warm start** (S=2 basin walk to 322) and recorded
 in its post-resolution table:

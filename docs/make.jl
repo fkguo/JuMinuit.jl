@@ -11,7 +11,7 @@ DocMeta.setdocmeta!(JuMinuit, :DocTestSetup, :(using JuMinuit); recursive = true
 
 makedocs(
     sitename = "JuMinuit.jl",
-    authors  = "Feng-Kun Guo and contributors",
+    authors  = "Feng-Kun Guo",
     modules  = [JuMinuit],
     format   = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
@@ -26,6 +26,8 @@ makedocs(
             "Bounded parameters" => "tutorials/bounded.md",
             "MINOS errors & contours" => "tutorials/minos_contours.md",
         ],
+        "Cost functions" => "cost_functions.md",
+        "Error analysis" => "error_analysis.md",
         "API Reference" => "api.md",
         "Internals" => "internals.md",
     ],

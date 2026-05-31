@@ -43,7 +43,7 @@ The asymmetric error result for a single parameter. Mirrors C++
   snapshot at the ±σ crossing endpoint. `nothing` when that side
   did not converge cleanly. Mirrors C++ `MinosError::UpperState()` /
   `LowerState()` (`MinosError.h:73-74`). Useful for HEP correlated-
-  systematic studies and at-bound diagnostics — see GAP_AUDIT.md M4.
+  systematic studies and at-bound diagnostics — see docs/dev/GAP_AUDIT.md M4.
 
 # Note on sign convention
 
@@ -141,10 +141,10 @@ Compute asymmetric ±σ errors for parameter `par_idx`. Mirrors
 `MnMinos::Minos(unsigned int, ...)` from
 `reference/Minuit2_cpp/src/MnMinos.cxx`.
 
-# Phase 1 first cut
+# Notes
 
-- Unbounded parameters only (par_limit reserved for Phase 1+ bounds
-  integration).
+- Bounded parameters are supported; hitting a bound is a clean termination
+  (recorded in `upper_par_limit` / `lower_par_limit`).
 - Inner MIGRAD uses Strategy(0) by default. Strategy 1/2 affects the
   `tlr` propagation but not HESSE refinement.
 - `sigma::Real=1` — confidence level in σ-units (P5). Threads
