@@ -168,10 +168,11 @@ resulting matrix, but allocation-light:
   skipping `eigvals`' internal input copy.
 
 Return value mirrors the status the allocating form would assign:
-`true` ⇔ `MnMadePosDef` (a diagonal perturbation or the n=1 clamp
-fired), `false` ⇔ `MnHesseValid` (the eigenvalue gate passed, or n=1
-was already `> eps` so `S` is left untouched). The caller owns the
-`dcovar`/`status` bookkeeping (see `hesse`).
+`true` ⇔ `MnMadePosDef` — the eigenvalue-gate forcing term (`padd`) or the
+n=1 clamp was applied; `false` ⇔ `MnHesseValid` — the gate passed (the
+preliminary `dg` diagonal floor, applied before the gate, does NOT by itself
+set `true`), or n=1 was already `> eps` so `S` is left untouched. The caller
+owns the `dcovar`/`status` bookkeeping (see `hesse`).
 
 Only the `:U` (upper) triangle of `S` is read or written, matching the
 JuMinuit storage convention; the lower triangle of `p_buf` is never
@@ -184,14 +185,26 @@ function make_posdef!(S::Symmetric{Float64,Matrix{Float64}},
     M = parent(S)
     n = LinearAlgebra.checksquare(M)
 
-    # Validate caller-supplied scratch up front: the correlation loop writes
-    # p_buf/s_buf under `@inbounds`, so an undersized buffer would be silent
-    # heap corruption rather than a BoundsError. Cheap (once per call), and
-    # make_posdef! is exported, so external callers can supply buffers too.
-    p_buf === nothing || size(p_buf) == (n, n) ||
-        throw(DimensionMismatch("make_posdef!: p_buf size $(size(p_buf)) != ($n, $n)"))
-    s_buf === nothing || length(s_buf) == n ||
-        throw(DimensionMismatch("make_posdef!: s_buf length $(length(s_buf)) != $n"))
+    # Fail-closed precondition guards. `make_posdef!` mutates `M` and writes the
+    # correlation scratch through p_buf/s_buf under `@inbounds`; a layout, size,
+    # or aliasing violation would silently corrupt results (breaking the
+    # bit-identity HESSE relies on) rather than erroring. This is an internal
+    # primitive — its sole caller (hesse) satisfies all three — but the guards
+    # are cheap once-per-call insurance for any future buffer-pooling caller.
+    S.uplo == 'U' ||
+        throw(ArgumentError("make_posdef!: only the :U (upper) Symmetric layout is supported"))
+    if p_buf !== nothing
+        size(p_buf) == (n, n) ||
+            throw(DimensionMismatch("make_posdef!: p_buf size $(size(p_buf)) != ($n, $n)"))
+        Base.mightalias(p_buf, M) &&
+            throw(ArgumentError("make_posdef!: p_buf must not alias parent(S)"))
+    end
+    if s_buf !== nothing
+        length(s_buf) == n ||
+            throw(DimensionMismatch("make_posdef!: s_buf length $(length(s_buf)) != $n"))
+        Base.mightalias(s_buf, M) &&
+            throw(ArgumentError("make_posdef!: s_buf must not alias parent(S)"))
+    end
 
     eps = prec.eps
     eps2 = prec.eps2

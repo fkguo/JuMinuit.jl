@@ -134,11 +134,11 @@
             ref = make_posdef(MinimumError(Symmetric(copy(M), :U), dcov))
             ref_made = is_made_pos_def(ref)
             # default (self-allocated scratch)
-            M1 = copy(M); made1 = make_posdef!(Symmetric(M1, :U))
+            M1 = copy(M); made1 = JuMinuit.make_posdef!(Symmetric(M1, :U))
             # pooled scratch path
             n = size(M, 1)
             M2 = copy(M)
-            made2 = make_posdef!(Symmetric(M2, :U);
+            made2 = JuMinuit.make_posdef!(Symmetric(M2, :U);
                                  p_buf = Matrix{Float64}(undef, n, n),
                                  s_buf = Vector{Float64}(undef, n))
             (ref = upper(parent(ref.inv_hessian)), ref_made = ref_made,
@@ -161,17 +161,17 @@
         # return value semantics + in-place mutation actually happened
         Mneg = Float64[1.0 5.0; 5.0 1.0]
         S = Symmetric(copy(Mneg), :U)
-        @test make_posdef!(S) === true            # padd applied → MnMadePosDef
+        @test JuMinuit.make_posdef!(S) === true            # padd applied → MnMadePosDef
         @test parent(S) != Mneg                   # mutated in place
         Sok = Symmetric(Float64[4.0 1.0; 1.0 5.0], :U)
-        @test make_posdef!(Sok) === false         # gate passed → not made-posdef
-        @test (@inferred make_posdef!(Symmetric(Float64[2.0 0.0; 0.0 3.0], :U))) isa Bool
+        @test JuMinuit.make_posdef!(Sok) === false         # gate passed → not made-posdef
+        @test (@inferred JuMinuit.make_posdef!(Symmetric(Float64[2.0 0.0; 0.0 3.0], :U))) isa Bool
 
         # caller-supplied scratch is size-validated before the @inbounds loop:
         # an undersized buffer must raise, not silently corrupt the heap.
         S3 = Symmetric(Float64[1.0 5.0; 5.0 1.0], :U)
-        @test_throws DimensionMismatch make_posdef!(S3; p_buf = Matrix{Float64}(undef, 1, 1))
-        @test_throws DimensionMismatch make_posdef!(S3; s_buf = Vector{Float64}(undef, 1))
+        @test_throws DimensionMismatch JuMinuit.make_posdef!(S3; p_buf = Matrix{Float64}(undef, 1, 1))
+        @test_throws DimensionMismatch JuMinuit.make_posdef!(S3; s_buf = Vector{Float64}(undef, 1))
         @test parent(S3) == Float64[1.0 5.0; 5.0 1.0]   # untouched (threw pre-mutation)
     end
 end
