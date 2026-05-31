@@ -65,8 +65,8 @@ methods plus iminuit-style property access.
 
 # Keyword arguments
 
-- `names::Vector{<:AbstractString}=["p1", ..., "pn"]` — parameter
-  names.
+- `names::Vector{<:AbstractString}=["x0", "x1", …, "x(n-1)"]` — parameter
+  names (iminuit-style `x0, x1, …`).
 - `errors::Vector{<:Real}=fill(0.1, n)` — initial step sizes.
 - `limits::Vector` — per-parameter bounds. Each entry may be:
     - `nothing` for unbounded,
@@ -177,7 +177,24 @@ end
 # wrapper subtypes; in native JuMinuit both reduce to the same `Minuit`
 # (the keyword constructor wraps `fcn(a,b)` into `x -> fcn(x...)`), so
 # they are aliases here, not separate types. See `AbstractFit` docs.
+"""
+    Fit
+
+IMinuit.jl-compatible alias of [`Minuit`](@ref) (scalar / keyword-argument
+construction in IMinuit.jl). In native JuMinuit it is the same type as
+[`Minuit`](@ref), so existing IMinuit.jl scripts that build `Fit(...)` work
+unchanged. See [`AbstractFit`](@ref).
+"""
 const Fit = Minuit
+
+"""
+    ArrayFit
+
+IMinuit.jl-compatible alias of [`Minuit`](@ref) (vector construction in
+IMinuit.jl). In native JuMinuit it is the same type as [`Minuit`](@ref), so
+existing IMinuit.jl scripts that build `ArrayFit(...)` work unchanged. See
+[`AbstractFit`](@ref).
+"""
 const ArrayFit = Minuit
 
 # ── threaded_gradient policy ────────────────────────────────────────────────
@@ -1875,7 +1892,7 @@ end
 """
     migrad(m::Minuit; ncall=nothing, resume=true, precision=nothing,
                        strategy=m.strategy, tol=m.tol,
-                       iterate=5, use_simplex=true) -> Minuit
+                       iterate=5, use_simplex=false) -> Minuit
 
 IMinuit.jl-compatible alias for [`migrad!`](@ref). Mutates `m.fmin`
 and returns `m`. The `ncall` / `resume` / `precision` kwargs are

@@ -21,8 +21,11 @@ helpers.
 | [`CostSum`](@ref) | a joint fit of several costs (`+`) | mixed (rescaled) |
 
 Every cost is a callable `cost(params) -> Float64`, and `errordef(cost)` returns
-its `up` (1 for a χ² cost, 0.5 for a `−lnL` cost). The model/pdf is generic on
-its parameter vector, so AD (ForwardDiff) and threading work unchanged.
+its `up` (1 for a χ² cost, 0.5 for a `−lnL` cost). The threaded numerical
+gradient works on every cost. AD (ForwardDiff) works on `LeastSquares`,
+`UnbinnedNLL`, and `ExtendedUnbinnedNLL` (their model/pdf is generic on the
+parameter vector); the **binned** costs (`BinnedNLL` / `ExtendedBinnedNLL`) push
+their CDF values through `Float64` buffers and are **not** currently AD-generic.
 
 ## Least squares
 

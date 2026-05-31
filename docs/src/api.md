@@ -1,14 +1,15 @@
 # API Reference
 
 The public API is grouped by stage of a typical fit: declare the cost
-function, run MIGRAD, refine with HESSE/MINOS, post-process. For
-internal helpers and non-exported names see [Internals](internals.md).
+function, run MIGRAD, refine with HESSE/MINOS, post-process, and visualize.
+For internal helpers and non-exported names see [Internals](internals.md).
 
 ## Cost function
 
 ```@docs
 JuMinuit.CostFunction
 JuMinuit.CostFunctionWithGradient
+JuMinuit.CostFunctionAD
 ```
 
 ## MIGRAD (minimization)
@@ -43,31 +44,56 @@ JuMinuit.int2ext_error
 JuMinuit.hesse
 ```
 
+## Covariance & diagnostics
+
+```@docs
+JuMinuit.covariance
+JuMinuit.eigenvalues
+JuMinuit.global_cc
+JuMinuit.CovStatus
+```
+
 ## MINOS (asymmetric errors)
 
 ```@docs
 JuMinuit.minos
 JuMinuit.MinosError
+JuMinuit.minos_upper
+JuMinuit.minos_lower
 JuMinuit.function_cross
 JuMinuit.MnCross
 ```
 
-## Contours
+## Contours & profiles
 
 ```@docs
+JuMinuit.mncontour
 JuMinuit.contour
 JuMinuit.contour_exact
 JuMinuit.ContoursError
+JuMinuit.profile
+JuMinuit.mnprofile
 ```
 
 ## iminuit-style Minuit wrapper
 
 ```@docs
 JuMinuit.Minuit
+JuMinuit.AbstractFit
+JuMinuit.Fit
+JuMinuit.ArrayFit
 JuMinuit.migrad!
 JuMinuit.minos!
 JuMinuit.hesse!
 JuMinuit.HesseResult
+JuMinuit.set_precision
+```
+
+## Gradients & threading
+
+```@docs
+JuMinuit.is_thread_safe
+JuMinuit.ThreadSafetyError
 ```
 
 ## Other minimizers
@@ -85,6 +111,8 @@ JuMinuit.release!
 JuMinuit.set_value!
 JuMinuit.set_error!
 JuMinuit.set_limits!
+JuMinuit.set_lower_limit!
+JuMinuit.set_upper_limit!
 JuMinuit.remove_limits!
 ```
 
@@ -94,6 +122,13 @@ JuMinuit.remove_limits!
 JuMinuit.Data
 JuMinuit.chisq
 JuMinuit.model_fit
+JuMinuit.@model_fit
+JuMinuit.args
+JuMinuit.matrix
+JuMinuit.chi2
+JuMinuit.poisson_chi2
+JuMinuit.multinominal_chi2
+JuMinuit.func_argnames
 ```
 
 ## Strategy & precision
@@ -151,10 +186,27 @@ JuMinuit.optim
 JuMinuit.minimize_with
 ```
 
+## Plotting & rich output
+
+`plot(...)` recipes for the result types are provided via `RecipesBase`
+(rendered via Plots.jl); the `draw_*` helpers below are Plots.jl-specific and
+load through the Plots extension (`using Plots`). See the
+[Plotting & rich output](guides/plotting.md) guide.
+
+```@docs
+JuMinuit.to_latex
+JuMinuit.mn_plot_text
+JuMinuit.draw_contour
+JuMinuit.draw_mncontour
+JuMinuit.draw_profile
+JuMinuit.draw_mnprofile
+JuMinuit.draw_mnmatrix
+```
+
 ## Common accessors
 
 These small accessor functions are exported but documented as part of
-the parent struct (see `FunctionMinimum`, `MinosError`, etc.):
+the parent struct (see [`FunctionMinimum`](@ref), [`MinosError`](@ref), etc.):
 
 | Function          | Returns                                          |
 |:------------------|:-------------------------------------------------|
@@ -168,7 +220,7 @@ the parent struct (see `FunctionMinimum`, `MinosError`, etc.):
 | `ext_covariance(m)` | full external covariance (bounded path)        |
 | `free_covariance(m)` | n_free × n_free sub-block                     |
 | `ext_errors(m)`   | external errors via Int2extError two-sided       |
-| `has_limits(p)`   | both lower AND upper set (MinuitParameter)       |
+| `has_limits(p)`   | any finite lower or upper limit (MinuitParameter) |
 | `is_fixed(p)`     | fixed flag (MinuitParameter)                     |
 
 ## Index

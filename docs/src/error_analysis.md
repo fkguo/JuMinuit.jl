@@ -84,7 +84,8 @@ describe the confidence region. Unlike MINOS it captures **non-Gaussian** and
 data are fixed and the per-point `σ` are trusted), so its honesty rests on the
 error model just as HESSE's and MINOS' do. Returns a `NamedTuple` (kept
 `samples`, per-parameter asymmetric `bounds`, `acceptance`, `under_coverage`, …);
-`contour_df_samples` gives the same cloud as a `DataFrame`. Validated against the
+`contour_df_samples` gives the same cloud as a `DataFrame` (it lives in a package
+extension, so add `using DataFrames` to enable it). Validated against the
 X(3872) published line-shape analysis (`BenchmarkExamples/X3872_dip`).
 
 **The proposal is not the cut.** The Gaussian (or box) is only how trial points
@@ -149,10 +150,10 @@ Resamples the dataset and re-fits `nresample` times, returning a
   *does* trust `σ`, so it tracks the HESSE error closely — useful as a check that
   the resampling machinery and the curvature error agree.
 
-Re-fits are warm-started from the full-data optimum by default, run across
-threads with `threaded = true`, and are **deterministic** given an explicit
-`seed` (the per-resample RNG seeds are drawn serially, so a threaded run is
-bit-identical to a serial one). Percentile CIs default to a `0.68` (±1σ-equiv.)
+Re-fits are warm-started from the full-data optimum by default, run serially
+unless you pass `threaded = true` (the default is `threaded = false`), and are
+**deterministic** given an explicit `seed` (the per-resample RNG seeds are drawn
+serially, so a threaded run is bit-identical to a serial one). Percentile CIs default to a `0.68` (±1σ-equiv.)
 coverage; pass `covariance = true` for the bootstrap covariance matrix.
 
 `bootstrap` / `jackknife` accept three input shapes: **(i)** a cost object —
@@ -268,8 +269,8 @@ different points of one error ellipse, and must be enumerated and fit separately
 using JuMinuit
 m = Minuit(chi2, x0; names = pnames);  migrad!(m)
 
-samples = get_contours_samples(m; ...)        # MC-Δχ² accepted set, rows = vectors
-modes   = find_solution_modes(samples, m)     # cluster into distinct solutions
+r       = get_contours_samples(m; ...)        # NamedTuple; r.samples has rows = vectors
+modes   = find_solution_modes(r.samples, m)   # cluster into distinct solutions
 
 if length(modes) > 1
     @warn "multi-modal: $(length(modes)) statistically distinct solutions"
@@ -402,8 +403,8 @@ JuMinuit's threaded gradient).
 ## Visualizing the results
 
 Every error-analysis output above ships a [RecipesBase](https://github.com/JuliaPlots/RecipesBase.jl)
-recipe, so `plot(...)` works from either Plots.jl or Makie.jl with no extra glue
-(JuMinuit itself depends on neither). A parameter pair is chosen with `vars`
+recipe, so `plot(...)` works from Plots.jl with no extra glue (JuMinuit depends
+only on `RecipesBase`, not on Plots). A parameter pair is chosen with `vars`
 (indices or names; default the first two free parameters) and a single parameter
 with `par`.
 

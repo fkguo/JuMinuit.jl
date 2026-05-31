@@ -6,13 +6,14 @@ physics for χ² and likelihood fits.
 
 ## Why?
 
-[iminuit](https://github.com/scikit-hep/iminuit) (Python) and
-[IMinuit.jl](https://github.com/fkguo/IMinuit.jl) (Julia, by the same
-lead author) both wrap the upstream C++ library. **JuMinuit.jl is a clean-room
-Julia port** of the same algorithms — no C++ dependency, no FFI overhead,
-and full access to Julia tooling (ForwardDiff, threads, broadcasted FCN
-evaluation). On the benchmark corpus it runs in the **0.13–0.89× C++
-wall-time** range, i.e. comparable to or faster than C++ Minuit2 — see
+[iminuit](https://github.com/scikit-hep/iminuit) (Python) wraps the upstream C++
+Minuit2 library, and [IMinuit.jl](https://github.com/fkguo/IMinuit.jl) (Julia, by
+the same lead author) in turn wraps `iminuit` through PyCall — so it carries both
+a Python and a C++ dependency. **JuMinuit.jl is a clean-room Julia port** of the
+same algorithms, with **no C++ or Python dependency and no PyCall / FFI** — plus
+full access to Julia tooling (ForwardDiff, threads, broadcasted FCN evaluation).
+On the benchmark corpus it runs in the **0.13–0.89× C++ wall-time** range, i.e.
+comparable to or faster than C++ Minuit2 — see
 [`benchmark/`](https://github.com/fkguo/JuMinuit.jl/tree/main/benchmark).
 
 ## Quick example
@@ -24,9 +25,9 @@ using JuMinuit
 cf = CostFunction(x -> sum(abs2, x .- [1.0, 2.0, 3.0, 4.0]))
 
 # Initial parameter values + step sizes
-m = migrad(cf, [0.0, 0.0, 0.0, 0.0], [0.1, 0.1, 0.1, 0.1])
+fm = migrad(cf, [0.0, 0.0, 0.0, 0.0], [0.1, 0.1, 0.1, 0.1])   # a FunctionMinimum
 
-show(stdout, MIME"text/plain"(), m)
+show(stdout, MIME"text/plain"(), fm)
 ```
 
 ```
@@ -76,14 +77,27 @@ m.merrors       # asymmetric ±σ per parameter (name-keyed Dict)
 
 ## Tutorials & reference
 
-* [Quickstart](tutorials/quickstart.md) — a hands-on tour.
+**Tutorials**
+
+* [Quickstart](tutorials/quickstart.md) — a hands-on first fit.
 * [Bounded parameters](tutorials/bounded.md) — parameter limits and fixed
   parameters.
 * [MINOS errors & contours](tutorials/minos_contours.md) — asymmetric error
   bars and 2-D confidence contours.
+
+**Guides**
+
 * [Cost functions](cost_functions.md) — the Julia-native cost family.
+* [Gradients: AD & threading](guides/gradients.md) — ForwardDiff gradients and
+  the threaded / `:auto` numerical gradient.
+* [Alternative minimizers](guides/optim.md) — the `Optim.jl` bridge (`optim`).
 * [Error analysis](error_analysis.md) — which uncertainty method to use, when.
-* Full [API reference](api.md) and [internals](internals.md).
+* [Plotting & rich output](guides/plotting.md) — plot recipes, `draw_*`
+  helpers, and LaTeX / ASCII tables.
+* [Migrating from iminuit / IMinuit.jl](guides/migration.md) — the drop-in
+  mapping.
+
+Full [API reference](api.md) and [internals](internals.md).
 
 ## Citation & references
 

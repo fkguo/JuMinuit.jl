@@ -1,85 +1,150 @@
 # Quickstart
 
-This tutorial walks through a minimal MIGRAD fit and the key result
-accessors. We assume Julia ≥ 1.10 and `JuMinuit` already installed
-(`Pkg.add("JuMinuit")` when registered, or `Pkg.add(url=...)` from
-the repository).
+This tutorial gets you from an empty REPL to a fitted parameter with
+asymmetric errors in five minutes. We use the iminuit / IMinuit.jl-style
+[`Minuit`](@ref) object throughout: one mutable handle that bundles the
+cost function, the parameters, and the fit result, with property access
+(`m.values`, `m.errors`, `m.fval`, …) you can copy-paste from iminuit.
 
-## A χ² fit in five lines
+We assume Julia ≥ 1.10 and `JuMinuit` installed
+(`Pkg.add("JuMinuit")` once registered, or `Pkg.add(url=...)` from the
+repository).
+
+## A first end-to-end fit
+
+Define an FCN — any `f(x::AbstractVector) -> Real`. Here it is a simple
+χ² with its minimum at `(1, 2, 3)`:
 
 ```julia
 using JuMinuit
 
-cf = CostFunction(x -> sum(abs2, x .- [1.0, 2.0, 3.0]))   # χ² = (x-1)² + (y-2)² + (z-3)²
-m  = migrad(cf, [0.0, 0.0, 0.0], [0.1, 0.1, 0.1])         # initial point + step sizes
-@assert is_valid(m)
-println("fval = ", fval(m))                                # 0 at the minimum
-println("x*   = ", Base.values(m))                         # [1, 2, 3]
+fcn(x) = (x[1] - 1.0)^2 + (x[2] - 2.0)^2 + (x[3] - 3.0)^2
+
+m = Minuit(fcn, [0.0, 0.0, 0.0];
+           names  = ["a", "b", "c"],   # parameter names (default "x0", "x1", …)
+           errors = [0.1, 0.1, 0.1])   # initial step sizes
+
+migrad!(m)                              # run MIGRAD; mutates m in place
 ```
 
-## Anatomy of `CostFunction`
+Displaying `m` in a REPL or notebook prints the rich result table:
 
-`CostFunction(f, up=1.0)` wraps a Julia function `f(x::AbstractVector{<:Real}) -> Real`
-and an "error definition" `up`:
+```
+JuMinuit.Minuit  fval=0  edm=0  nfcn=36
+[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [✓ No params at limit]
+┌───┬──────┬─────────────┬─────────┬─────────┬───────┐
+│ # │ Name │ Value       │ Limit − │ Limit + │ Fixed │
+├───┼──────┼─────────────┼─────────┼─────────┼───────┤
+│ 1 │ a    │ 1.00 ± 1.00 │ ─       │ ─       │       │
+│ 2 │ b    │ 2.00 ± 1.00 │ ─       │ ─       │       │
+│ 3 │ c    │ 3.00 ± 1.00 │ ─       │ ─       │       │
+└───┴──────┴─────────────┴─────────┴─────────┴───────┘
+```
 
-| `up`  | When to use                                          |
-|------:|:-----------------------------------------------------|
-| `1.0` | χ² fits (default). 1σ contour at `f = fmin + 1`.     |
-| `0.5` | Negative-log-likelihood fits. 1σ at `f = fmin + 0.5`.|
+## Reading the result
 
-The `up` value matters for MINOS and contour geometry, not for the
-location of the minimum.
-
-## Accessing results
-
-After a successful `migrad`, the returned `FunctionMinimum` exposes:
+The fit result is exposed as iminuit-style properties on `m`:
 
 ```julia
-fval(m)         # value of the FCN at the minimum
-Base.values(m)  # Vector{Float64} of parameter values at the minimum
-errors(m)       # Vector of 1σ Hesse errors (sqrt(2·up·V[i,i]))
-covariance(m)   # Symmetric{Float64} covariance matrix (2·up·V)
-gradient(m)     # FunctionGradient at the minimum
-nfcn(m)         # total FCN calls used by MIGRAD
-is_valid(m)     # true if MIGRAD converged within tolerances
+m.values        # parameter values at the minimum (≈ [1, 2, 3])
+m.errors        # symmetric 1σ Hesse errors, per parameter
+m.fval          # FCN value at the minimum (≈ 0 here)
+m.valid         # true if MIGRAD converged within tolerances
+m.nfcn          # total FCN calls used
+m.covariance    # external covariance matrix (nothing before migrad!)
 ```
+
+`m.values` and `m.errors` read live from the fit and accept both an
+integer index and a parameter name:
+
+```julia
+m.values[1]     # 1.0
+m.values["b"]   # 2.0
+m.errors["a"]   # the 1σ error on a
+```
+
+For a plain `Vector{Float64}` of the values use `args(m)` (≡
+`collect(m.values)`).
+
+## Asymmetric errors with MINOS
+
+The symmetric Hesse error assumes a parabolic minimum. For a more honest,
+generally **asymmetric** error, run [`minos!`](@ref) after `migrad!`:
+
+```julia
+minos!(m)               # MINOS on every free parameter
+m.merrors               # Dict{String,MinosError}, keyed by parameter name
+
+me = m.merrors["a"]
+me.upper                # positive 1σ error (≥ 0)
+me.lower                # negative 1σ error (≤ 0)
+```
+
+`minos!(m, "a")` (or `minos!(m, 1)`) does a single parameter. Once MINOS
+has run, the rich table folds the asymmetric error into the `Value`
+column. See [MINOS errors & contours](minos_contours.md) for the full
+[`MinosError`](@ref) field list and 2-D confidence contours.
+
+!!! note "MINOS needs a covariance"
+    MINOS derives its starting step from the inverse Hessian, so a fit
+    that produced no covariance (e.g. [`simplex`](@ref) or [`scan`](@ref))
+    must be refined with [`hesse!`](@ref)`(m)` first. A normal `migrad!`
+    already leaves a covariance in place.
+
+## A cost-function fit — `LeastSquares`
+
+For a standard curve fit you don't have to spell out the χ² by hand. The
+[`LeastSquares`](@ref) cost carries its own data, model, and error
+definition, so `Minuit(cost, x0)` reads `up` and the data count off the
+cost automatically:
+
+```julia
+using JuMinuit
+
+model(x, p) = p[1] * x + p[2]            # a straight line y = a·x + b
+xdata = [1.0, 2.0, 3.0, 4.0, 5.0]
+ydata = [2.1, 3.9, 6.2, 7.8, 10.1]
+σy    = fill(0.2, 5)
+
+cost = LeastSquares(xdata, ydata, σy, model; name = [:a, :b])
+m = Minuit(cost, [1.0, 0.0])             # up = 1 and ndata are taken from the cost
+migrad!(m)
+
+m.values        # ≈ [1.99, 0.05]  (slope, intercept)
+m.fval          # χ² at the minimum
+```
+
+Because the cost knows it holds 5 data points, the rich table also shows
+a `χ²/ndf` line and a fit p-value. The [Cost functions](../cost_functions.md)
+guide covers the full family — `UnbinnedNLL`, `BinnedNLL`, their extended
+variants, and joining several datasets into one fit with `CostSum` (`+`).
 
 ## Tolerances and budgets
 
-```julia
-m = migrad(cf, x0, errs;
-    tol = 0.1,           # EDM convergence multiplier (× up × 0.002)
-    maxfcn = 1000,       # call budget
-    strategy = Strategy(0),     # 0 = fast, 1 = default, 2 = thorough
-    prec = MachinePrecision(),  # numerical precision overrides
-)
-```
-
-`Strategy(0)` is the speed-tuned mode (no inner-Hesse refinement).
-`Strategy(1)` (the iminuit default) runs an inner HESSE when the
-DFP-estimated covariance is loose (`Dcovar > 0.05`). `Strategy(2)`
-runs HESSE unconditionally after MIGRAD converges and re-iterates the
-inner DFP loop if HESSE moves EDM above tolerance.
-
-## Convergence diagnostics
-
-If `is_valid(m)` returns `false`, inspect:
+`migrad!` mirrors iminuit's defaults (`Strategy(1)`, `tol = 0.1`); override
+per call or store them on `m`:
 
 ```julia
-m.reached_call_limit  # true if maxfcn exhausted
-m.above_max_edm       # true if EDM > 10 × tol·up·0.002
-m.hesse_failed        # true if Strategy ≥ 1 inner HESSE failed
-m.made_pos_def        # true if posdef perturbation was applied mid-fit
+migrad!(m;
+    strategy = 2,        # 0 = fast, 1 = default, 2 = thorough
+    tol      = 1e-3,     # EDM convergence target (× up × 0.002)
+    maxfcn   = 10_000)   # call budget
+
+m.strategy = 2           # or set once on the object; later fits reuse it
 ```
 
-For invalid results, try (in order):
+If `m.valid` is `false`, loosen `tol`, raise `maxfcn`, bump the strategy,
+or re-seed from a better starting point. `m.accurate` separately reports
+whether the covariance is trustworthy (it is `false` when MIGRAD had to
+force the Hessian positive-definite).
 
-1. Loosen `tol`.
-2. Increase `maxfcn`.
-3. Raise the strategy level.
-4. Re-seed with a better starting point.
+## Where to go next
 
-## Next
-
-Continue to [Bounded parameters](bounded.md) to learn how to add
-`lower`/`upper` limits and `fixed` parameters.
+- [Bounded parameters](bounded.md) — add limits with `limits =` and fix
+  parameters, via the constructor or per-parameter [`set_limits!`](@ref) /
+  [`fix!`](@ref).
+- [MINOS errors & contours](minos_contours.md) — asymmetric errors,
+  `mncontour`, and profile likelihoods.
+- [Cost functions](../cost_functions.md) — the Julia-native cost family.
+- [Error analysis](../error_analysis.md) — which uncertainty method to
+  use, and when.

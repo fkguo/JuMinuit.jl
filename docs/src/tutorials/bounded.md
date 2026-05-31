@@ -1,85 +1,147 @@
 # Bounded parameters
 
-JuMinuit provides the iminuit-style **named-parameter API**: `MinuitParameter`
-+ `Parameters`, with per-parameter `lower`/`upper`/`fixed` flags.
-Bounds are implemented via internal `sin`/`sqrt` coordinate transforms
-mirroring C++ Minuit2 (no L-BFGS-B-style projected gradient).
+Real fits constrain parameters: a width must stay positive, a mixing angle
+lives in `[0, π/2]`, a normalization is fixed by an external measurement.
+JuMinuit handles all of this through the [`Minuit`](@ref) object — bounds
+and fixed flags are set at construction or mutated afterward, exactly like
+iminuit.
 
-## Adding bounds
+## Adding bounds at construction
+
+Pass `limits` — one entry per parameter. Each entry is `nothing`
+(unbounded), `(lo, hi)` (two-sided), `(lo, nothing)` (lower only), or
+`(nothing, hi)` (upper only):
 
 ```julia
 using JuMinuit
 
-cf = CostFunction(x -> (x[1] - 0.5)^2 + (x[2] - 0.5)^2)
+fcn(x) = (x[1] - 0.5)^2 + (x[2] - 3.0)^2
 
-params = Parameters([
-    MinuitParameter("x", 0.3, 0.1; lower = 0.0, upper = 1.0),  # double-bounded
-    MinuitParameter("y", 0.3, 0.1),                              # unbounded
-])
+m = Minuit(fcn, [0.3, 1.0];
+           names  = ["frac", "mass"],
+           limits = [(0.0, 1.0), (0.0, nothing)])   # frac ∈ [0,1]; mass ≥ 0
 
-m = migrad(cf, params)
-@assert is_valid(m)
-@assert 0.0 ≤ m.ext_values[1] ≤ 1.0   # bound respected exactly
+migrad!(m)
+@assert 0.0 ≤ m.values["frac"] ≤ 1.0                # bound respected exactly
 ```
 
-The first positional argument to `MinuitParameter` is the **name**,
-followed by the initial value and step size. Keywords:
+The FCN **always sees external (physical) coordinates** — inside `fcn`,
+`x[1]` is the real `frac`, already mapped into `[0, 1]`. You never deal
+with the transformed coordinate yourself.
 
-| Keyword     | Default | Meaning                                                  |
-|:------------|:--------|:---------------------------------------------------------|
-| `lower`     | `NaN`   | Lower bound; absent if `NaN`.                            |
-| `upper`     | `NaN`   | Upper bound; absent if `NaN`.                            |
-| `fixed`     | `false` | If `true`, parameter stays at its initial value.         |
+## What the transforms do
 
-When both `lower` and `upper` are set, the parameter uses the **Sin**
-transform: `ext = lower + 0.5·(upper-lower)·(sin(int)+1)`. With only
-one bound, the SqrtUp or SqrtLow transform is used. The internal
-coordinate the optimizer sees is **unbounded** — projection onto the
-allowed range happens transparently in `int2ext`/`ext2int`.
+Minuit enforces bounds by optimizing an *unbounded* internal coordinate
+and mapping it to the bounded external one (no projected-gradient or
+active-set machinery). The map depends on which bounds are present:
 
-## Fixed parameters
+| Bounds         | Transform | External value                                    |
+|:---------------|:----------|:--------------------------------------------------|
+| both `(lo,hi)` | sin       | `lo + (hi − lo)·(sin(int)+1)/2`                   |
+| lower only     | √         | `lo − 1 + √(int² + 1)`                            |
+| upper only     | √         | `hi + 1 − √(int² + 1)`                            |
+| none           | identity  | `int`                                             |
+
+This mirrors C++ Minuit2 exactly. The practical consequences:
+
+- the optimizer can never propose an out-of-range value — the bound is
+  respected at *every* probe, not just at the optimum;
+- but near a bound the map flattens (its slope → 0 at the boundary), which
+  distorts the error estimate — see *How bounds interact with HESSE and
+  MINOS* below.
+
+## Fixing parameters
+
+A fixed parameter is held bit-exactly at its value and excluded from the
+fit. Set `fixed` at construction:
 
 ```julia
-params = Parameters([
-    MinuitParameter("x", 0.0, 0.1),
-    MinuitParameter("y", 5.0, 0.1; fixed = true),    # bit-exact at 5.0
-    MinuitParameter("z", 0.0, 0.1),
-])
+m = Minuit(fcn, [0.3, 5.0];
+           names = ["frac", "mass"],
+           fixed = [false, true])     # mass pinned at 5.0
 
-m = migrad(cf, params)
-@assert m.ext_values[2] == 5.0          # exact, no roundoff
-@assert m.ext_errors[2] == 0.0           # fixed → zero error
+migrad!(m)
+@assert m.values["mass"] == 5.0       # exact, no roundoff
+@assert m.errors["mass"] == 0.0       # fixed → zero error
 ```
 
-## Result accessors for the bounded path
+A common workflow is the *fix–fit–release–fit* scan, e.g. to study one
+parameter's pull on the rest:
 
 ```julia
-m = migrad(cf, params)         # returns BoundedFunctionMinimum
-
-m.ext_values                   # parameter values in external (user) coords
-m.ext_errors                   # symmetric-average two-sided errors via Int2extError
-ext_covariance(m)              # full n_total × n_total external covariance
-                               #   (fixed rows + cols are zero)
-free_covariance(m)             # n_free × n_free sub-block (C++ MnUserParameterState shape)
+fix!(m, "mass"); migrad!(m)           # fit with mass held
+release!(m, "mass"); migrad!(m)       # free it again and refit
 ```
 
-The diagonal of `m.ext_errors` uses the C++
-[`MnUserTransformation::Int2extError`](https://github.com/root-project/root/blob/master/math/minuit2/src/MnUserTransformation.cxx)
-two-sided formula:
+## Editing bounds and fixes after construction
+
+Every constructor option has a per-parameter mutator (each accepts an
+integer index **or** a name, drops the cached fit, and returns `m` for
+chaining). They mirror the C++ `MnUserParameters` methods:
+
+```julia
+fix!(m, "frac")                       # exclude from the fit
+release!(m, 1)                        # re-include parameter 1
+set_value!(m, "mass", 3.0)            # change the starting value
+set_error!(m, "mass", 0.2)            # change the step size
+
+set_limits!(m, "frac", 0.0, 1.0)     # two-sided bound, keeps both sides
+set_lower_limit!(m, "mass", 0.0)      # lower bound only  → [0, ∞)
+set_upper_limit!(m, "mass", 10.0)     # upper bound only  → (-∞, 10]
+remove_limits!(m, "mass")             # drop both bounds
+```
+
+!!! warning "`set_lower_limit!` / `set_upper_limit!` clear the other side"
+    Matching C++ Minuit2, `set_lower_limit!` sets the lower bound
+    **and clears any upper bound**; `set_upper_limit!` does the
+    reverse. To keep both sides, use the two-sided [`set_limits!`](@ref)`(m, par, lo, hi)`.
+
+The same edits are available through the iminuit-style index-assignment
+views, which write straight back into `m`:
+
+```julia
+m.fixed["frac"]  = true               # ≡ fix!(m, "frac")
+m.limits["mass"] = (0.0, 10.0)        # ≡ set_limits!(m, "mass", 0.0, 10.0)
+m.limits["mass"] = nothing            # ≡ remove_limits!(m, "mass")
+m.values["mass"] = 3.0                # ≡ set_value!(m, "mass", 3.0)
+```
+
+## How bounds interact with HESSE and MINOS
+
+Both error methods run in internal coordinates and map back, so they
+respect the bounds — but two effects are worth knowing.
+
+**The error at a bound is asymmetric and Jacobian-distorted.** Because the
+transform's slope vanishes at the boundary, a naive `√(V[i,i])` would
+*under-report* the error there. JuMinuit instead uses the C++
+two-sided `Int2extError` formula for `m.errors`, which probes the map at
+`int ± err` and averages, capturing the curvature near the bound. So the
+reported symmetric error stays sensible even close to a limit.
+
+**A parameter pinned at a bound is flagged.** If MIGRAD ends with a value
+sitting on its `lower` or `upper` limit, the rich result table prints a
+warning, and the bound makes the local error unreliable:
 
 ```
-ui  = int2ext(val)
-du1 = int2ext(val + err) − ui
-du2 = int2ext(val − err) − ui
-return 0.5 · (|du1| + |du2|)
+⚠ Parameter `frac` is at its lower limit — Hesse/MINOS error is unreliable.
 ```
 
-This captures the nonlinear remapping near bounds where the
-Jacobian-only `sqrt(V_ext[i,i])` would under-report (the Jacobian
-shrinks toward zero at the boundary).
+**MINOS reports the bound distance, not an overflow.** When a MINOS scan
+runs into a bound before `χ²` rises by `up`, that side is a clean
+termination: the published error is the *distance to the bound*
+(`bound − value`), and the corresponding [`MinosError`](@ref) flag
+(`upper_par_limit` / `lower_par_limit`) is raised — matching iminuit's
+`m.merrors[name].is_valid` semantics (hitting a bound is legitimate, not a
+failure). If a parameter sits at a bound, that is usually a sign your bound
+is too tight or the data don't constrain the parameter on that side.
 
-## Bound saturation
+When a parameter rails against a bound and you suspect the error model is
+the culprit, the model-light cross-checks in the
+[Error analysis](../error_analysis.md) guide (bootstrap / jackknife) are
+the next tool.
 
-If MIGRAD ends with a parameter pinned at its `lower` or `upper` limit,
-the status box flags it — the "parameters at limit" row switches to a
-warning.
+## Next
+
+Continue to [MINOS errors & contours](minos_contours.md) for asymmetric
+errors and 2-D confidence regions, including how bounds propagate into the
+contour search.
