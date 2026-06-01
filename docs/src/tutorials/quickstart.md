@@ -6,7 +6,7 @@ asymmetric errors in five minutes. We use the iminuit / IMinuit.jl-style
 cost function, the parameters, and the fit result, with property access
 (`m.values`, `m.errors`, `m.fval`, …) you can copy-paste from iminuit.
 
-We assume Julia ≥ 1.10 and `JuMinuit` installed
+We assume Julia ≥ 1.11 and `JuMinuit` installed
 (`Pkg.add("JuMinuit")` once registered, or `Pkg.add(url=...)` from the
 repository).
 

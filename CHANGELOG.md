@@ -102,7 +102,7 @@ Builds on 0.1.0-alpha; 1012/1012 tests passing (Julia 1.12, 4 threads).
   bounded, MINOS+contours), API reference, internals (algorithm map,
   cross-search walk-through, multi-agent review history).
 - GitHub Actions workflows:
-    - `ci.yml`: test matrix on Julia 1.10 + 1, Ubuntu + macOS +
+    - `ci.yml`: test matrix on Julia 1.11 + 1, Ubuntu + macOS +
       macOS-aarch64; codecov upload.
     - `docs.yml`: Documenter build + gh-pages deploy on push to main.
 

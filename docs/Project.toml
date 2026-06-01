@@ -4,4 +4,4 @@ JuMinuit = "5523a57a-07f4-4aae-a9fd-d526bcb5d194"
 
 [compat]
 Documenter = "1"
-julia = "1.10"
+julia = "1.11"
