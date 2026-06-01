@@ -23,9 +23,10 @@ on:
       - 'LICENSE'
       - 'CHANGELOG*'
   schedule:
-    # Weekly full-matrix sweep — Mondays 06:00 UTC = catch any
-    # version/OS regression that the per-push minimal CI misses.
-    - cron: '0 6 * * 1'
+    # Monthly full-matrix sweep (1st of month, 06:00 UTC) — catch version/OS
+    # regressions the per-push minimal CI misses, without the weekly macOS
+    # (10× billing) cost.
+    - cron: '0 6 1 * *'
   workflow_dispatch:
 
 concurrency:
@@ -57,9 +58,9 @@ jobs:
           files: lcov.info
         continue-on-error: true   # codecov upload is best-effort
 
-  # Full matrix: tags + weekly schedule + manual dispatch. macos-14
-  # (Apple Silicon) is the developer's native arch; Julia 1.10 is the
-  # declared LTS-class compat floor (Project.toml: julia = "1.10").
+  # Full matrix: tags + monthly schedule + manual dispatch. One macOS job
+  # (macos-14, Apple Silicon — macOS bills 10×); Julia 1.10 is the declared
+  # LTS-class compat floor (Project.toml: julia = "1.10").
   test-full:
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - full
@@ -72,11 +73,11 @@ jobs:
           - '1'                 # current stable
         os:
           - ubuntu-latest
-          - macOS-latest
         arch:
           - x64
         include:
-          # Apple Silicon native — only on Julia 1 (latest)
+          # One macOS job (macOS bills 10×): Apple-Silicon native, Julia 1
+          # only. Dropped macOS-latest/x64 (that runner is being retired).
           - os: macos-14
             version: '1'
             arch: aarch64
