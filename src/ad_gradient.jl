@@ -181,6 +181,21 @@ This factory is the visible end of that capability.
 """
 function CostFunctionAD end
 
+# Fallback when the ForwardDiff extension is NOT loaded. The real method
+# (`JuMinuit.CostFunctionAD(f, up::Real=1.0; …)`, ext/JuMinuitForwardDiffExt.jl)
+# is strictly more specific, so it wins whenever ForwardDiff is loaded; this
+# catch-all only fires without the extension, turning a bare `MethodError` into
+# the actionable guidance the docstring promises.
+function CostFunctionAD(args...; kwargs...)
+    if Base.get_extension(@__MODULE__, :JuMinuitForwardDiffExt) === nothing
+        throw(ArgumentError(
+            "CostFunctionAD requires the ForwardDiff extension — run " *
+            "`using ForwardDiff` alongside `using JuMinuit` to enable it."))
+    end
+    # Extension loaded but no method matched these argument types.
+    throw(MethodError(CostFunctionAD, args))
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Analytical-gradient evaluation
 # ─────────────────────────────────────────────────────────────────────────────

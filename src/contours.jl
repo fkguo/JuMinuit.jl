@@ -80,10 +80,13 @@ re-minimization at each boundary point, so the full state is captured for
 free (IMinuit.jl re-fit each point only because PyCall could not return
 the inner `MinimumState` across the Python boundary).
 
-Each vector is in the **same coordinate frame as `ce.points`** (internal
-coordinates when reached via `mncontour` on a bounded fit; identical to
-external for unbounded fits). Empty when `ce` came from the ellipse
-[`contour`](@ref) or when the contour was invalid.
+Each vector is in the **same coordinate frame as `ce.points`**: physical
+(external) coordinates when the `ContoursError` came from the high-level
+[`contour`](@ref)`(m, …)` (which externalizes its output), and internal
+(sin/√-transformed) coordinates when it came from the low-level
+[`contour_exact`](@ref)`(fmin, cf, …)` on a bounded fit (identical to external
+for unbounded fits). Empty when `ce` came from the ellipse [`contour`](@ref)
+or when the contour was invalid.
 
 # Example
 
@@ -95,6 +98,26 @@ cf(psets[1]) ≈ fval(fmin) + cf.up
 ```
 """
 contour_parameter_sets(ce::ContoursError) = ce.full_points
+
+# Map a contour computed in INTERNAL (sin/√-transformed) coordinates back to
+# the user's EXTERNAL (physical) frame — the same frame as `m.values`. The
+# high-level `contour(m, …)` / `mncontour(m, …)` entry points run the contour
+# algorithm on the internal cost function (`m.fmin.internal_cf`) at internal
+# indices, so for BOUNDED parameters the raw `ce.points` are arcsin/√ coords,
+# not physical ones (a silent wrong result for plots / region analysis). This
+# externalizes `points` and `full_points` and restores the public external
+# parameter indices. No-op for unbounded parameters (internal == external).
+# `ce.par_x` / `ce.par_y` carry the INTERNAL indices the low-level call used.
+function _externalize_contour(ce::ContoursError, params::Parameters,
+                               ext_x::Integer, ext_y::Integer)
+    ix_int, iy_int = ce.par_x, ce.par_y
+    pts = [(int_to_ext_value(params, ix_int, px),
+            int_to_ext_value(params, iy_int, py)) for (px, py) in ce.points]
+    full = isempty(ce.full_points) ? ce.full_points :
+           [int_to_ext_vector(params, fp) for fp in ce.full_points]
+    return ContoursError(Int(ext_x), Int(ext_y), pts, ce.minos_x, ce.minos_y,
+                         ce.nfcn, ce.valid, full)
+end
 
 # ── full-point assembly helpers (Phase 2.x; used by contour_exact) ───────────
 # Re-insert the fixed contour coordinate(s) into an inner cross-search

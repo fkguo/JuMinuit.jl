@@ -490,8 +490,14 @@ function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
     # the iminuit-style V ≈ I that walks the warm start across basins
     # to χ²=322.59 in 8 DFP iters. Restored here for C++ parity.
     @inbounds for j in 1:n
-        tmp = abs(g2[j]) < prec.eps2 ? 1.0 : 1.0 / g2[j]
-        M[j, j] = abs(tmp) < prec.eps2 ? 1.0 : tmp
+        # RAW comparison (no abs) — exactly mirrors C++ MnHesse.cxx:288-291.
+        # For g2[j] < 0 (negative curvature) the first test is true → fall
+        # back to 1.0, never storing a negative diagonal (variance). Using
+        # `abs(g2[j])` here silently produced a NEGATIVE covariance entry
+        # (tmp = 1/g2 < 0), contradicting this routine's own docstring and
+        # C++; that poisoned EDM / error reporting on the invert-failed path.
+        tmp = g2[j] < prec.eps2 ? 1.0 : 1.0 / g2[j]
+        M[j, j] = tmp < prec.eps2 ? 1.0 : tmp
     end
     err = MinimumError(Symmetric(M, :U), status)
     return MinimumState(state.parameters, err, state.gradient,

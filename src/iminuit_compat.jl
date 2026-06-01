@@ -485,8 +485,10 @@ end
 MINOS 2D contour — the C++-faithful `MnContours` algorithm (boundary
 search via multi-parameter `function_cross`, not the ellipse
 approximation). Returns a vector of `(x, y)` points tracing the
-`sigma`-σ contour in the (par1, par2) plane. Mirrors iminuit's
-`m.mncontour(par1, par2)`.
+`sigma`-σ contour in the (par1, par2) plane, in **physical (external)
+coordinates** — the same frame as `m.values`, so the points plot directly
+(for bounded parameters they are mapped back through the sin/√ transform).
+Mirrors iminuit's `m.mncontour(par1, par2)`.
 
 `size` and `cl` are iminuit-compatible kwarg aliases for `numpoints`
 and `sigma` respectively. The iminuit names win if both pairs are
@@ -522,7 +524,10 @@ function mncontour(m::Minuit, par1, par2;
     ce = contour_exact(m.fmin.internal, m.fmin.internal_cf,
                         ix_int, iy_int; npoints = npts,
                         threaded_gradient = _tg, kwargs...)
-    return ce.points
+    # contour_exact works in internal (sin/√) coords; return physical
+    # (external) coords matching `m.values` (no-op for unbounded params).
+    return [(int_to_ext_value(m.params, ix_int, px),
+             int_to_ext_value(m.params, iy_int, py)) for (px, py) in ce.points]
 end
 
 """

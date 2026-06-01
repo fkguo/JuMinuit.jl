@@ -562,14 +562,14 @@ default to whatever the user stored on `m` (settable via
 `m.strategy = ...`, `m.tol = ...` or the constructor kwargs).
 
 If a prior `m.fmin` exists, pass 1 starts from the previous converged
-point (iminuit-compatible implicit resume). Use [`reset`](@ref) (or
+point (iminuit-compatible implicit resume). Use `reset(m)` (or
 `migrad(m; resume=false)`) to drop the prior fit and restart from the
 constructor's initial values. `m.params` itself is NEVER mutated —
 the carry-forward builds a fresh `Parameters` only for the duration
 of the inner MIGRAD call.
 """
 function migrad!(m::Minuit;
-                  strategy::Strategy = m.strategy,
+                  strategy::Union{Strategy,Integer} = m.strategy,
                   tol::Real = m.tol,
                   maxfcn::Union{Integer,Nothing} = nothing,
                   iterate::Integer = 5,
@@ -577,6 +577,9 @@ function migrad!(m::Minuit;
                   threaded_gradient::Union{Bool,Symbol} = m.threaded_gradient,
                   verify_threading::Bool = m.verify_threading,
                   print_level::Integer = m.print_level)
+    # Accept a bare Integer strategy (e.g. `strategy=2`) for parity with the
+    # `Minuit(...)` constructor and the `m.strategy=` setter; coerce to Strategy.
+    strategy = strategy isa Strategy ? strategy : Strategy(Int(strategy))
     # iminuit's `_robust_low_level_fit` requires iterate ≥ 1. iterate=1
     # disables retry (only pass 1 runs) and reproduces single-shot
     # C++-faithful behavior; iterate ≤ 0 would silently skip MIGRAD
@@ -1304,9 +1307,13 @@ function contour(m::Minuit, par_x::Integer, par_y::Integer;
     iy = m.params.int_of_ext[par_y]
     # Use the internal-coord-wrapped CostFunction (parallel-review #4
     # A7/B4 — see minos! for the rationale).
-    return contour(m.fmin.internal, m.fmin.internal_cf, ix, iy;
-                    npoints = npts,
-                    threaded_gradient = _tg, kwargs...)
+    ce = contour(m.fmin.internal, m.fmin.internal_cf, ix, iy;
+                  npoints = npts,
+                  threaded_gradient = _tg, kwargs...)
+    # The contour runs in internal coords; return physical (external) ones,
+    # matching `m.values` (no-op for unbounded params). See
+    # `_externalize_contour`.
+    return _externalize_contour(ce, m.params, par_x, par_y)
 end
 
 function contour(m::Minuit, px::AbstractString, py::AbstractString;
@@ -1924,7 +1931,7 @@ function migrad(m::Minuit;
                  ncall::Union{Integer,Nothing} = nothing,
                  resume::Bool = true,
                  precision::Union{Real,Nothing} = nothing,
-                 strategy::Strategy = m.strategy,
+                 strategy::Union{Strategy,Integer} = m.strategy,
                  tol::Real = m.tol,
                  iterate::Integer = 5,
                  use_simplex::Bool = false)
@@ -1968,11 +1975,13 @@ Internally:
 
 Returns `m` for chaining.
 """
-function hesse(m::Minuit; strategy::Strategy = Strategy(1),
+function hesse(m::Minuit; strategy::Union{Strategy,Integer} = Strategy(1),
                            maxcall::Integer = 0,
                            print_level::Integer = m.print_level)
     m.fmin === nothing &&
         throw(ArgumentError("Call `migrad(m)` before `hesse(m)`"))
+    # Accept a bare Integer strategy for parity with `Minuit(...)`.
+    strategy = strategy isa Strategy ? strategy : Strategy(Int(strategy))
     bfm = m.fmin
 
     # Refresh the internal-coord Hessian. Thread the per-parameter bound
