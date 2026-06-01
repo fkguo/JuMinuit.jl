@@ -277,16 +277,17 @@ On actual HEP fits (vs `iminuit` via PyCall; `julia -t 8` except where noted):
   and MINOS **2.1×** faster (72.8 vs 154.7 ms); the numerical path is ~1.2×
   faster too. All schemes reach the published `fval = 0.0174`.
 - **Large coupled-channel amplitude fit** — 57 free parameters, from an
-  independent unpublished analysis (single-threaded; a heavy multi-second-per-call
-  FCN). JuMinuit reaches the **same minimum** as the iminuit/PyCall backend
-  (Δχ² ≈ 2×10⁻⁵; 55 of 57 free parameters agree to <1%, the other two
-  weakly-constrained flat directions) in essentially the **same number of MIGRAD
-  evaluations** (within 2%), at **comparable per-evaluation cost**: at this FCN
-  weight the wall time is almost entirely the user function (a controlled
-  re-measurement puts the PyCall round-trip at <0.01% of a call and GC at ~0%,
-  the two backends allocating within 0.1% of each other), so neither has a
-  structural per-eval edge. The takeaway for heavy fits: the optimizer is not the
-  bottleneck — the FCN is.
+  independent unpublished analysis (single-threaded; a heavy, multi-second-per-call
+  FCN). The FCN is the **same Julia code** for both backends, so it cancels from
+  the comparison — only the optimizer differs. By the metric that reflects that,
+  JuMinuit lands on the **same minimum** (Δχ² ≈ 2×10⁻⁵; 55 of 57 free parameters
+  agree to <1%, the rest weakly-constrained flat directions) in the **same number
+  of MIGRAD evaluations** (7562 vs 7446, within 2%): its MIGRAD is as
+  call-efficient as C++ Minuit2's, which is what matters when each evaluation is
+  expensive. Wall time is then just `nfcn × (shared FCN cost)` — the optimizer's
+  own per-call overhead is negligible against a multi-second FCN, so here the FCN,
+  not the optimizer, sets the clock. (The cheap-FCN benchmarks above are where
+  that optimizer overhead — and JuMinuit's call-site advantage — actually shows.)
 
 (The IAM fit — the thread-safety example above — is a stiff,
 ill-conditioned amplitude fit whose convergence is seed-sensitive; it is
