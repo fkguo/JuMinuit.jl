@@ -1,23 +1,27 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Basin-hopping global minimisation for multi-basin objectives.
+# Basin-hopping search for a DEEPER minimum on multi-basin objectives.
 #
 # MIGRAD (like every local optimiser) converges to whatever basin its start
 # point drains into. On an ill-conditioned, multi-basin surface — IAM ππ being
 # the worked example in `BenchmarkExamples/IAM_2Pformfactor` — that basin is
 # often NOT the global one, and any error analysis done there is meaningless.
-# `find_global_minimum` automates the "restart, find a deeper basin, adopt it,
-# repeat" loop a user would otherwise run by hand.
+# `find_deeper_minimum` automates the "restart, find a deeper basin, adopt it,
+# repeat" loop a user would otherwise run by hand. It is a HEURISTIC: it returns
+# a deeper minimum than the start when its restarts find one, but cannot certify
+# the result is global (hence the name — not `find_global_minimum`).
 #
-# This is the global-SEARCH counterpart to `find_solution_modes` (which CLUSTERS
-# an already-sampled set into distinct solutions). Use this to find the true
-# minimum first, then the usual error analysis (HESSE / MINOS / get_contours_
-# samples) at the minimum it returns.
+# This is the SEARCH counterpart to `find_solution_modes` (which CLUSTERS an
+# already-sampled set into distinct solutions). Use it to escape a local basin
+# before the usual error analysis (HESSE / MINOS / get_contours_samples) at the
+# minimum it returns.
 
 """
-    find_global_minimum(fcn, x0, errors; kwargs...) -> FunctionMinimum
+    find_deeper_minimum(fcn, x0, errors; kwargs...) -> FunctionMinimum
 
-Basin-hopping global search for a multi-basin objective. Starting from a MIGRAD
+Basin-hopping search for a **deeper** minimum on a multi-basin objective — it
+escapes the local basin a single MIGRAD lands in. It does **not** certify the
+result is global (see the note below). Starting from a MIGRAD
 fit at `x0`, repeatedly draw `n_restarts` perturbed restarts around the current
 best (each coordinate jittered by `perturb · scaleᵢ · randn`, with
 `scaleᵢ = max(|xᵢ|, |errorᵢ|, abs_floor)`), MIGRAD each, and **adopt any deeper
@@ -57,33 +61,36 @@ and step sizes.
 - `seed::Union{Integer,Nothing} = nothing` — RNG seed for reproducible restarts.
 - `verbose::Bool = false` — log the best χ² per round.
 
-!!! note "Not a global-optimum guarantee"
+!!! note "Not a global-optimum guarantee (hence the name)"
     Basin-hopping is a heuristic: it finds a *deeper* basin when its restarts
-    land in one, but cannot prove the result is global. Raise `n_restarts` /
-    `perturb` / `max_rounds` for a more thorough search, and cross-check by
-    re-running from independent seeds.
+    land in one, but cannot prove the result is global — which is why this is
+    `find_deeper_minimum`, not `find_global_minimum`. On the IAM ππ fit, for
+    instance, it reaches χ²≈308 from a cold start but not the deeper ≈212 a
+    data-resampling search finds: **a** deeper minimum, not **the** global one.
+    Raise `n_restarts` / `perturb` / `max_rounds` for a more thorough search,
+    and cross-check by re-running from independent seeds.
 
 # Example
 
 ```julia
-fm = find_global_minimum(chi2, x0, errs; n_restarts = 40, perturb = 1.5, seed = 1)
-is_valid(fm) || error("global search failed")
+fm = find_deeper_minimum(chi2, x0, errs; n_restarts = 40, perturb = 1.5, seed = 1)
+is_valid(fm) || error("search failed")
 m = Minuit(chi2, values(fm); names = pnames)   # error analysis at the minimum
 migrad!(m); hesse(m)
 ```
 
 See also [`find_solution_modes`](@ref) (cluster sampled solutions into modes).
 """
-function find_global_minimum(cf::AbstractCostFunction, x0::AbstractVector, errors::AbstractVector;
+function find_deeper_minimum(cf::AbstractCostFunction, x0::AbstractVector, errors::AbstractVector;
         n_restarts::Integer = 24, perturb::Real = 1.0, abs_floor::Real = 0.0,
         max_rounds::Integer = 6, strategy = Strategy(1),
         maxfcn::Union{Integer,Nothing} = nothing, min_improvement::Real = 1e-3,
         seed::Union{Integer,Nothing} = nothing, verbose::Bool = false)
-    n_restarts >= 1 || throw(ArgumentError("find_global_minimum: n_restarts must be ≥ 1"))
-    max_rounds >= 1 || throw(ArgumentError("find_global_minimum: max_rounds must be ≥ 1"))
-    perturb > 0 || throw(ArgumentError("find_global_minimum: perturb must be > 0"))
-    min_improvement >= 0 || throw(ArgumentError("find_global_minimum: min_improvement must be ≥ 0"))
-    abs_floor >= 0 || throw(ArgumentError("find_global_minimum: abs_floor must be ≥ 0"))
+    n_restarts >= 1 || throw(ArgumentError("find_deeper_minimum: n_restarts must be ≥ 1"))
+    max_rounds >= 1 || throw(ArgumentError("find_deeper_minimum: max_rounds must be ≥ 1"))
+    perturb > 0 || throw(ArgumentError("find_deeper_minimum: perturb must be > 0"))
+    min_improvement >= 0 || throw(ArgumentError("find_deeper_minimum: min_improvement must be ≥ 0"))
+    abs_floor >= 0 || throw(ArgumentError("find_deeper_minimum: abs_floor must be ≥ 0"))
     rng = seed === nothing ? Random.default_rng() : Random.Xoshiro(seed)
     errs = collect(Float64, errors)
 
@@ -116,11 +123,20 @@ function find_global_minimum(cf::AbstractCostFunction, x0::AbstractVector, error
                 improved = true
             end
         end
-        verbose && @info "find_global_minimum" round χ² = fval(best) improved
+        verbose && @info "find_deeper_minimum" round χ² = fval(best) improved
         improved || break
     end
     return best
 end
 
-find_global_minimum(f, x0::AbstractVector, errors::AbstractVector; up::Real = 1.0, kwargs...) =
-    find_global_minimum(CostFunction(f, up), x0, errors; kwargs...)
+find_deeper_minimum(f, x0::AbstractVector, errors::AbstractVector; up::Real = 1.0, kwargs...) =
+    find_deeper_minimum(CostFunction(f, up), x0, errors; kwargs...)
+
+# Deprecated 0.3.1 name. Basin-hopping cannot certify a global minimum, so the
+# honest name is `find_deeper_minimum`; this warning-emitting alias keeps any
+# v0.3.1 code working.
+function find_global_minimum(args...; kwargs...)
+    Base.depwarn("`find_global_minimum` is deprecated; use `find_deeper_minimum` " *
+                 "(basin-hopping cannot guarantee a *global* minimum).", :find_global_minimum)
+    return find_deeper_minimum(args...; kwargs...)
+end

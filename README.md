@@ -99,14 +99,15 @@ common in coupled-channel / amplitude fits), JuMinuit adds:
   distinct solutions**, with optional per-mode re-fit and a "deeper-than-global"
   flag. Detects when a fit has several physically different solutions of
   comparable χ² that a single error bar would hide.
-- **Global minimisation** (`find_global_minimum`) — a basin-hopping search that
-  escapes the local basin a single MIGRAD lands in: it perturbs the best fit,
-  re-fits, and adopts any deeper minimum until no round improves. Use it to find
-  the true minimum *before* quoting errors.
+- **Escaping a local basin** (`find_deeper_minimum`) — a basin-hopping search
+  that climbs out of the basin a single MIGRAD lands in: it perturbs the best
+  fit, re-fits, and adopts any **deeper** minimum until no round improves. A
+  heuristic — it finds *a* deeper minimum, not a *certified global* one — but a
+  useful step toward the true minimum before quoting errors.
 
 **On multi-basin surfaces** (ill-conditioned coupled-channel fits), do two things
 in order. **(1) Find the true minimum** — a single MIGRAD only reaches the basin
-its start drains into, so use `find_global_minimum`, or multi-start +
+its start drains into, so use `find_deeper_minimum`, or multi-start +
 `find_solution_modes(…; refine=true)` (whose `new_min` flag marks a re-fit
 *deeper* than the current best). **(2) At that minimum, trust the _local_ error
 methods** (HESSE / MINOS / `get_contours_samples`). Naive bootstrap/jackknife are

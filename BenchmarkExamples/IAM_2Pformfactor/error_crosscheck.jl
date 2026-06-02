@@ -12,7 +12,7 @@
 #   discovery (`find_solution_modes(...; refine=true)`, which flags a re-fit
 #   DEEPER than the current best via `new_min`) drops further still. PHASE 1
 #   automates "restart → adopt any deeper basin → repeat". Error analysis at the
-#   shallow local minimum is meaningless. (The package's `find_global_minimum`
+#   shallow local minimum is meaningless. (The package's `find_deeper_minimum`
 #   is the general-purpose version of this loop for objectives with resamplable
 #   data unavailable.)
 #
@@ -210,5 +210,5 @@ especially) because their re-fits scatter across $(n_basins) basin(s): that spre
 is the distance BETWEEN basins, not the 1σ error. On a multi-basin surface there
 is no clean resampling 1σ — basin-selecting and taking the std of the survivors
 selects on the σ you're measuring → biased low. Defensible recipe: find the true
-minimum first (PHASE 1 / `find_global_minimum`), then trust the LOCAL error
+minimum first (PHASE 1 / `find_deeper_minimum`), then trust the LOCAL error
 methods (HESSE / MINOS / MC-Δχ²).""")

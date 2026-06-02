@@ -168,7 +168,7 @@ export eigenvalues, global_cc
 
 # Multi-modal solution detection (beyond iminuit) — cluster Δχ² samples
 export SolutionMode, SolutionModes, find_solution_modes
-export find_global_minimum
+export find_deeper_minimum, find_global_minimum  # latter deprecated → find_deeper_minimum
 
 # IMinuit.jl-compatible algorithm wrappers
 export mncontour, profile, mnprofile

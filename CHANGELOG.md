@@ -11,13 +11,15 @@ tests, real-physics error-analysis demonstrations, and a docs pass.
 
 ### Added
 
-- **`find_global_minimum`** — a basin-hopping global search for multi-basin
-  objectives (a single MIGRAD only finds the basin its start point drains into).
-  It perturbs the current best, re-fits, and adopts any deeper valid minimum,
-  repeating until no round improves. Complements `find_solution_modes` (which
-  clusters an already-sampled set into modes); use it to find the true minimum
-  *before* error analysis. Unbounded-only; returns a `FunctionMinimum` (check
-  `is_valid`).
+- **`find_deeper_minimum`** — a basin-hopping search for a *deeper* minimum on
+  multi-basin objectives (a single MIGRAD only finds the basin its start point
+  drains into). It perturbs the current best, re-fits, and adopts any deeper
+  valid minimum, repeating until no round improves. A **heuristic** — it finds
+  *a* deeper minimum, not a certified *global* one — complementing
+  `find_solution_modes`; use it to escape a local basin before error analysis.
+  Unbounded-only; returns a `FunctionMinimum` (check `is_valid`). (A deprecated
+  `find_global_minimum` alias — the name in the first 0.3.1 build, which
+  overclaimed globality — forwards here with a warning.)
 - **JET optimisation-analysis regression guard** — `test/test_aqua_jet.jl`
   asserts (via `JET.@report_opt target_modules=(JuMinuit,)`) that the MIGRAD hot
   path stays free of runtime dispatch — locking in the `CostFunction{F}`
