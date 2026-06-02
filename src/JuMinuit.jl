@@ -74,6 +74,7 @@ include("minuit.jl")
 include("display.jl")
 include("eigen_corr.jl")
 include("solution_modes.jl")
+include("global_min.jl")
 include("iminuit_compat.jl")
 include("cost_functions.jl")
 include("resampling.jl")
@@ -167,6 +168,7 @@ export eigenvalues, global_cc
 
 # Multi-modal solution detection (beyond iminuit) — cluster Δχ² samples
 export SolutionMode, SolutionModes, find_solution_modes
+export find_global_minimum
 
 # IMinuit.jl-compatible algorithm wrappers
 export mncontour, profile, mnprofile
