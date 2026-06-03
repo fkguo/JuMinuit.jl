@@ -321,9 +321,12 @@ function _refine_mode(m::Minuit, rep_full::Vector{Float64},
     empty_vec = Float64[]
     try
         grad = m.cfwg === nothing ? nothing : m.cfwg.g
+        # Preserve the parent's check_gradient choice — otherwise the constructor
+        # default (true) re-enables the seed-time CheckGradient check on every
+        # refine fit, emitting spurious warnings when the user set it false.
         mm = grad === nothing ?
             Minuit(m.fcn.f, m; threaded_gradient = false, verify_threading = false) :
-            Minuit(m.fcn.f, m; grad = grad,
+            Minuit(m.fcn.f, m; grad = grad, check_gradient = m.cfwg.check_gradient,
                    threaded_gradient = false, verify_threading = false)
         # Start from the cluster representative, but PIN fixed parameters at the
         # fit's value: a fixed parameter must not be re-anchored to whatever the

@@ -11,263 +11,244 @@
 # a deeper minimum than the start when its restarts find one, but cannot certify
 # the result is global (hence the name — not `find_global_minimum`).
 #
+# Two complementary strategies share the name:
+#   • parameter-perturbation  — jitter the current best and re-fit (any objective);
+#   • data-resampling         — bootstrap-resample the data and re-fit (data fits;
+#                               far stronger on hard multi-basin surfaces).
+#
+# EVERY fit goes through the high-level `Minuit` path, so a fit's PARAMETER LIMITS
+# and FIXED parameters are honoured throughout — the search stays inside the same
+# constrained parameter space as the user's fit. All overloads return a `Minuit`
+# (MIGRAD + HESSE already run); check `.valid`.
+#
 # This is the SEARCH counterpart to `find_solution_modes` (which CLUSTERS an
-# already-sampled set into distinct solutions). Use it to escape a local basin
-# before the usual error analysis (HESSE / MINOS / get_contours_samples) at the
-# minimum it returns.
+# already-sampled set into distinct solutions).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Clone a Minuit's FULL configuration — cost function, gradient + check_gradient,
+# parameter NAMES, LIMITS, FIXED flags, errordef, strategy, tol, threading, prec,
+# ndata — optionally overriding the start values / step sizes / strategy. This is
+# the single place constraint-preservation is centralised: every (re-)fit in the
+# search is built through here, so limits and fixed parameters always survive.
+function _clone_minuit(m::Minuit; values = nothing, errors = nothing, strategy = m.strategy)
+    grad = m.cfwg === nothing ? nothing : m.cfwg.g
+    chkg = m.cfwg === nothing ? true    : m.cfwg.check_gradient
+    # Minuit(fcn, m::Minuit) recovers names/limits/fixed/errors/up/tol/print_level/
+    # threaded_gradient/verify_threading/prec from `m`; we override grad/check_gradient/strategy.
+    mm = Minuit(m.fcn.f, m; grad = grad, check_gradient = chkg, strategy = strategy)
+    mm.ndata = m.ndata                       # not recovered by the constructor
+    values === nothing || (mm.values = collect(Float64, values))
+    errors === nothing || (mm.errors = collect(Float64, errors))
+    return mm
+end
+
+# A perturbed start point: jitter ONLY free parameters (fixed ones are left at
+# their value), and clamp each jittered coordinate into its [lower, upper] bound.
+function _perturb_point(best::Minuit, scale::Vector{Float64}, perturb::Real, rng)
+    bx = collect(Float64, best.values)
+    x  = copy(bx)
+    @inbounds for i in eachindex(bx)
+        is_fixed(best.params, i) && continue          # fixed: keep exactly
+        xi = bx[i] + perturb * scale[i] * randn(rng)
+        lo, hi = best.limits[i]                        # (NaN, NaN) when unbounded
+        isnan(lo) || (xi = max(xi, lo))
+        isnan(hi) || (xi = min(xi, hi))
+        x[i] = xi
+    end
+    return x
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Perturbation strategy — core (m::Minuit) + convenience overloads
+# ─────────────────────────────────────────────────────────────────────────────
 
 """
-    find_deeper_minimum(fcn, x0, errors; kwargs...) -> FunctionMinimum
+    find_deeper_minimum(m::Minuit; kwargs...) -> Minuit
 
-Basin-hopping search for a **deeper** minimum on a multi-basin objective — it
-escapes the local basin a single MIGRAD lands in. It does **not** certify the
-result is global (see the note below). Starting from a MIGRAD
-fit at `x0`, repeatedly draw `n_restarts` perturbed restarts around the current
-best (each coordinate jittered by `perturb · scaleᵢ · randn`, with
-`scaleᵢ = max(|xᵢ|, |errorᵢ|, abs_floor)`), MIGRAD each, and **adopt any deeper
-valid minimum**. A round that finds no improvement means the search has
-converged; otherwise it stops after `max_rounds`. Returns the deepest
-[`FunctionMinimum`](@ref) found.
+Parameter-perturbation basin-hopping search for a **deeper** minimum, starting
+from the fit `m`. Each round draws `n_restarts` perturbed restarts around the
+current best (each FREE coordinate jittered by `perturb · scaleᵢ · randn`, with
+`scaleᵢ = max(|xᵢ|, |errorᵢ|, abs_floor)`), MIGRADs each, and **adopts any deeper
+valid minimum**; it stops when a round finds no improvement or after `max_rounds`.
 
-`fcn` may be a plain callable (wrapped in `CostFunction(fcn, up)`) or an
-[`AbstractCostFunction`](@ref). `x0`/`errors` are the usual MIGRAD start point
-and step sizes.
-
-!!! warning "Unbounded only — and check validity"
-    This routine fits through the **unbounded** MIGRAD path and **ignores
-    parameter limits**: fold any bounds into `fcn` (a penalty, or a smooth
-    reparameterisation) before calling. The returned `FunctionMinimum` can be
-    invalid (e.g. if every restart failed) — always check `is_valid(result)`
-    before using it.
+Every restart is a clone of `m` (via [`Minuit`](@ref)), so **`m`'s parameter
+limits and fixed parameters are honoured** — fixed parameters are never jittered
+and stay pinned at their value, and jittered coordinates are clamped into their
+bounds. The search therefore stays inside the same constrained parameter space as
+your fit. Returns the deepest `Minuit` found (MIGRAD + HESSE already run); check
+its `.valid` property. `m` itself is not mutated.
 
 # Keyword arguments
-
-- `n_restarts::Integer = 24` — perturbed restarts per round (must be ≥ 1).
+- `n_restarts::Integer = 24` — perturbed restarts per round (≥ 1).
 - `perturb::Real = 1.0` — exploration radius, as a multiple of each parameter's
-  scale. Larger ⇒ jumps farther (more likely to escape a basin, at one full
-  re-fit per restart). **The key knob to tune on a hard surface.**
-- `abs_floor::Real = 0.0` — an absolute lower bound on each coordinate's jitter
-  scale. Raise it if a parameter sits near 0 with a tiny step (otherwise
-  `scaleᵢ → 0` and that coordinate is never explored).
+  scale. **The key knob on a hard surface.**
+- `abs_floor::Real = 0.0` — absolute lower bound on each coordinate's jitter scale
+  (raise it for a parameter sitting near 0 with a tiny step).
 - `max_rounds::Integer = 6` — stop after this many improvement rounds (≥ 1).
-- `strategy = Strategy(1)` — MIGRAD strategy for every (re-)fit.
-- `maxfcn::Union{Integer,Nothing} = nothing` — per-fit MIGRAD call budget
-  (`nothing` ⇒ MIGRAD's default `200 + 100n + 5n²`). Raise it for expensive FCNs
-  whose restarts need many calls to converge.
-- `min_improvement::Real = 1e-3` — a restart must beat the current best χ² by
-  more than this to be adopted (guards against same-basin numerical jitter).
-  (Note: this is the *adoption margin*, NOT MIGRAD's EDM `tol`.)
-- `up::Real = 1.0` — error definition, when `fcn` is a bare callable.
+- `strategy = m.strategy` — MIGRAD strategy for every (re-)fit.
+- `maxfcn::Union{Integer,Nothing} = nothing` — per-fit MIGRAD call budget.
+- `min_improvement::Real = 1e-3` — χ² drop required to adopt a restart.
 - `seed::Union{Integer,Nothing} = nothing` — RNG seed for reproducible restarts.
 - `verbose::Bool = false` — log the best χ² per round.
 
 !!! note "Not a global-optimum guarantee (hence the name)"
-    Basin-hopping is a heuristic: it finds a *deeper* basin when its restarts
-    land in one, but cannot prove the result is global — which is why this is
-    `find_deeper_minimum`, not `find_global_minimum`. On the IAM ππ fit, for
-    instance, it reaches χ²≈308 from a cold start but not the deeper ≈212 a
-    data-resampling search finds: **a** deeper minimum, not **the** global one.
-    Raise `n_restarts` / `perturb` / `max_rounds` for a more thorough search,
-    and cross-check by re-running from independent seeds.
+    Basin-hopping finds *a* deeper basin when its restarts land in one; it cannot
+    prove the result is global. Raise `n_restarts`/`perturb`/`max_rounds` and
+    cross-check from independent seeds.
 
-# Example
-
-```julia
-fm = find_deeper_minimum(chi2, x0, errs; n_restarts = 40, perturb = 1.5, seed = 1)
-is_valid(fm) || error("search failed")
-m = Minuit(chi2, values(fm); names = pnames)   # error analysis at the minimum
-migrad!(m); hesse(m)
-```
-
-See also [`find_solution_modes`](@ref) (cluster sampled solutions into modes).
+See also [`find_solution_modes`](@ref) and the data-resampling overload
+[`find_deeper_minimum(m, refit, data)`](@ref).
 """
-function find_deeper_minimum(cf::AbstractCostFunction, x0::AbstractVector, errors::AbstractVector;
+function find_deeper_minimum(m::Minuit;
         n_restarts::Integer = 24, perturb::Real = 1.0, abs_floor::Real = 0.0,
-        max_rounds::Integer = 6, strategy = Strategy(1),
+        max_rounds::Integer = 6, strategy = m.strategy,
         maxfcn::Union{Integer,Nothing} = nothing, min_improvement::Real = 1e-3,
         seed::Union{Integer,Nothing} = nothing, verbose::Bool = false)
     n_restarts >= 1 || throw(ArgumentError("find_deeper_minimum: n_restarts must be ≥ 1"))
     max_rounds >= 1 || throw(ArgumentError("find_deeper_minimum: max_rounds must be ≥ 1"))
-    perturb > 0 || throw(ArgumentError("find_deeper_minimum: perturb must be > 0"))
+    perturb > 0     || throw(ArgumentError("find_deeper_minimum: perturb must be > 0"))
     min_improvement >= 0 || throw(ArgumentError("find_deeper_minimum: min_improvement must be ≥ 0"))
-    abs_floor >= 0 || throw(ArgumentError("find_deeper_minimum: abs_floor must be ≥ 0"))
+    abs_floor >= 0  || throw(ArgumentError("find_deeper_minimum: abs_floor must be ≥ 0"))
+    m.npar >= 1     || throw(ArgumentError("find_deeper_minimum: needs ≥ 1 free parameter " *
+                                           "(all parameters are fixed — nothing to search)"))
     rng = seed === nothing ? Random.default_rng() : Random.Xoshiro(seed)
-    errs = collect(Float64, errors)
+    n = length(m.values)
 
-    # Each fit gets a fresh call budget: `migrad` compares the cost function's
-    # CUMULATIVE `nfcn` to `maxfcn`, so without resetting, later restarts on the
-    # shared `cf` would start already over the limit and bail immediately.
-    _fit(x) = (reset_ncalls!(cf); migrad(cf, x, errs; strategy = strategy, maxfcn = maxfcn))
+    # Work on a fitted clone — never mutate the caller's `m`.
+    best = _clone_minuit(m; strategy = strategy)
+    migrad!(best; maxfcn = maxfcn); hesse(best)
 
-    best = _fit(collect(Float64, x0))
     for round in 1:max_rounds
-        bx = collect(Float64, best.state.parameters.x)
-        scale = [max(abs(bx[i]), abs(errs[i]), abs_floor, eps()) for i in eachindex(bx)]
+        bx    = collect(Float64, best.values)
+        berr  = collect(Float64, best.errors)
+        scale = [is_fixed(best.params, i) ? 0.0 :
+                 max(abs(bx[i]), abs(berr[i]), abs_floor, eps()) for i in 1:n]
         improved = false
         for _ in 1:n_restarts
-            x = bx .+ perturb .* scale .* randn(rng, length(bx))
+            x = _perturb_point(best, scale, perturb, rng)
             # A wild jitter can push a constrained FCN into a throwing region
-            # (log of a negative, a singular matrix, …); skip that restart
-            # rather than aborting the whole search.
-            fm = try
-                _fit(x)
+            # (log of a negative, a singular matrix, …); skip that restart.
+            cand = _clone_minuit(best; values = x)
+            ok = try
+                migrad!(cand; maxfcn = maxfcn); true
             catch err
                 err isa Union{DomainError,BoundsError,SingularException,ArgumentError,DivideError} || rethrow()
-                continue
+                false
             end
-            # NB: restarts in a round all jitter around this round's `bx` (the
-            # current best is re-centred only at the next round boundary) — the
-            # standard basin-hopping choice.
-            if is_valid(fm) && isfinite(fval(fm)) && fval(fm) < fval(best) - min_improvement
-                best = fm
+            ok || continue
+            if cand.valid && isfinite(cand.fval) && cand.fval < best.fval - min_improvement
+                hesse(cand)
+                best = cand
                 improved = true
             end
         end
-        verbose && @info "find_deeper_minimum" round χ² = fval(best) improved
+        verbose && @info "find_deeper_minimum (perturbation)" round χ² = best.fval improved
         improved || break
     end
     return best
 end
 
+"""
+    find_deeper_minimum(cf, x0, errors; limits=nothing, fixed=nothing, names=nothing, kwargs...) -> Minuit
+
+Parameter-perturbation search from a cost function / callable `cf` and start
+`x0`/`errors`. Builds a [`Minuit`](@ref) with the given `limits`, `fixed` flags
+and `names` (same meaning as the `Minuit` constructor) and delegates to
+[`find_deeper_minimum(m::Minuit)`](@ref) — so bounds and fixed parameters are
+honoured. `cf` may be an [`AbstractCostFunction`](@ref) (its gradient, if any, is
+carried) or a bare callable (`up` sets the error definition).
+"""
+function find_deeper_minimum(cf::AbstractCostFunction, x0::AbstractVector, errors::AbstractVector;
+        limits = nothing, fixed = nothing, names = nothing, strategy = Strategy(1), kwargs...)
+    grad = cf isa CostFunctionWithGradient ? cf.g : nothing
+    chkg = cf isa CostFunctionWithGradient ? cf.check_gradient : true
+    m = Minuit(cf.f, collect(Float64, x0); error = collect(Float64, errors), up = cf.up,
+               limits = limits, fixed = fixed, name = names,
+               grad = grad, check_gradient = chkg, strategy = strategy)
+    find_deeper_minimum(m; strategy = strategy, kwargs...)
+end
+
 find_deeper_minimum(f, x0::AbstractVector, errors::AbstractVector; up::Real = 1.0, kwargs...) =
     find_deeper_minimum(CostFunction(f, up), x0, errors; kwargs...)
 
-# ─── Perturbation: Minuit convenience dispatch ────────────────────────────────
-
-"""
-    find_deeper_minimum(m::Minuit; kwargs...) -> FunctionMinimum
-
-Convenience overload — equivalent to
-`find_deeper_minimum(m.fcn, collect(m.values), collect(m.errors); kwargs...)`.
-Avoids extracting `values` and `errors` by hand when you already hold a
-converged [`Minuit`](@ref). All keyword arguments are forwarded to the
-parameter-perturbation overload.
-"""
-find_deeper_minimum(m::Minuit; kwargs...) =
-    # Route through m.cfwg (the CostFunctionWithGradient) when the user supplied an
-    # analytical / AD gradient, so the perturbation restarts use the gradient path.
-    # Fall back to m.fcn (numerical CostFunction) when no gradient was given.
-    find_deeper_minimum(m.cfwg === nothing ? m.fcn : m.cfwg,
-                        collect(Float64, m.values), collect(Float64, m.errors); kwargs...)
-
-# ─── Resampling: pre-fitted Minuit (primary implementation) ──────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Data-resampling strategy — core (m, refit, data) + overloads
+# ─────────────────────────────────────────────────────────────────────────────
 
 """
     find_deeper_minimum(m::Minuit, refit, data; kwargs...) -> Minuit
 
 Data-resampling basin-hopping search for a **deeper** minimum on a multi-basin
-data-fitting objective.
+data-fitting objective. Each round bootstrap-resamples `data` and re-fits each
+resample with `refit` (those drift toward whichever basin best explains that
+subset); the candidates are clustered with `find_solution_modes(...; refine=true)`
+and **re-evaluated on the ORIGINAL objective** (so the χ² comparison is honest);
+the deepest valid new basin is adopted, and the loop repeats.
 
-Unlike the parameter-perturbation overload, which randomly jitters parameters,
-this overload exploits the *statistical structure of the data*: each bootstrap
-resample of `data` is re-fit by `refit`, which naturally drifts toward the basin
-that best explains *that* data subset — making it far more effective on surfaces
-where basins are separated by large distances in parameter space relative to the
-HESSE scale.
-
-!!! note "Comparability: all χ² comparisons are on the original data"
-    `refit(subdata, start)` runs on a bootstrap subsample and returns *parameter
-    vectors* only, used as starting-point candidates. All function-value comparisons
-    use [`find_solution_modes`](@ref) with `refine=true`, which re-evaluates each
-    candidate on the *original* objective (via `m.fcn`). Comparability with
-    `m.fval` is guaranteed by design.
-
-!!! warning "Unbounded only — same contract as the perturbation overload"
-    Parameter limits and fixed flags are **not** carried over to the adopted
-    Minuit. Fold any bounds into the cost function before calling.
-    Always check `.valid` on the returned `Minuit` (note: the `Minuit`-returning
-    overloads use the `m.valid` property, not `is_valid` — the latter is for the
-    low-level `FunctionMinimum` that the perturbation overloads return).
+**Constraints are honoured.** The re-fit/refinement runs through `Minuit(m.fcn.f, m)`
+(which carries `m`'s limits + fixed flags and pins fixed parameters), and the
+adoption rebuild clones the same configuration — so a fixed parameter stays fixed
+and a bounded one stays in bounds throughout. Returns the deepest `Minuit` (MIGRAD
++ HESSE already run); check `.valid`. `m` is not mutated.
 
 # Arguments
-- `m::Minuit` — a converged fit (MIGRAD + HESSE already run). Provides the cost
-  function, current best parameters as the warm-start for discovery, and the
-  HESSE covariance for whitening inside [`find_solution_modes`](@ref).
-- `refit` — any callable: `refit(subdata, start::Vector{Float64}) -> Vector{Float64}`.
-  Must run MIGRAD on the resampled subset starting from `start`, and return the
-  fitted parameter vector, or a `NaN`-filled vector of the same length if the
-  fit is invalid. Accepts functors/callable structs as well as plain functions.
-- `data` — the full dataset. Must support `data[idx]` indexing where `idx` is a
-  `Vector{Int}` bootstrap index vector.
+- `m::Minuit` — a converged fit. Supplies the cost function, current best as the
+  warm start, the HESSE covariance for whitening, and the constraint structure.
+- `refit` — `refit(subdata, start::Vector{Float64}) -> Vector{Float64}` (a `NaN`-
+  filled vector of the same length ⇒ invalid, dropped). Accepts functors. To keep
+  the discovery itself constrained, `refit` should apply the same fix/limits;
+  any fixed parameter is in any case re-pinned during refinement.
+- `data` — the full dataset, supporting `data[idx]` bootstrap indexing.
 
 # Keyword arguments
-- `n_discovery::Integer = 20` — bootstrap resamples per round. Keep ≥ 10 for
-  [`find_solution_modes`](@ref) clustering to be stable; must be ≥ 2.
-- `max_rounds::Integer = 6` — cap on adoption rounds. Each round runs
-  `n_discovery` refits + one full-data re-minimisation if a deeper basin is found.
-- `strategy = Strategy(1)` — MIGRAD strategy for the adoption re-fit (full data).
-  Discovery-phase strategy is controlled inside `refit`.
-- `min_improvement::Real = 1e-3` — minimum χ² drop required to adopt a basin.
-- `parallel::Union{Bool,Nothing} = nothing` — controls threading in two places:
-  (1) the discovery loop (`Threads.@threads`) is parallelised **only** when
-  `parallel === true` — `refit` must be thread-safe (no shared mutable state);
-  under `nothing` or `false` discovery is always serial.
-  (2) the value is passed through to [`find_solution_modes`](@ref), which
-  auto-threads the per-mode re-fits when `nothing` and `m.threaded_gradient` is set.
-- `seed::Union{Integer,Nothing} = nothing` — RNG seed for reproducible bootstrap
-  index generation. Indices are pre-generated sequentially before any parallel
-  section, so results are deterministic regardless of `parallel`.
-- `verbose::Bool = false` — log χ² improvement at each adoption round.
-
-# Returns
-The deepest `Minuit` found (MIGRAD + HESSE already run at the new basin), or the
-*input `m` unchanged* if no deeper basin was found or the suitability check fired.
+- `n_discovery::Integer = 20` — bootstrap resamples per round (≥ 2; keep ≥ 10 for
+  stable clustering).
+- `max_rounds::Integer = 6` — cap on adoption rounds.
+- `strategy = m.strategy` — MIGRAD strategy for the adoption re-fit.
+- `min_improvement::Real = 1e-3` — χ² drop required to adopt a basin.
+- `parallel::Union{Bool,Nothing} = nothing` — `true` threads the discovery loop
+  (only if `refit` is thread-safe) AND is passed to `find_solution_modes`;
+  `nothing`/`false` runs discovery serially.
+- `seed::Union{Integer,Nothing} = nothing` — RNG seed (indices are pre-generated
+  sequentially, so results are deterministic regardless of `parallel`).
+- `verbose::Bool = false` — log χ² improvement per round.
 
 # Suitability check
-After the **first** discovery round, if no resample finds a deeper basin the
-surface appears single-basin for data-resampling at this start point — a `@warn`
-is emitted and `m` is returned immediately. Try the parameter-perturbation
-overload: `find_deeper_minimum(m; perturb=…, n_restarts=…)`.
-
-# Example
-```julia
-m = Minuit(chi2, x0; names = pnames, errors = errs); migrad!(m); hesse(m)
-
-refit = (subdata, start) -> begin
-    cf = CostFunction(lec -> chi2_on(subdata, lec), 1.0)
-    fm = migrad(cf, start, errs; strategy = Strategy(1))
-    is_valid(fm) ? collect(values(fm)) : fill(NaN, length(start))
-end
-
-m_deep = find_deeper_minimum(m, refit, pts)
-m_deep.valid || error("search failed")
-# m_deep already has HESSE; run minos!(m_deep) or get_contours_samples for errors
-```
-
-See also [`find_solution_modes`](@ref), the parameter-perturbation overload
-[`find_deeper_minimum(fcn, x0, errors)`](@ref).
+If the first round finds no deeper basin, a `@warn` is emitted and a fitted clone
+of `m` (the same minimum, since `m` is never mutated) is returned — the surface
+may be single-basin here, or bootstrap coverage was
+insufficient (raise `n_discovery`); for parameter-space search try the
+perturbation overload `find_deeper_minimum(m; perturb=…)`.
 """
 function find_deeper_minimum(m::Minuit, refit, data;
-        n_discovery     :: Integer                = 20,
-        max_rounds      :: Integer                = 6,
-        strategy                                  = Strategy(1),
-        min_improvement :: Real                   = 1e-3,
-        parallel        :: Union{Bool,Nothing}    = nothing,
-        seed            :: Union{Integer,Nothing} = nothing,
-        verbose         :: Bool                   = false)
-
-    n_discovery >= 2 ||
-        throw(ArgumentError("find_deeper_minimum: n_discovery must be ≥ 2"))
-    max_rounds >= 1 ||
-        throw(ArgumentError("find_deeper_minimum: max_rounds must be ≥ 1"))
-    min_improvement >= 0 ||
-        throw(ArgumentError("find_deeper_minimum: min_improvement must be ≥ 0"))
+        n_discovery::Integer = 20, max_rounds::Integer = 6, strategy = m.strategy,
+        min_improvement::Real = 1e-3, maxfcn::Union{Integer,Nothing} = nothing,
+        parallel::Union{Bool,Nothing} = nothing,
+        seed::Union{Integer,Nothing} = nothing, verbose::Bool = false)
+    n_discovery >= 2 || throw(ArgumentError("find_deeper_minimum: n_discovery must be ≥ 2"))
+    max_rounds >= 1  || throw(ArgumentError("find_deeper_minimum: max_rounds must be ≥ 1"))
+    min_improvement >= 0 || throw(ArgumentError("find_deeper_minimum: min_improvement must be ≥ 0"))
     n  = length(data)
     n >= 2 || throw(ArgumentError("find_deeper_minimum: data must have ≥ 2 elements"))
+    m.npar >= 1 || throw(ArgumentError("find_deeper_minimum: needs ≥ 1 free parameter " *
+                                       "(all parameters are fixed — nothing to search)"))
     np = length(m.values)
-
     rng    = seed === nothing ? Random.default_rng() : Random.Xoshiro(seed)
-    # Parallelize discovery only when explicitly requested: refit must be thread-safe.
     do_par = parallel === true
 
-    for iter in 1:max_rounds
-        p_star = collect(Float64, m.values)
+    # Work on a fitted clone — never mutate the caller's `m`.
+    cur = _clone_minuit(m; strategy = strategy)
+    migrad!(cur; maxfcn = maxfcn); hesse(cur)
 
-        # Pre-generate all bootstrap index vectors sequentially so the RNG state
-        # is deterministic regardless of whether the discovery loop runs in parallel.
+    for iter in 1:max_rounds
+        p_star = collect(Float64, cur.values)
+
+        # Pre-generate bootstrap indices sequentially → deterministic under parallel.
         all_idx = [rand(rng, 1:n, n) for _ in 1:n_discovery]
 
-        # ── Discovery: refit each bootstrap resample ──────────────────────────
         rows = Vector{Union{Vector{Float64},Nothing}}(undef, n_discovery)
         if do_par
             Threads.@threads :static for k in 1:n_discovery
@@ -282,7 +263,6 @@ function find_deeper_minimum(m::Minuit, refit, data;
         end
         valid_rows = filter(!isnothing, rows)
 
-        # ── Too few valid resamples: bail ─────────────────────────────────────
         if length(valid_rows) < 2
             @warn "find_deeper_minimum (resampling): only $(length(valid_rows)) valid " *
                   "resample(s) in round $iter — FCN may throw or fail on most bootstrap " *
@@ -290,142 +270,92 @@ function find_deeper_minimum(m::Minuit, refit, data;
             break
         end
 
-        # ── Cluster and refine each mode on the ORIGINAL data (via m.fcn) ─────
-        # Pre-allocate disc matrix (avoids repeated vcat allocations).
         disc = Matrix{Float64}(undef, length(valid_rows), np)
         for (i, r) in enumerate(valid_rows)
             disc[i, :] .= r
         end
-        md = find_solution_modes(disc, m; refine = true, parallel = parallel)
+        # find_solution_modes refines each mode through Minuit(m.fcn.f, m) — limits
+        # + fixed flags preserved, fixed parameters pinned — on the ORIGINAL data.
+        md = find_solution_modes(disc, cur; refine = true, parallel = parallel)
 
-        # ── Suitability check (round 1 only) ─────────────────────────────────
-        # `new_min` is false when every resample converged to the same or a shallower
-        # basin — the surface may be single-basin, or the bootstrap may just not
-        # have explored deeply enough (try a larger `n_discovery`).
         if iter == 1 && !any(x.new_min for x in md)
             @warn "find_deeper_minimum (resampling): round 1 — " *
                   "$(length(valid_rows)) valid resample(s) formed $(length(md)) mode(s), " *
-                  "none deeper than current best (χ² = $(round(m.fval; digits=3))). " *
+                  "none deeper than current best (χ² = $(round(cur.fval; digits=3))). " *
                   "No deeper basin found via data-resampling at this start. " *
                   "The surface may be single-basin here, or bootstrap coverage was insufficient " *
                   "(try a larger `n_discovery`). " *
                   "For parameter-space search try: `find_deeper_minimum(m; perturb=…, n_restarts=…)`."
-            return m
+            return cur
         end
 
-        # ── Find the deepest valid new-minimum mode ───────────────────────────
         deeper = [x for x in md if x.new_min && x.refined_valid]
         if isempty(deeper)
             verbose && @info "find_deeper_minimum (resampling)" iter msg = "no deeper basin → stable"
             break
         end
         bn          = deeper[argmin(x.refined_fval for x in deeper)]
-        fval_before = m.fval
+        fval_before = cur.fval
         fval_after  = bn.refined_fval
         fval_before - fval_after >= min_improvement || break
 
         verbose && @info "find_deeper_minimum (resampling)" iter χ²_before = fval_before χ²_after = fval_after
 
-        # ── Adopt: rebuild Minuit at new basin, re-fit + HESSE on full data ───
-        # Preserve the analytical gradient function if the original fit used one.
-        # Note: parameter limits and fixed flags are not carried over (unbounded
-        # contract, matching the perturbation overload).
-        grad = m.cfwg === nothing ? nothing : m.cfwg.g
-        # Preserve the user's check_gradient choice (the constructor default is
-        # true; without this an original check_gradient=false would be silently
-        # re-enabled on the rebuild). No-op when there is no gradient.
-        chkg = m.cfwg === nothing ? true : m.cfwg.check_gradient
-        # Use the refined_errors from the new basin (populated by migrad! inside
-        # _refine_mode) as step sizes — more appropriate than the old basin's
-        # HESSE errors, which may differ in scale by orders of magnitude.
-        # Fall back to m.errors only if refined_errors is unexpectedly empty.
-        adopt_errs  = isempty(bn.refined_errors) ? collect(Float64, m.errors) :
-                                                    collect(Float64, bn.refined_errors)
-        prev_ndata  = m.ndata
-        prev_prec   = m.prec
-        prev_vt     = m.verify_threading
-        m = Minuit(m.fcn.f, collect(Float64, bn.refined_values);
-                   name              = collect(m.parameters),
-                   error             = adopt_errs,
-                   grad              = grad,
-                   check_gradient    = chkg,
-                   up                = m.fcn.up,
-                   strategy          = strategy,
-                   tol               = m.tol,
-                   print_level       = m.print_level,
-                   threaded_gradient = m.threaded_gradient,
-                   verify_threading  = prev_vt,
-                   prec              = prev_prec)
-        m.ndata = prev_ndata   # not a constructor kwarg; set post-construction
-        migrad!(m); hesse(m)
+        # Adopt: clone cur's constraints, set the new basin's values + step sizes.
+        adopt_errs = isempty(bn.refined_errors) ? collect(Float64, cur.errors) :
+                                                   collect(Float64, bn.refined_errors)
+        cur = _clone_minuit(cur; values = bn.refined_values, errors = adopt_errs, strategy = strategy)
+        migrad!(cur; maxfcn = maxfcn); hesse(cur)
     end
-    return m
+    return cur
 end
 
-# ─── Resampling: fresh-start (delegates to pre-fitted) ────────────────────────
-
 """
-    find_deeper_minimum(cf::AbstractCostFunction, x0, errors, refit, data; kwargs...) -> Minuit
+    find_deeper_minimum(cf, x0, errors, refit, data; limits=nothing, fixed=nothing, names=nothing, kwargs...) -> Minuit
 
-Fresh-start data-resampling overload. Runs an initial MIGRAD + HESSE from `x0`
-to build the reference [`Minuit`](@ref), then delegates to the
-`(m::Minuit, refit, data)` overload. See that overload for full keyword
-documentation.
-
-When you already have a converged `Minuit`, prefer passing it directly —
-`find_deeper_minimum(m, refit, data)` skips the initial MIGRAD + HESSE.
+Data-resampling search from a cost function / callable. Builds a [`Minuit`](@ref)
+with the given `limits`/`fixed`/`names`, fits it, and delegates to the
+`(m::Minuit, refit, data)` overload (constraints honoured). When you already hold
+a converged `Minuit`, prefer passing it directly.
 """
 function find_deeper_minimum(cf::AbstractCostFunction, x0::AbstractVector,
                              errors::AbstractVector, refit, data;
+                             limits = nothing, fixed = nothing, names = nothing,
                              strategy = Strategy(1), kwargs...)
-    errs = collect(Float64, errors)
-    # Preserve an analytical/AD gradient if cf carries one, so the fresh-start path
-    # has the same AD parity as the pre-fitted (m::Minuit) overload — otherwise an
-    # AD user's whole search would silently fall back to central differences.
-    # Also preserve the cf's check_gradient flag (constructor default is true).
     grad = cf isa CostFunctionWithGradient ? cf.g : nothing
     chkg = cf isa CostFunctionWithGradient ? cf.check_gradient : true
-    m0   = Minuit(cf.f, collect(Float64, x0);
-                  error = errs, up = cf.up, grad = grad,
-                  check_gradient = chkg, strategy = strategy)
-    migrad!(m0); hesse(m0)
-    find_deeper_minimum(m0, refit, data; strategy = strategy, kwargs...)
+    m = Minuit(cf.f, collect(Float64, x0); error = collect(Float64, errors), up = cf.up,
+               limits = limits, fixed = fixed, name = names,
+               grad = grad, check_gradient = chkg, strategy = strategy)
+    # The (m, refit, data) core fits a clone of `m` itself — no need to fit here.
+    find_deeper_minimum(m, refit, data; strategy = strategy, kwargs...)
 end
-
-# ─── Resampling: plain-callable wrapper ───────────────────────────────────────
 
 find_deeper_minimum(f, x0::AbstractVector, errors::AbstractVector, refit, data;
                     up::Real = 1.0, kwargs...) =
     find_deeper_minimum(CostFunction(f, up), x0, errors, refit, data; kwargs...)
 
-# ─── Dispatch disambiguator ───────────────────────────────────────────────────
-# Without this method, a call shaped `(Minuit, AbstractVector, AbstractVector)`
-# is ambiguous: the perturbation plain-callable wrapper is more specific on
-# args 2–3, while the resampling pre-fitted overload is more specific on arg 1.
-# Julia would throw MethodError. This sentinel is more specific on ALL three
-# args and resolves the ambiguity with a helpful message.
+# ─────────────────────────────────────────────────────────────────────────────
+# Dispatch disambiguators
+# ─────────────────────────────────────────────────────────────────────────────
+# A 3-arg call `(Minuit, AbstractVector, AbstractVector)` is otherwise ambiguous
+# (perturbation plain-callable wrapper vs. the m::Minuit core), and a 5-arg
+# `(Minuit, AbstractVector, AbstractVector, refit, data)` mixes the two API styles.
+# These sentinels throw a helpful ArgumentError instead.
 find_deeper_minimum(::Minuit, ::AbstractVector, ::AbstractVector; kwargs...) =
     throw(ArgumentError(
         "find_deeper_minimum: ambiguous 3-arg call (Minuit, AbstractVector, AbstractVector). " *
-        "For parameter-perturbation from a Minuit use the 1-arg form: " *
-        "`find_deeper_minimum(m; perturb=…)`. " *
-        "For data-resampling pass a callable `refit` and a data collection: " *
-        "`find_deeper_minimum(m, refit, data)`."))
+        "For parameter-perturbation from a Minuit use the 1-arg form `find_deeper_minimum(m; perturb=…)`. " *
+        "For data-resampling pass a callable `refit` and a data collection: `find_deeper_minimum(m, refit, data)`."))
 
-# Symmetric guard for the invalid 5-arg shape `(Minuit, AbstractVector,
-# AbstractVector, refit, data)` — a user mixing the two API styles (a Minuit AND
-# x0/errors). Without this it falls through to the plain-callable wrapper, which
-# wraps the Minuit in a CostFunction and later fails with the cryptic
-# `MethodError: objects of type Minuit are not callable`. (More specific than the
-# plain-callable wrapper on arg 1, so it wins without introducing ambiguity.)
 find_deeper_minimum(::Minuit, ::AbstractVector, ::AbstractVector, refit, data; kwargs...) =
     throw(ArgumentError(
         "find_deeper_minimum: invalid call (Minuit, AbstractVector, AbstractVector, refit, data) " *
         "mixes the two API styles. For data-resampling from a converged Minuit, drop x0/errors: " *
-        "`find_deeper_minimum(m, refit, data)`. To start fresh from x0/errors, pass a cost " *
-        "function or callable (not a Minuit): `find_deeper_minimum(cf, x0, errors, refit, data)`."))
+        "`find_deeper_minimum(m, refit, data)`. To start fresh, pass a cost function/callable " *
+        "(not a Minuit): `find_deeper_minimum(cf, x0, errors, refit, data)`."))
 
-
+# ─────────────────────────────────────────────────────────────────────────────
 # Deprecated 0.3.1 name. Basin-hopping cannot certify a global minimum, so the
 # honest name is `find_deeper_minimum`; this warning-emitting alias keeps any
 # v0.3.1 code working.

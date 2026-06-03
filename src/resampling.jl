@@ -853,6 +853,24 @@ variance) parameter yields `NaN` in its row/column (correlation undefined).
 correlation(r::BootstrapResult) = _sample_correlation(r.samples, r.valid, length(r.names))
 correlation(r::JackknifeResult) = _sample_correlation(r.samples, r.valid, length(r.names))
 
+"""
+    correlation(m::Minuit; skip_fixed=true) -> Matrix{Float64}
+
+The parameter **correlation matrix** of the fit — the HESSE covariance normalised
+to unit diagonal (`C[i,j] = V[i,j]/√(V[i,i]·V[j,j])`). IMinuit.jl/iminuit-compatible
+(equivalent to `matrix(m; correlation=true)`, and to iminuit's
+`m.covariance.correlation()`). Returns `nothing` if MIGRAD has not run. By default
+the free-parameter block is returned (`skip_fixed=true`); pass `skip_fixed=false`
+for the full external matrix (fixed parameters then give a `0` row/column).
+
+```julia
+C = correlation(m)
+C[i, j]          # estimated correlation of parameters i and j
+```
+"""
+correlation(m::Minuit; skip_fixed::Bool = true) =
+    matrix(m; correlation = true, skip_fixed = skip_fixed)
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Display — boxed tables in the house style (reuses _fmt_num/_ljust/_center).
 # ═════════════════════════════════════════════════════════════════════════════

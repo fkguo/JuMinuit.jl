@@ -166,6 +166,17 @@ using Test
         # degenerate: <2 valid samples → NaN correlation matrix (no throw)
         Cnan = JuMinuit._sample_correlation(jk.samples, falses(jk.g), 2)
         @test all(isnan, Cnan)
+
+        # correlation(m::Minuit) — HESSE correlation matrix (iminuit parity with
+        # `m.covariance.correlation()`); equals `matrix(m; correlation=true)`.
+        Cm = correlation(m)
+        @test size(Cm) == (2, 2)
+        @test Cm[1, 1] ≈ 1.0 atol = 1e-12
+        @test Cm[2, 2] ≈ 1.0 atol = 1e-12
+        @test Cm ≈ Cm'
+        @test Cm[1, 2] < 0                                  # slope/intercept anti-correlated
+        @test Cm ≈ matrix(m; correlation = true)
+        @test Cm[1, 2] ≈ Cj[1, 2] rtol = 0.2               # HESSE ≈ resampling estimate
     end
 
     @testset "delete-d block jackknife" begin

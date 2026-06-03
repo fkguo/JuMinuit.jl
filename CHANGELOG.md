@@ -3,6 +3,52 @@
 All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 + [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-03
+
+`find_deeper_minimum` gains a data-resampling strategy and full parameter-constraint
+support, and its API is unified onto `Minuit`. The solver core (MIGRAD/HESSE/MINOS)
+is unchanged; the breaking change is contained to the `find_deeper_minimum` helper
+that shipped in 0.3.1.
+
+### Added
+
+- **`find_deeper_minimum` data-resampling strategy** —
+  `find_deeper_minimum(m::Minuit, refit, data; …)`: each round bootstrap-resamples
+  the data and re-fits each resample (those drift toward whichever basin best
+  explains that subset), clusters the candidates with
+  `find_solution_modes(…; refine=true)` **re-evaluated on the original data**, and
+  adopts the deepest valid new basin — far stronger than parameter perturbation on
+  hard multi-basin data fits. Fresh-start `(cf/f, x0, errors, refit, data)`
+  overloads and a `find_deeper_minimum(m::Minuit; …)` convenience overload included.
+- **Parameter limits + fixed parameters are honoured.** Every fit in the search now
+  routes through the high-level `Minuit` path, so a fit's `limits` and `fixed`
+  flags survive the entire search — fixed parameters stay pinned, bounded ones stay
+  in bounds (the perturbation jitters only free coordinates and clamps to bounds;
+  the resampling refinement re-pins fixed parameters). The bare `(cf/f, x0, errors)`
+  overloads accept `limits`/`fixed`/`names` keyword arguments.
+- **`correlation(m::Minuit)`** — the HESSE parameter correlation matrix, for
+  IMinuit.jl/iminuit parity (iminuit's `m.covariance.correlation()`). Equivalent
+  to `matrix(m; correlation=true)`; the `correlation` function previously only
+  accepted `BootstrapResult`/`JackknifeResult`.
+
+### Changed (breaking)
+
+- **`find_deeper_minimum` now always returns a `Minuit`** (MIGRAD + HESSE already
+  run — check `.valid`). The 0.3.1 parameter-perturbation overloads returned a
+  `FunctionMinimum`; both strategies now share one return type, ready for
+  `minos!`/`hesse`. Migrate `is_valid(fm)` / `fm.state.parameters.x` / `values(fm)`
+  to `m.valid` / `m.values`.
+- **No longer "unbounded only".** The previous `find_deeper_minimum` ignored
+  parameter limits and fixed flags (the docs told you to fold bounds into the FCN);
+  it now honours them. Behaviour for unconstrained fits is unchanged.
+
+### Fixed
+
+- `find_solution_modes(…; refine=true)` now preserves the parent fit's
+  `check_gradient` flag on each per-mode re-fit (it previously reverted to the
+  constructor default `true`, emitting spurious `CheckGradient` warnings when the
+  user had set it `false`).
+
 ## [0.3.1] — 2026-06-02
 
 A tooling + documentation release. The solver core is unchanged (the v0.3.0
