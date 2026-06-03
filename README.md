@@ -100,10 +100,13 @@ common in coupled-channel / amplitude fits), JuMinuit adds:
   flag. Detects when a fit has several physically different solutions of
   comparable χ² that a single error bar would hide.
 - **Escaping a local basin** (`find_deeper_minimum`) — a basin-hopping search
-  that climbs out of the basin a single MIGRAD lands in: it perturbs the best
-  fit, re-fits, and adopts any **deeper** minimum until no round improves. A
-  heuristic — it finds *a* deeper minimum, not a *certified global* one — but a
-  useful step toward the true minimum before quoting errors.
+  that climbs out of the basin a single MIGRAD lands in, by **parameter
+  perturbation** (any objective) or **data resampling** (bootstrap-driven —
+  stronger on hard multi-basin data fits, automating the multi-start +
+  `find_solution_modes(…; refine=true)` loop in one call). Adopts any **deeper**
+  valid minimum until no round improves. A heuristic — it finds *a* deeper
+  minimum, not a *certified global* one — but a useful step toward the true
+  minimum before quoting errors.
 
 **On multi-basin surfaces** (ill-conditioned coupled-channel fits), do two things
 in order. **(1) Find the true minimum** — a single MIGRAD only reaches the basin
@@ -113,10 +116,13 @@ its start drains into, so use `find_deeper_minimum`, or multi-start +
 methods** (HESSE / MINOS / `get_contours_samples`). Naive bootstrap/jackknife are
 **unreliable** here — each resample re-fits into a possibly-different basin, so
 the spread measures the distance *between* basins, not the 1σ error, and there is
-no clean "basin-selection" rescue. Worked example:
+no clean "basin-selection" rescue. Worked examples:
 [`IAM_2Pformfactor/error_crosscheck.jl`](BenchmarkExamples/IAM_2Pformfactor/error_crosscheck.jl)
-(contrast the clean single-basin
-[`X3872_dip`](BenchmarkExamples/X3872_dip/error_crosscheck.jl)).
+(the full multi-basin error study) and
+[`find_deeper_minimum_demo.jl`](BenchmarkExamples/IAM_2Pformfactor/find_deeper_minimum_demo.jl)
+(`find_deeper_minimum` dropping a cold χ²≈379 fit to χ²≈255, a Δχ²≈124 descent, in
+one call); contrast the clean single-basin
+[`X3872_dip`](BenchmarkExamples/X3872_dip/error_crosscheck.jl).
 
 See the [error-analysis guide](docs/src/error_analysis.md) for the full comparison
 table (which method, when) and worked examples.

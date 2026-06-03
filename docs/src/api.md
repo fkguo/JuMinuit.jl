@@ -179,6 +179,12 @@ JuMinuit.SolutionMode
 JuMinuit.SolutionModes
 ```
 
+## Escaping a local basin
+
+```@docs
+JuMinuit.find_deeper_minimum
+```
+
 ## Alternative minimizers (Optim.jl bridge)
 
 ```@docs

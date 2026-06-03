@@ -371,6 +371,62 @@ reach. Per-mode re-fits are parallelized across threads when the fit opts into
 threading (`m.threaded_gradient`, honoring the same FCN thread-safety contract as
 JuMinuit's threaded gradient).
 
+### Escaping a local basin — `find_deeper_minimum`
+
+`find_solution_modes` only *clusters what you already sampled*; its `new_min` flag
+tells you a better basin exists but not how to reach it from scratch.
+[`find_deeper_minimum`](@ref) is the **search** counterpart — it actively climbs
+out of the basin a single MIGRAD lands in and returns the deeper minimum, so you
+can do error analysis *there*. It ships in two flavours:
+
+**Parameter-perturbation** (works for any objective — no data needed). Jitter the
+current best by `perturb · scaleᵢ · randn` each restart, MIGRAD, adopt any deeper
+valid minimum, repeat. Returns a [`FunctionMinimum`](@ref) (check `is_valid`):
+
+```julia
+fm = find_deeper_minimum(m)                       # from a converged Minuit
+fm = find_deeper_minimum(chi2, x0, errs; n_restarts = 40, perturb = 1.5, seed = 1)
+is_valid(fm) || error("search failed")
+```
+
+**Data-resampling** (for data fits — much stronger on hard multi-basin surfaces).
+Each round bootstrap-resamples the data and re-fits each resample; those drift
+toward whichever basin best explains that subset. The candidates are clustered
+with `find_solution_modes(...; refine = true)`, **re-evaluated on the ORIGINAL
+data** (so the χ² comparison is honest), and the deepest valid new basin is
+adopted; repeat. Returns a [`Minuit`](@ref) with MIGRAD + HESSE already run — check
+its **`.valid`** property (not `is_valid`, which is for the `FunctionMinimum` the
+perturbation form returns):
+
+```julia
+# refit(subdata, start) -> parameter vector (NaNs ⇒ invalid, dropped)
+refit = (sub, start) -> (fm = migrad(CostFunction(p -> chi2_on(sub, p)), start, errs);
+                         is_valid(fm) ? collect(values(fm)) : fill(NaN, length(start)))
+m_deep = find_deeper_minimum(m, refit, data)      # m already MIGRAD+HESSE'd
+m_deep.valid || error("search failed")
+minos!(m_deep)                                    # now do error analysis HERE
+```
+
+If the first round finds no deeper basin, it warns and returns `m` unchanged — the
+surface may be single-basin, or bootstrap coverage was insufficient (raise
+`n_discovery`); for parameter-space search try the perturbation form instead.
+
+!!! note "Worked example — IAM ππ"
+    `BenchmarkExamples/IAM_2Pformfactor/find_deeper_minimum_demo.jl`: a cold
+    Strategy-1 MIGRAD from the published LECs lands at **χ² ≈ 379** (a shallow
+    basin, χ²/dof ≈ 4.9); `find_deeper_minimum`'s resampling dispatch drops it to
+    **χ² ≈ 255** (χ²/dof ≈ 3.3) over four adopt-rounds — a **Δχ² ≈ 124** descent in
+    one call, by the same mechanism `error_crosscheck.jl`'s hand-rolled PHASE 1
+    loop uses (it reaches χ² ≈ 235 from a multi-start seed). Error analysis at 379
+    would be meaningless; do it at the deep minimum.
+
+!!! warning "A heuristic, not a global-optimum proof"
+    Basin-hopping finds *a* deeper minimum when its restarts/resamples land in one;
+    it cannot certify the result is global (hence the name — not
+    `find_global_minimum`). Raise `n_restarts`/`perturb`/`n_discovery`/`max_rounds`
+    and cross-check from independent seeds. The routine fits through the
+    **unbounded** MIGRAD path — fold any bounds into the cost function first.
+
 ### Clustering backends
 
 - **`method = :components`** (default, **zero dependencies**) — single-linkage
