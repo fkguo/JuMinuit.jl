@@ -175,7 +175,9 @@ HESSE scale.
 !!! warning "Unbounded only — same contract as the perturbation overload"
     Parameter limits and fixed flags are **not** carried over to the adopted
     Minuit. Fold any bounds into the cost function before calling.
-    Always check `is_valid` on the returned `Minuit`.
+    Always check `.valid` on the returned `Minuit` (note: the `Minuit`-returning
+    overloads use the `m.valid` property, not `is_valid` — the latter is for the
+    low-level `FunctionMinimum` that the perturbation overloads return).
 
 # Arguments
 - `m::Minuit` — a converged fit (MIGRAD + HESSE already run). Provides the cost
@@ -228,7 +230,7 @@ refit = (subdata, start) -> begin
 end
 
 m_deep = find_deeper_minimum(m, refit, pts)
-is_valid(m_deep) || error("search failed")
+m_deep.valid || error("search failed")
 # m_deep already has HESSE; run minos!(m_deep) or get_contours_samples for errors
 ```
 
@@ -329,6 +331,10 @@ function find_deeper_minimum(m::Minuit, refit, data;
         # Note: parameter limits and fixed flags are not carried over (unbounded
         # contract, matching the perturbation overload).
         grad = m.cfwg === nothing ? nothing : m.cfwg.g
+        # Preserve the user's check_gradient choice (the constructor default is
+        # true; without this an original check_gradient=false would be silently
+        # re-enabled on the rebuild). No-op when there is no gradient.
+        chkg = m.cfwg === nothing ? true : m.cfwg.check_gradient
         # Use the refined_errors from the new basin (populated by migrad! inside
         # _refine_mode) as step sizes — more appropriate than the old basin's
         # HESSE errors, which may differ in scale by orders of magnitude.
@@ -342,6 +348,7 @@ function find_deeper_minimum(m::Minuit, refit, data;
                    name              = collect(m.parameters),
                    error             = adopt_errs,
                    grad              = grad,
+                   check_gradient    = chkg,
                    up                = m.fcn.up,
                    strategy          = strategy,
                    tol               = m.tol,
@@ -372,7 +379,15 @@ function find_deeper_minimum(cf::AbstractCostFunction, x0::AbstractVector,
                              errors::AbstractVector, refit, data;
                              strategy = Strategy(1), kwargs...)
     errs = collect(Float64, errors)
-    m0   = Minuit(cf.f, collect(Float64, x0); error = errs, up = cf.up, strategy = strategy)
+    # Preserve an analytical/AD gradient if cf carries one, so the fresh-start path
+    # has the same AD parity as the pre-fitted (m::Minuit) overload — otherwise an
+    # AD user's whole search would silently fall back to central differences.
+    # Also preserve the cf's check_gradient flag (constructor default is true).
+    grad = cf isa CostFunctionWithGradient ? cf.g : nothing
+    chkg = cf isa CostFunctionWithGradient ? cf.check_gradient : true
+    m0   = Minuit(cf.f, collect(Float64, x0);
+                  error = errs, up = cf.up, grad = grad,
+                  check_gradient = chkg, strategy = strategy)
     migrad!(m0); hesse(m0)
     find_deeper_minimum(m0, refit, data; strategy = strategy, kwargs...)
 end
@@ -396,6 +411,19 @@ find_deeper_minimum(::Minuit, ::AbstractVector, ::AbstractVector; kwargs...) =
         "`find_deeper_minimum(m; perturb=…)`. " *
         "For data-resampling pass a callable `refit` and a data collection: " *
         "`find_deeper_minimum(m, refit, data)`."))
+
+# Symmetric guard for the invalid 5-arg shape `(Minuit, AbstractVector,
+# AbstractVector, refit, data)` — a user mixing the two API styles (a Minuit AND
+# x0/errors). Without this it falls through to the plain-callable wrapper, which
+# wraps the Minuit in a CostFunction and later fails with the cryptic
+# `MethodError: objects of type Minuit are not callable`. (More specific than the
+# plain-callable wrapper on arg 1, so it wins without introducing ambiguity.)
+find_deeper_minimum(::Minuit, ::AbstractVector, ::AbstractVector, refit, data; kwargs...) =
+    throw(ArgumentError(
+        "find_deeper_minimum: invalid call (Minuit, AbstractVector, AbstractVector, refit, data) " *
+        "mixes the two API styles. For data-resampling from a converged Minuit, drop x0/errors: " *
+        "`find_deeper_minimum(m, refit, data)`. To start fresh from x0/errors, pass a cost " *
+        "function or callable (not a Minuit): `find_deeper_minimum(cf, x0, errors, refit, data)`."))
 
 
 # Deprecated 0.3.1 name. Basin-hopping cannot certify a global minimum, so the

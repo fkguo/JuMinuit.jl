@@ -145,7 +145,10 @@ end
 
     # ── disambiguator: (Minuit, AbstractVector, AbstractVector) → ArgumentError ─
     @testset "dispatch disambiguator" begin
+        # 3-arg ambiguous shape
         @test_throws ArgumentError find_deeper_minimum(m_sb, [1.0], [0.1])
+        # 5-arg invalid shape (Minuit + x0 + errors + refit + data) mixes API styles
+        @test_throws ArgumentError find_deeper_minimum(m_sb, [1.0], [0.1], refit_sb, pts_sb)
     end
 
     # ── refit returning wrong-length vector is treated as invalid ─────────────
@@ -159,4 +162,110 @@ end
         @test m_out isa Minuit
         @test m_out.fval ≈ m_sb.fval atol = 1e-6
     end
+end
+
+@testset "find_deeper_minimum — resampling ADOPTION path (deeper basin found)" begin
+    # The single-basin fixtures above only exercise the suitability-check early
+    # return.  This drives the FULL adoption path: discovery → find_solution_modes
+    # refine → new_min → rebuild Minuit → migrad!+hesse → loop.  It covers the
+    # adoption-rebuild lines (refined_errors / prec / verify_threading / ndata).
+    #
+    # Tilted double well: shallow well at x[1]≈+1 (f≈+0.39), DEEP at x[1]≈−1
+    # (f≈−0.41).  Start in the shallow well; `refit` returns DEEP-well candidates
+    # so the refine step finds a genuinely deeper minimum and adoption fires.
+    f(x) = (x[1]^2 - 1)^2 + 0.4 * x[1] + x[2]^2
+
+    m = Minuit(f, [1.0, 0.3]; errors = [0.2, 0.2], strategy = 2)
+    migrad!(m); hesse(m)
+    m.ndata = 17                          # to verify ndata survives the rebuild
+    @test m.values[1] > 0                 # confirm we start in the SHALLOW basin
+
+    data = collect(1.0:10.0)
+    # refit ignores the (fixed) objective's data-dependence and returns deep-well
+    # candidates with a tiny bootstrap-derived jitter so the cluster is non-degenerate.
+    refit_deep = (subdata, start) -> begin
+        j = 0.01 * (sum(subdata) / length(subdata) - 5.5)
+        return [-1.0 + j, 0.0 + j]
+    end
+
+    m_deep = find_deeper_minimum(m, refit_deep, data; n_discovery = 12, seed = 1)
+
+    @test m_deep isa Minuit
+    @test m_deep.valid                    # Minuit uses .valid, NOT is_valid
+    @test m_deep.values[1] < 0            # escaped to the DEEP well
+    @test m_deep.fval < m.fval - 0.5      # genuinely deeper (≈−0.41 vs ≈+0.39)
+    @test m_deep.ndata == 17              # ndata carried through the adoption rebuild
+    @test m_deep !== m                    # a NEW Minuit was adopted (not the input)
+
+    # determinism: same seed ⇒ same adopted minimum
+    m_deep2 = find_deeper_minimum(m, refit_deep, data; n_discovery = 12, seed = 1)
+    @test collect(m_deep2.values) ≈ collect(m_deep.values)
+end
+
+@testset "find_deeper_minimum — AD-gradient parity" begin
+    # Both the perturbation m::Minuit overload and the fresh-start resampling
+    # overload must keep an analytical/AD gradient (not silently fall back to
+    # central differences). These paths are green-but-were-untested.
+    fq(x) = (x[1] - 2.0)^2 + (x[2] + 1.0)^2
+    gq(x) = [2 * (x[1] - 2.0), 2 * (x[2] + 1.0)]          # exact gradient
+    m_ad = Minuit(fq, [0.0, 0.0]; errors = [0.3, 0.3], grad = gq, strategy = 1)
+    migrad!(m_ad)
+    @test m_ad.cfwg !== nothing                           # fixture really has a gradient cf
+
+    # ── Fix #5: perturbation m::Minuit routes through m.cfwg (AD migrad path).
+    # If migrad(::CostFunctionWithGradient) / reset_ncalls! were missing this errors.
+    fm = find_deeper_minimum(m_ad; n_restarts = 10, perturb = 0.4, seed = 1)
+    @test JuMinuit.is_valid(fm)
+    @test values(fm) ≈ [2.0, -1.0] atol = 1e-3            # converged via the AD-routed search
+
+    # ── New fix: fresh-start resampling overload forwards cf.g for a
+    # CostFunctionWithGradient.  Single-basin refit → suitability fires → returns
+    # the internal m0; m0 must carry the gradient (cfwg !== nothing).
+    cf_ad = m_ad.cfwg
+    refit_ad = (subdata, start) -> begin
+        fm2 = migrad(CostFunction(fq, 1.0), start, [0.3, 0.3]; strategy = JuMinuit.Strategy(1))
+        JuMinuit.is_valid(fm2) ? collect(Float64, values(fm2)) : fill(NaN, length(start))
+    end
+    data_ad = fill(1.0, 16)
+    # NullLogger: we only assert gradient preservation here, not the warning set
+    # (an AD fit may also emit a one-time CheckGradient line at the seed).
+    m_out = with_logger(NullLogger()) do
+        find_deeper_minimum(cf_ad, [0.0, 0.0], [0.3, 0.3], refit_ad, data_ad;
+                            n_discovery = 8, seed = 1)
+    end
+    @test m_out isa Minuit
+    @test m_out.cfwg !== nothing                          # AD gradient preserved (the fix)
+
+    # ── check_gradient flag preserved through the fresh-start rebuild (round-3 fix):
+    # an explicit check_gradient=false must NOT be silently reset to the
+    # constructor default (true).
+    m_cg = Minuit(fq, [0.0, 0.0]; errors = [0.3, 0.3], grad = gq, check_gradient = false)
+    @test m_cg.cfwg.check_gradient == false               # fixture really has it off
+    m_out_cg = with_logger(NullLogger()) do
+        find_deeper_minimum(m_cg.cfwg, [0.0, 0.0], [0.3, 0.3], refit_ad, data_ad;
+                            n_discovery = 8, seed = 1)
+    end
+    @test m_out_cg.cfwg !== nothing
+    @test m_out_cg.cfwg.check_gradient == false           # preserved, not reset to default
+
+    # ── SITE 1 (adoption rebuild): grad + check_gradient must survive an ACTUAL
+    # basin adoption, not just the suitability early-return.  Tilted double well
+    # with an exact gradient; start shallow, refit returns deep-well candidates.
+    fw(x) = (x[1]^2 - 1)^2 + 0.4 * x[1] + x[2]^2
+    gw(x) = [4 * x[1] * (x[1]^2 - 1) + 0.4, 2 * x[2]]
+    m_w = Minuit(fw, [1.0, 0.3]; errors = [0.2, 0.2], grad = gw,
+                 check_gradient = false, strategy = 2)
+    migrad!(m_w); hesse(m_w)
+    @test m_w.values[1] > 0                               # starts in the shallow basin
+    data_w = collect(1.0:10.0)
+    refit_w = (subdata, start) -> begin
+        j = 0.01 * (sum(subdata) / length(subdata) - 5.5)
+        return [-1.0 + j, 0.0 + j]
+    end
+    m_w_deep = with_logger(NullLogger()) do
+        find_deeper_minimum(m_w, refit_w, data_w; n_discovery = 12, seed = 1)
+    end
+    @test m_w_deep.values[1] < 0                          # actually adopted the deep basin
+    @test m_w_deep.cfwg !== nothing                       # gradient survived adoption
+    @test m_w_deep.cfwg.check_gradient == false           # check_gradient survived adoption
 end
