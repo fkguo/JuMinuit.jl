@@ -1,31 +1,35 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # `find_deeper_minimum` on the IAM ππ fit — WORKED EXAMPLE (demonstration, not a
-# unit test).
+# unit test). Shows the basin-hopping search escaping a shallow cold-start basin,
+# in BOTH of the physically relevant setups, side by side:
 #
-# A single Strategy-1 MIGRAD from the published LEC start lands in a SHALLOW basin
-# (χ² ≈ 379). `find_deeper_minimum`'s data-resampling dispatch climbs out of it:
-# each round bootstrap-resamples the 85 phase-shift points, re-fits each resample
-# (those drift toward whichever basin best explains that subset), clusters the
-# results with `find_solution_modes(...; refine=true)`, adopts the deepest valid
-# basin found on the ORIGINAL data, and repeats — here 379 → 285 → 279 → 260 → 255
-# over four adopt-rounds (Δχ² ≈ 124, seed=1). Same mechanism as PHASE 1 of
-# `error_crosscheck.jl` (which reaches ≈235 from a multi-start seed); from this
-# colder single-start it lands in a different, comparably deep basin — exactly the
-# path-sensitivity the heuristic warns about. ONE call replaces the hand loop.
+#   CASE 1 — L6ʳ FIXED (the paper-faithful fit). In the NLO ChPT amplitudes the
+#            LECs L6ʳ and L8ʳ enter the ππ→ππ, Kπ→Kπ, KK̄→KK̄ sector essentially
+#            through the combination 2L6ʳ+L8ʳ, so the πη data (sparse here) barely
+#            pins L6ʳ separately and it is FIXED to its input value 0.07×10⁻³.
+#   CASE 2 — L6ʳ FREE (8 LECs). Releasing L6ʳ lets the fit slide along that nearly
+#            flat 2L6ʳ+L8ʳ direction, so it can reach a deeper χ² — at an L6ʳ value
+#            (≈ −0.4×10⁻³) the ππ data alone cannot really determine.
 #
-# Companion: `error_crosscheck.jl` (the full multi-basin error-analysis study).
+# Both cases start from the SAME cold Strategy-1 MIGRAD and use the SAME
+# data-resampling `find_deeper_minimum`; the only difference is whether L6ʳ is
+# fixed. `find_deeper_minimum` honours the fixed flag (v0.4.0), so CASE 1 keeps
+# L6ʳ pinned throughout the search. The comparison lets the reader see exactly
+# what fixing vs. freeing L6ʳ costs/buys in χ².
 #
-# Run (needs CSV/DataFrames/StaticArrays/QuadGK + JuMinuit):
+# Run (needs CSV/DataFrames/StaticArrays/QuadGK + JuMinuit; slow — each round is
+# many full MIGRADs on an ~11 ms FCN; stops on convergence):
 #     julia --project=. BenchmarkExamples/IAM_2Pformfactor/find_deeper_minimum_demo.jl
-#   Tunable env (defaults): IAM_NDISC=20  IAM_SEED=1
+#   Tunable env (defaults): IAM_NDISC=20  IAM_SEED=1  IAM_MAXROUNDS=40
 #
 # Physics: GKPY Roy-equation ππ phase shifts; IAM with SU(3) NLO LECs.
 
-using LinearAlgebra, Random, Statistics
+using LinearAlgebra, Random, Statistics, Printf
 BLAS.set_num_threads(1)
-const NDISC = parse(Int, get(ENV, "IAM_NDISC", "20"))   # bootstrap resamples / round
+const NDISC = parse(Int, get(ENV, "IAM_NDISC", "20"))
 const SEED  = parse(Int, get(ENV, "IAM_SEED", "1"))
+const MAXR  = parse(Int, get(ENV, "IAM_MAXROUNDS", "40"))
 
 const IAM_DIR = @__DIR__
 cd(IAM_DIR)
@@ -47,6 +51,7 @@ include(joinpath(IAM_DIR, "src", "tmatrix.jl"))
 include(joinpath(IAM_DIR, "src", "unitarity_modification.jl"))
 include(joinpath(IAM_DIR, "src", "phaseshifts.jl"))
 const lecr0 = [0.56e-3, 1.21e-3, -2.79e-3, -0.36e-3, 1.4e-3, 0.07e-3, -0.44e-3, 0.78e-3]
+const L6FIX = [false, false, false, false, false, true, false, false]   # L6 (index 6) fixed
 
 _load(f) = JuMinuit.Data(DataFrame(CSV.File(f, header=[:w,:δ,:err], delim=' ', ignorerepeated=true)))
 d00 = _load("./datajl/pipi/pipi00_Roy-GKPY_PRD83_074004.dat")
@@ -74,52 +79,62 @@ for c in 1:3, i in 1:dats[c].ndata
     push!(pts, IAMPoint(c, dats[c].x[i], dats[c].y[i], dats[c].err[i]))
 end
 
-# The `refit` contract: fit a resampled subset, warm-started from `start`, and
-# return the fitted parameter VECTOR (NaNs for an invalid fit so the resampling
-# dispatch drops it). Strategy-1 keeps discovery fast.
-function iam_refit(subpts, start)
-    function chi2r(lec)
-        s = 0.0
-        @inbounds for p in subpts
-            s += (sind(p.y - δfuns[p.chan](p.x, lec)) / (p.err*π/180))^2
+# `refit(subpts, start)` for the resampling dispatch: fit a bootstrap subset,
+# warm-started from `start`, optionally with L6 fixed (so the discovery is
+# consistent with the parent fit). Returns NaNs for an invalid fit.
+function make_refit(fixL6::Bool)
+    (subpts, start) -> begin
+        chi2r(lec) = begin
+            s = 0.0
+            @inbounds for p in subpts
+                s += (sind(p.y - δfuns[p.chan](p.x, lec)) / (p.err*π/180))^2
+            end
+            s
         end
-        return s
+        ms = Minuit(chi2r, collect(start); names = nm, errors = fill(1e-6, 8),
+                    fixed = fixL6 ? L6FIX : fill(false, 8), strategy = JuMinuit.Strategy(1))
+        migrad!(ms)
+        ms.valid ? collect(ms.values) : fill(NaN, 8)
     end
-    fm = migrad(JuMinuit.CostFunction(chi2r, 1.0), start, fill(1e-6, 8);
-                strategy = JuMinuit.Strategy(1))
-    return JuMinuit.is_valid(fm) ? collect(fm.state.parameters.x) : fill(NaN, 8)
 end
 
-println("\n", "="^78)
-println("find_deeper_minimum on the IAM ππ fit (data-resampling dispatch)")
-println("="^78)
-println("data points = $ndata,  free LECs = 8,  DOF = $(ndata - 8)")
-
-# ── [1] cold single MIGRAD — lands in a shallow basin ────────────────────────
-m = Minuit(chi2_8, collect(lecr0); names = nm, errors = fill(1e-6, 8), strategy = 1)
-migrad!(m); hesse(m)
-χ2_cold = m.fval
-println("\n[1] cold Strategy-1 MIGRAD from the published LEC start:")
-println("    χ² = ", round(χ2_cold; digits=3),
-        "  (χ²/dof = ", round(χ2_cold/(ndata-8); digits=2), ")  valid = ", m.valid)
-
-# ── [2] find_deeper_minimum — bootstrap-driven basin hopping ─────────────────
-println("\n[2] find_deeper_minimum(m, iam_refit, pts; n_discovery=$NDISC, seed=$SEED):")
-m_deep = find_deeper_minimum(m, iam_refit, pts;
-                             n_discovery = NDISC, max_rounds = 6, seed = SEED, verbose = true)
-χ2_deep = m_deep.fval
-
-# ── [3] result ───────────────────────────────────────────────────────────────
-println("\n[3] result:")
-println("    χ² = ", round(χ2_deep; digits=3),
-        "  (χ²/dof = ", round(χ2_deep/(ndata-8); digits=2), ")  valid = ", m_deep.valid)
-println("    Δχ² over the cold fit = ", round(χ2_cold - χ2_deep; digits=3))
-if χ2_deep < χ2_cold - 1
-    println("    ✓ find_deeper_minimum escaped the shallow basin: χ² dropped ",
-            round(χ2_cold; digits=1), " → ", round(χ2_deep; digits=1),
-            " (Δ = ", round(χ2_cold - χ2_deep; digits=1), ").")
-    println("    Now run error analysis (HESSE / MINOS / MC-Δχ²) at THIS minimum, not the cold one.")
-else
-    println("    (no deeper basin found from this start — raise n_discovery or try another seed.)")
+# Run one case: cold Strategy-1 fit → find_deeper_minimum (data-resampling).
+function run_case(label::String, fixL6::Bool)
+    nfree = fixL6 ? 7 : 8
+    m = Minuit(chi2_8, collect(lecr0); names = nm, errors = fill(1e-6, 8),
+               fixed = fixL6 ? L6FIX : fill(false, 8), strategy = 1)
+    migrad!(m); hesse(m)
+    χcold = m.fval
+    t = @elapsed mdeep = find_deeper_minimum(m, make_refit(fixL6), pts;
+                                             n_discovery = NDISC, max_rounds = MAXR,
+                                             seed = SEED, verbose = true)
+    return (; label, nfree, χcold, χdeep = mdeep.fval, dof = ndata - nfree,
+            L6 = mdeep.values[6], L8 = mdeep.values[8], valid = mdeep.valid,
+            params = collect(mdeep.values), t)
 end
-println("="^78)
+
+println("\n", "="^88)
+println("find_deeper_minimum on the IAM ππ fit — L6 FIXED vs L6 FREE  (data-resampling)")
+println("="^88)
+println("data points = $ndata;  seed = $SEED, n_discovery = $NDISC, max_rounds(backstop) = $MAXR\n")
+
+println(">>> CASE 1: L6 FIXED at 0.07×10⁻³ (paper-faithful, 7 free LECs)")
+c1 = run_case("L6 fixed", true)
+println("\n>>> CASE 2: L6 FREE (8 LECs)")
+c2 = run_case("L6 free", false)
+
+@printf("\n%s\n", "="^88)
+@printf("%-10s  %8s  %8s  %9s  %8s   %12s\n", "case", "cold χ²", "deep χ²", "χ²/dof", "Δχ²", "L6 (×1e-3)")
+@printf("%s\n", "-"^88)
+for c in (c1, c2)
+    @printf("%-10s  %8.2f  %8.2f  %9.3f  %8.2f   %+11.3f%s\n",
+            c.label, c.χcold, c.χdeep, c.χdeep/c.dof, c.χcold - c.χdeep,
+            c.L6*1e3, c.label == "L6 fixed" ? " (fixed)" : " (free)")
+end
+@printf("%s\n", "="^88)
+@printf("Both descend from a shallow cold basin. L6-free reaches χ²=%.1f vs L6-fixed χ²=%.1f\n",
+        c2.χdeep, c1.χdeep)
+@printf("(Δ=%.1f): freeing L6 buys depth by sliding along the weakly-constrained 2L6+L8\n", c1.χdeep - c2.χdeep)
+@printf("direction to L6≈%+.2f×10⁻³ — a value the ππ data alone cannot determine, which is\n", c2.L6*1e3)
+println("exactly why the paper fixes L6. Do error analysis (HESSE/MINOS) at whichever")
+println("minimum matches your physics assumptions, not at the cold basin.")
