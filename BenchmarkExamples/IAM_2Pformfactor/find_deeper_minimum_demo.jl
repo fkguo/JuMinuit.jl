@@ -4,19 +4,23 @@
 # unit test). Shows the basin-hopping search escaping a shallow cold-start basin,
 # in BOTH of the physically relevant setups, side by side:
 #
-#   CASE 1 — L6ʳ FIXED (the paper-faithful fit). In the NLO ChPT amplitudes the
-#            LECs L6ʳ and L8ʳ enter the ππ→ππ, Kπ→Kπ, KK̄→KK̄ sector essentially
-#            through the combination 2L6ʳ+L8ʳ, so the πη data (sparse here) barely
-#            pins L6ʳ separately and it is FIXED to its input value 0.07×10⁻³.
-#   CASE 2 — L6ʳ FREE (8 LECs). Releasing L6ʳ lets the fit slide along that nearly
-#            flat 2L6ʳ+L8ʳ direction, so it can reach a deeper χ² — at an L6ʳ value
-#            (≈ −0.4×10⁻³) the ππ data alone cannot really determine.
+#   CASE 1 — L6ʳ FIXED (the paper-faithful setup). L6ʳ is poorly constrained by
+#            these ππ data — in NLO ChPT it enters the ππ/Kπ/KK̄ sector largely via
+#            the combination 2L6ʳ+L8ʳ, and the πη data that would separate it are
+#            sparse — so the paper FIXES it to its input value 0.07×10⁻³ (7 free).
+#   CASE 2 — L6ʳ FREE (8 LECs). Releasing L6ʳ gives the search one more direction.
 #
 # Both cases start from the SAME cold Strategy-1 MIGRAD and use the SAME
 # data-resampling `find_deeper_minimum`; the only difference is whether L6ʳ is
 # fixed. `find_deeper_minimum` honours the fixed flag (v0.4.0), so CASE 1 keeps
-# L6ʳ pinned throughout the search. The comparison lets the reader see exactly
-# what fixing vs. freeing L6ʳ costs/buys in χ².
+# L6ʳ pinned throughout the search.
+#
+# What the comparison shows (see the printed LEC table): the two runs land in
+# DIFFERENT deep basins — the LEC sets differ across the board, not just in L6ʳ —
+# and BOTH sit far from the paper's input LECs. `find_deeper_minimum` optimises χ²;
+# it does not enforce physical priors. So this illustrates the TOOL (escaping a
+# shallow basin, with vs. without a fixed parameter), not a recommended physical
+# fit — judge physicality separately and do error analysis at the minimum you adopt.
 #
 # Run (needs CSV/DataFrames/StaticArrays/QuadGK + JuMinuit; slow — each round is
 # many full MIGRADs on an ~11 ms FCN; stops on convergence):
@@ -132,9 +136,12 @@ for c in (c1, c2)
             c.L6*1e3, c.label == "L6 fixed" ? " (fixed)" : " (free)")
 end
 @printf("%s\n", "="^88)
-@printf("Both descend from a shallow cold basin. L6-free reaches χ²=%.1f vs L6-fixed χ²=%.1f\n",
-        c2.χdeep, c1.χdeep)
-@printf("(Δ=%.1f): freeing L6 buys depth by sliding along the weakly-constrained 2L6+L8\n", c1.χdeep - c2.χdeep)
-@printf("direction to L6≈%+.2f×10⁻³ — a value the ππ data alone cannot determine, which is\n", c2.L6*1e3)
-println("exactly why the paper fixes L6. Do error analysis (HESSE/MINOS) at whichever")
-println("minimum matches your physics assumptions, not at the cold basin.")
+@printf("L6 free reaches χ²=%.1f; the best L6-fixed basin found is χ²=%.1f  (Δ=%.1f).\n",
+        c2.χdeep, c1.χdeep, c1.χdeep - c2.χdeep)
+println("These are DIFFERENT deep basins — the LEC sets differ across the board, not just in")
+println("L6 — and BOTH sit far from the paper's input LECs. find_deeper_minimum optimises χ²;")
+println("it does NOT enforce physical priors. Releasing L6 just opens one more direction, so")
+println("the search can reach a different, deeper basin; whether either basin is physical is a")
+println("separate judgement. Fix the LECs your physics requires (here L6 — sparsely constrained")
+println("by the πη data), search WITHIN that constraint, and assess physicality separately.")
+println("Error analysis (HESSE/MINOS) belongs at the minimum you adopt, not the cold basin.")
