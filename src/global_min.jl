@@ -87,7 +87,9 @@ its `.valid` property. `m` itself is not mutated.
   scale. **The key knob on a hard surface.**
 - `abs_floor::Real = 0.0` — absolute lower bound on each coordinate's jitter scale
   (raise it for a parameter sitting near 0 with a tiny step).
-- `max_rounds::Integer = 6` — stop after this many improvement rounds (≥ 1).
+- `max_rounds::Integer = 50` — **safety backstop**, not the normal stop. The search
+  stops when a round finds no deeper basin (convergence); `max_rounds` only bounds a
+  pathological non-converging run. A `@warn` fires if it is hit while still improving.
 - `strategy = m.strategy` — MIGRAD strategy for every (re-)fit.
 - `maxfcn::Union{Integer,Nothing} = nothing` — per-fit MIGRAD call budget.
 - `min_improvement::Real = 1e-3` — χ² drop required to adopt a restart.
@@ -104,7 +106,7 @@ See also [`find_solution_modes`](@ref) and the data-resampling overload
 """
 function find_deeper_minimum(m::Minuit;
         n_restarts::Integer = 24, perturb::Real = 1.0, abs_floor::Real = 0.0,
-        max_rounds::Integer = 6, strategy = m.strategy,
+        max_rounds::Integer = 50, strategy = m.strategy,
         maxfcn::Union{Integer,Nothing} = nothing, min_improvement::Real = 1e-3,
         seed::Union{Integer,Nothing} = nothing, verbose::Bool = false)
     n_restarts >= 1 || throw(ArgumentError("find_deeper_minimum: n_restarts must be ≥ 1"))
@@ -121,6 +123,7 @@ function find_deeper_minimum(m::Minuit;
     best = _clone_minuit(m; strategy = strategy)
     migrad!(best; maxfcn = maxfcn); hesse(best)
 
+    converged = false
     for round in 1:max_rounds
         bx    = collect(Float64, best.values)
         berr  = collect(Float64, best.errors)
@@ -146,8 +149,15 @@ function find_deeper_minimum(m::Minuit;
             end
         end
         verbose && @info "find_deeper_minimum (perturbation)" round χ² = best.fval improved
-        improved || break
+        if !improved
+            converged = true
+            break
+        end
     end
+    converged || @warn "find_deeper_minimum (perturbation): reached max_rounds=$max_rounds while the " *
+                       "last round was STILL improving — the search has not converged. The stopping " *
+                       "criterion is convergence (a round with no deeper basin), not the round cap; " *
+                       "raise `max_rounds` (and/or `perturb`/`n_restarts`) to let it finish."
     return best
 end
 
@@ -206,7 +216,9 @@ and a bounded one stays in bounds throughout. Returns the deepest `Minuit` (MIGR
 # Keyword arguments
 - `n_discovery::Integer = 20` — bootstrap resamples per round (≥ 2; keep ≥ 10 for
   stable clustering).
-- `max_rounds::Integer = 6` — cap on adoption rounds.
+- `max_rounds::Integer = 50` — **safety backstop**, not the normal stop. The search
+  stops when a round adopts no deeper basin (convergence); a `@warn` fires if the cap
+  is hit while still improving.
 - `strategy = m.strategy` — MIGRAD strategy for the adoption re-fit.
 - `min_improvement::Real = 1e-3` — χ² drop required to adopt a basin.
 - `parallel::Union{Bool,Nothing} = nothing` — `true` threads the discovery loop
@@ -243,6 +255,7 @@ function find_deeper_minimum(m::Minuit, refit, data;
     cur = _clone_minuit(m; strategy = strategy)
     migrad!(cur; maxfcn = maxfcn); hesse(cur)
 
+    converged = false
     for iter in 1:max_rounds
         p_star = collect(Float64, cur.values)
 
@@ -267,6 +280,7 @@ function find_deeper_minimum(m::Minuit, refit, data;
             @warn "find_deeper_minimum (resampling): only $(length(valid_rows)) valid " *
                   "resample(s) in round $iter — FCN may throw or fail on most bootstrap " *
                   "subsets. Check your `refit` function."
+            converged = true   # explicit stop (already warned); not a silent cap-hit
             break
         end
 
@@ -292,12 +306,16 @@ function find_deeper_minimum(m::Minuit, refit, data;
         deeper = [x for x in md if x.new_min && x.refined_valid]
         if isempty(deeper)
             verbose && @info "find_deeper_minimum (resampling)" iter msg = "no deeper basin → stable"
+            converged = true
             break
         end
         bn          = deeper[argmin(x.refined_fval for x in deeper)]
         fval_before = cur.fval
         fval_after  = bn.refined_fval
-        fval_before - fval_after >= min_improvement || break
+        if fval_before - fval_after < min_improvement
+            converged = true       # deepest new basin is within tol of current → stable
+            break
+        end
 
         verbose && @info "find_deeper_minimum (resampling)" iter χ²_before = fval_before χ²_after = fval_after
 
@@ -307,6 +325,10 @@ function find_deeper_minimum(m::Minuit, refit, data;
         cur = _clone_minuit(cur; values = bn.refined_values, errors = adopt_errs, strategy = strategy)
         migrad!(cur; maxfcn = maxfcn); hesse(cur)
     end
+    converged || @warn "find_deeper_minimum (resampling): reached max_rounds=$max_rounds while the " *
+                       "last round still adopted a deeper basin — the search has not converged. The " *
+                       "stopping criterion is convergence (a round finding no deeper basin), not the " *
+                       "round cap; raise `max_rounds` to let it finish."
     return cur
 end
 

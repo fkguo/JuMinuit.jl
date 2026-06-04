@@ -30,6 +30,11 @@ that shipped in 0.3.1.
   IMinuit.jl/iminuit parity (iminuit's `m.covariance.correlation()`). Equivalent
   to `matrix(m; correlation=true)`; the `correlation` function previously only
   accepted `BootstrapResult`/`JackknifeResult`.
+- **`find_deeper_minimum` stops on CONVERGENCE, not a hard round count.** The
+  search already broke when a round found no deeper basin; the default `max_rounds`
+  is now a high safety backstop (`50`, was `6`) and a `@warn` fires if the cap is
+  hit while the last round was *still improving* — so a low cap can no longer
+  silently truncate a still-descending search.
 
 ### Changed (breaking)
 

@@ -225,3 +225,35 @@ end
     @test m_w_deep.values[1] < 0
     @test m_w_deep.cfwg !== nothing && m_w_deep.cfwg.check_gradient == false
 end
+
+@testset "find_deeper_minimum — max_rounds is a backstop; convergence is the stop" begin
+    # The stop criterion is convergence (a round finding no deeper basin). A
+    # max_rounds cap hit WHILE still improving must WARN (never silently truncate),
+    # and must still return the deeper basin it did reach.
+    f(x) = (x[1]^2 - 1)^2 + 0.4 * x[1] + x[2]^2
+
+    # perturbation: round 1 escapes to the deep well (improves); max_rounds=1 caps it.
+    mc = @test_logs (:warn, r"not converged") match_mode = :any begin
+        find_deeper_minimum(f, [1.0, 0.5], [0.3, 0.3];
+                            n_restarts = 80, perturb = 2.0, max_rounds = 1, seed = 1)
+    end
+    @test mc.values[1] < 0                       # still returned the deeper basin
+
+    # resampling: round 1 adopts the deep well; max_rounds=1 caps mid-descent.
+    m = Minuit(f, [1.0, 0.3]; errors = [0.2, 0.2], strategy = 2); migrad!(m); hesse(m)
+    data = collect(1.0:10.0)
+    refit_deep = (sub, st) -> [-1.0 + 0.01*(sum(sub)/length(sub) - 5.5),
+                                0.0 + 0.01*(sum(sub)/length(sub) - 5.5)]
+    mr = @test_logs (:warn, r"not converged") match_mode = :any begin
+        find_deeper_minimum(m, refit_deep, data; n_discovery = 12, max_rounds = 1, seed = 1)
+    end
+    @test mr.values[1] < 0
+
+    # at the (high) default it converges → NO cap warning emitted.
+    lg = Test.TestLogger(min_level = Logging.Warn)
+    md = with_logger(lg) do
+        find_deeper_minimum(m, refit_deep, data; n_discovery = 12, seed = 1)
+    end
+    @test md.values[1] < 0
+    @test !any(occursin("not converged", string(r.message)) for r in lg.logs)
+end
