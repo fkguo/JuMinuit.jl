@@ -350,6 +350,40 @@ On actual HEP fits (vs `iminuit` via PyCall; `julia -t 8` except where noted):
 - **[`docs/UPSTREAM.md`](docs/UPSTREAM.md)** — upstream provenance and LGPL
   attribution.
 
+## Using JuMinuit with an AI coding agent (Claude Code skill)
+
+This repository ships a [Claude Code](https://claude.com/claude-code) **skill**
+that teaches an AI coding agent the JuMinuit API — the `Minuit` / `migrad!` /
+`minos!` workflow, the Julia-native cost functions, bounds and fixed parameters,
+AD & threaded gradients, and the error-analysis tools (`mncontour`,
+`get_contours_samples`, `bootstrap` / `jackknife`, `find_deeper_minimum`, …).
+With it installed, an agent writes **correct fits and error analysis** instead of
+guessing the API or falling back to Python-`iminuit` / `IMinuit.jl` syntax. The
+skill is a concise quick-reference; its authoritative source is the package's own
+docstrings and [`docs/`](docs/), which it points to for depth.
+
+It lives at
+[`.claude/skills/juminuit-usage/SKILL.md`](.claude/skills/juminuit-usage/SKILL.md).
+
+- **Working inside this repository:** nothing to do — Claude Code auto-discovers
+  the project skill.
+- **Using JuMinuit from your own projects:** install it once at the user level so
+  every session can use it:
+
+  ```bash
+  mkdir -p ~/.claude/skills
+
+  # Option A — copy it in:
+  cp -r .claude/skills/juminuit-usage ~/.claude/skills/
+
+  # Option B (instead of A) — symlink it, so a later `git pull` keeps the skill current:
+  ln -s "$PWD/.claude/skills/juminuit-usage" ~/.claude/skills/juminuit-usage
+  ```
+
+The agent then picks it up automatically whenever a task involves fitting with
+JuMinuit (writing a χ²/likelihood fit, running MIGRAD/MINOS, computing contours
+or resampling errors, or porting iminuit / IMinuit.jl code).
+
 ## Citation
 
 If you use JuMinuit.jl in a publication, please cite **both** JuMinuit.jl and the
