@@ -3,7 +3,7 @@
 All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 + [Semantic Versioning](https://semver.org/).
 
-## [0.4.0] — 2026-06-03
+## [0.4.0] — 2026-06-05
 
 `find_deeper_minimum` gains a data-resampling strategy and full parameter-constraint
 support, and its API is unified onto `Minuit`. The solver core (MIGRAD/HESSE/MINOS)
