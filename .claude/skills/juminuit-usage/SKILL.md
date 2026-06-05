@@ -263,7 +263,9 @@ Two families that **agree** on a clean near-Gaussian fit and **diverge** when it
 
 `get_contours_samples` **gotchas**: (1) `ndof` is the **dimension of the region**, not
 the fit's param count — it defaults to `n_free` (joint region). A 2-D joint 1σ is
-`Δχ² = 2.30`, **not** 1.0. (2) it **samples all free parameters jointly**; `paras` only
+`Δχ² = 2.30`, **not** 1.0. `cl` = confidence level (iminuit convention): `cl ≥ 1` ⇒ that
+many σ (`cl=1`→68.27 %, `cl=2`→95.45 %), `0 < cl < 1` ⇒ a probability — so `cl=2` ≠ `cl=0.95`.
+(2) it **samples all free parameters jointly**; `paras` only
 filters the *reported* `bounds`/`names`, not the sampling — so `proposal = :uniform`'s
 `ranges` needs **one `(lo,hi)` per free parameter**, in order. (3) the default
 `proposal = :mvnormal` uses the fit covariance; when that is unreliable switch to the

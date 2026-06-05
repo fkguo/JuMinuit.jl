@@ -16,7 +16,8 @@ There are two families, and the difference is **what is held fixed**.
 
   They read the shape of the cost surface `χ²(θ)` (or `−2 ln L(θ)`) around the
   minimum — the curvature (HESSE), the `Δχ² = up` crossing along a profiled
-  axis (MINOS), or a Monte-Carlo sample of the whole `Δχ² ≤ threshold` region
+  axis (MINOS — `up` is the *error definition*: `1` for a χ² fit, `½` for `−2 ln L`,
+  defined just under the table below), or a Monte-Carlo sample of the whole `Δχ² ≤ threshold` region
   (MC-Δχ²). The dataset never changes; only the trial parameters move.
 
 - **Data-resampling methods — bootstrap, jackknife** resample the **data** and
@@ -48,8 +49,8 @@ or when you want a model-light cross-check before quoting a result.
 
 | Method | Varies | Needs | Best when | Caveats |
 |---|---|---|---|---|
-| **HESSE** | parameters (analytic 2nd-derivative covariance at the minimum) | a converged fit with a positive-definite covariance | a fast, symmetric error on a near-Gaussian, near-linear fit; the default | wrong when the cost surface is non-parabolic (nonlinear model); requires a valid, pos-def covariance — `made_pos_def` ⇒ treat with suspicion |
-| **MINOS** | parameters (profiles each one, re-minimising the rest) | a converged, valid fit (`fmin` valid) | reporting **asymmetric** errors under mild–moderate nonlinearity | fails / misleads on an invalid `fmin`, strong nonlinearity, or a multimodal surface; one inner-minimisation per scan point (costlier than HESSE) |
+| **HESSE** | parameters (analytic 2nd-derivative covariance at the minimum) | a converged fit with a positive-definite covariance | a fast, symmetric error on a near-Gaussian, near-linear fit; the default | wrong when the cost surface is non-parabolic (nonlinear model); requires a valid, pos-def covariance — a `made_pos_def` status (the covariance had to be *forced* positive-definite) ⇒ treat with suspicion |
+| **MINOS** | parameters (profiles each one, re-minimising the rest) | a converged, valid fit (`fmin` = the fit-minimum result; must be valid) | reporting **asymmetric** errors under mild–moderate nonlinearity | fails / misleads on an invalid `fmin`, strong nonlinearity, or a multimodal surface; one inner-minimisation per scan point (costlier than HESSE) |
 | **MC-Δχ² region** | parameters (fixed data), using the **true** `Δχ²` not a quadratic | the `χ²`/`−2lnL` plus a proposal (the fit covariance, or an explicit parameter range) | mapping a **non-Gaussian** confidence region, or a **joint** N-D region, where MINOS' 1-D profile is not enough | the proposal must **over-cover** when the covariance is unreliable, or the region is clipped; still *trusts the error model* (it is a likelihood method) |
 | **Bootstrap** | **data** (resample with replacement, then re-fit) | a resamplable dataset and many cheap re-fits | the error model is **uncertain or misspecified**; you want the estimator's empirical sampling distribution and robust, possibly asymmetric, CIs | expensive (`nresample` full re-fits); needs enough independent points; weak for binned / heavily-aggregated / strongly-correlated data |
 | **Jackknife** | **data** (leave-one-out, then re-fit) | a dataset and `N` (delete-1) re-fits | a quick, almost assumption-free error **plus an explicit bias estimate** | coarser than the bootstrap; unreliable for highly nonlinear or non-smooth estimators; the delete-`d` block variant is coarser still |
@@ -93,7 +94,8 @@ are *proposed*; acceptance is the **true `Δχ²`**, never the Mahalanobis dista
 `(x−μ)ᵀΣ⁻¹(x−μ)` — cutting on Mahalanobis would just reproduce the HESSE ellipse,
 defeating the purpose. The optional Mahalanobis output is a diagnostic only.
 
-**Proposal under-coverage (the pitfall).** A `MvNormal(best, Σ)` proposal
+**Proposal under-coverage (the pitfall).** A `MvNormal(best, Σ)` proposal (a
+multivariate normal centred on the best fit `best` with covariance `Σ`)
 **under-estimates** the region when `Σ` is unreliable (`made_pos_def` / invalid
 `fmin`) or the posterior is strongly nonlinear (the true shell extends beyond the
 local Gaussian). Mitigations, all built in: an `inflate` factor; **adaptive
@@ -103,23 +105,41 @@ box over explicit `ranges`; and a **warning** when the covariance looks unreliab
 — it never silently under-estimates. When in doubt, use the range proposal: it
 does not depend on `Σ` at all.
 
-**Joint vs single-parameter level — `delta_chisq(cl, ndof)`.** The threshold is
-`delta_chisq(cl, ndof)` (`chisq_cl` inverts it). `cl` follows iminuit (probability
-if `< 1`, nσ if `≥ 1`). **`ndof` is the dimension of the region, not the parameter
-count of the fit:** a single-parameter 1σ interval is `Δχ² = 1`, but a **2-D joint**
-68 % region is `Δχ² = 2.30`, and 3-D is `3.53` — *not* 1. The sampler defaults
-`ndof = n_free` (the joint region over all sampled parameters), which is usually
-what you want; override it deliberately if not.
+**Joint vs single-parameter level — `delta_chisq(cl, ndof)`.** The acceptance
+threshold is `delta_chisq(cl, ndof)`, with two arguments:
 
-The `delta_chisq(cl, ndof)` thresholds for the common cases (pick the column
-that matches the **dimension of the region you report**, not the fit's
-parameter count):
+- **`cl` — the confidence level**, read two ways depending on its magnitude (the
+  same convention as iminuit, so a ported fit behaves identically):
+  - `cl ≥ 1` → a number of **σ**: `1`→68.27 %, `2`→95.45 %, `3`→99.73 % (the
+    Gaussian probability mass within ±`cl` σ);
+  - `0 < cl < 1` → a **probability** directly: e.g. `0.95`→95 %.
 
-| Confidence | Probability | 1 param | 2 params | 3 params | 4 params |
-|:-----------|:-----------:|:-------:|:--------:|:--------:|:--------:|
-| 1σ | 68.27 % | **1.00** | **2.30** | **3.53** | **4.72** |
-| 2σ | 95.45 % | 4.00 | 6.18 | 8.02 | 9.72 |
-| 3σ | 99.73 % | 9.00 | 11.83 | 14.16 | 16.25 |
+  So `cl = 1` and `cl = 0.6827` request the *same* region — but mind the magnitude:
+  **`cl = 2` (2σ ⇒ 95.45 %) is *not* `cl = 0.95` (95 %).**
+- **`ndof` — the number of parameters defining the region** (how many you vary
+  *jointly*), **not** the fit's total parameter count. A single-parameter 1σ
+  interval is `Δχ² = 1`, but a **2-D joint** 68 % region is `Δχ² = 2.30`, and 3-D is
+  `3.53` — *not* 1. The sampler defaults `ndof = n_free` (`n_free` = the number of
+  free/floating parameters — the joint region over all sampled parameters), which is
+  usually what you want; override it deliberately if not.
+
+(`chisq_cl(Δχ², ndof)` is the inverse: given a `Δχ²` it returns the probability.)
+
+The table below **is** `delta_chisq(cl, ndof)` on a grid — each row a `cl` (given as
+nσ, with its probability), each column an `ndof`. Pick the column that matches the
+**dimension of the region you report**, not the fit's parameter count:
+
+| Confidence (`cl`) | Probability | `ndof` = 1 | `ndof` = 2 | `ndof` = 3 | `ndof` = 4 |
+|:------------------|:-----------:|:----------:|:----------:|:----------:|:----------:|
+| 1σ (`cl = 1`) | 68.27 % | **1.00** | **2.30** | **3.53** | **4.72** |
+| 2σ (`cl = 2`) | 95.45 % | 4.00 | 6.18 | 8.02 | 9.72 |
+| 3σ (`cl = 3`) | 99.73 % | 9.00 | 11.83 | 14.16 | 16.25 |
+
+For example the **2σ / 3-param** cell is `delta_chisq(2, 3) ≈ 8.02` (`cl = 2` ⇒ 2σ ⇒
+95.45 %, three jointly-varied parameters). To request the same region with a
+probability instead, pass `delta_chisq(0.9545, 3)` — **not** `delta_chisq(0.95, 3)`,
+which is the different (95 %) region. (`delta_chisq` is valid for any `ndof`; iminuit's
+own helper covers only 1–2 parameters.)
 
 ```julia
 # 1σ JOINT region for all 3 free parameters ⇒ Δχ² = 3.53 (NOT 1):
