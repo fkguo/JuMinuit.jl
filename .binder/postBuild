@@ -1,23 +1,38 @@
 #!/bin/bash
-# Binder post-build: configure PyCall to use the binder Python, then
-# instantiate the Julia environment and install the IJulia kernel.
+# Binder post-build (runs AFTER repo2docker's Julia buildpack has already
+# installed Julia and resolved/instantiated .binder/Project.toml).
+#
+# repo2docker sets JULIA_PROJECT=${REPO_DIR}/.binder and runs this from the
+# repo root. We:
+#   1. Pkg.develop the in-repo (unregistered) JuMinuit into the .binder env.
+#   2. Build PyCall against a Julia-private Conda Python so PyPlot pulls in
+#      its own matplotlib (no reliance on the base image's Python).
+#   3. Precompile, and install a FIXED-name kernel `julia-juminuit` that
+#      points explicitly at the .binder env — so a notebook sitting next to
+#      its own Project.toml (e.g. IAM_2Pformfactor/Project.toml) cannot
+#      hijack the package environment via `@.` resolution.
 set -e
 
-julia --project=.binder -e '
+julia -e '
 using Pkg
-# Dev the current repo'\''s JuMinuit so the notebook uses the in-tree
-# version (not the registered one — JuMinuit.jl is private/dev).
-Pkg.develop(path="..")
+binder = ENV["JULIA_PROJECT"]      # ${REPO_DIR}/.binder (set by repo2docker)
+repo   = dirname(binder)            # ${REPO_DIR} — the JuMinuit package root
+@info "postBuild: developing JuMinuit" repo binder
 
-# Point PyCall at the binder'\''s own Python (empty string = use $PYTHON env var
-# or the Julia-default conda/system Python — whichever Binder provides).
+Pkg.develop(path = repo)
+
+# PyPlot needs matplotlib; let Conda.jl manage a private Python for PyCall.
 ENV["PYTHON"] = ""
 Pkg.build("PyCall")
 
 Pkg.instantiate()
 Pkg.precompile()
 
-# Register an IJulia kernel for the notebooks to use.
+# Stable, version-independent kernel name that the notebooks reference.
 using IJulia
-installkernel("Julia (.binder)", "--project=@.")
+kp = installkernel("Julia JuMinuit", "--project=" * binder)
+fixed = joinpath(dirname(kp), "julia-juminuit")
+rm(fixed; force = true, recursive = true)
+cp(kp, fixed)
+@info "postBuild: installed kernel" kp fixed
 '
