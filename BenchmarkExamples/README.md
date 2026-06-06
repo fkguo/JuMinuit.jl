@@ -22,6 +22,8 @@ or `julia --project=. main.jl`).
 
 ### `X3872_dip/` — X(3872) line-shape with a dip near threshold
 
+▶ **Run online (no install):** [![Binder](https://mybinder.org/badge_logo.svg)](https://notebooks.gesis.org/binder/v2/gh/fkguo/JuMinuit.jl/main?urlpath=lab%2Ftree%2FBenchmarkExamples%2FX3872_dip%2FXdip_published.ipynb)
+
 Fit of an effective coupled-channel amplitude to the e⁺e⁻ → J/ψπ⁺π⁻
 data in the X(3872) mass region, demonstrating a dip structure near
 the DD̄* threshold. The published version of the analysis underlying
@@ -43,6 +45,8 @@ parameters: ~3–6 depending on which model variant. The covariance
 matrix is highly correlated → ideal stress test for MNCONTOUR.
 
 ### `IAM_2Pformfactor/` — Inverse Amplitude Method on ππ / Kπ / πη / πK form factors
+
+▶ **Run online (no install):** [![Binder](https://mybinder.org/badge_logo.svg)](https://notebooks.gesis.org/binder/v2/gh/fkguo/JuMinuit.jl/main?urlpath=lab%2Ftree%2FBenchmarkExamples%2FIAM_2Pformfactor%2Fiamfit.ipynb)
 
 Multi-channel χPT-IAM fit of meson-meson scattering phase shifts +
 form factors, used in
@@ -67,7 +71,9 @@ medium-dimensional non-trivial χ²-fit.
 ## Running an example
 
 These examples were originally written against IMinuit.jl (PyCall
-wrapper). To migrate to JuMinuit:
+wrapper) and have been **migrated to JuMinuit** — the notebooks now use
+`using JuMinuit` and run online via the Binder badges above. The migration
+is a one-line swap because the API is drop-in compatible:
 
 ```julia
 # Old

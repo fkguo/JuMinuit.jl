@@ -3,6 +3,14 @@
 Originally written for IMinuit.jl. Adapted here as a JuMinuit
 benchmark + stress test.
 
+## Run online
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://notebooks.gesis.org/binder/v2/gh/fkguo/JuMinuit.jl/main?urlpath=lab%2Ftree%2FBenchmarkExamples%2FX3872_dip%2FXdip_published.ipynb)
+
+`Xdip_published.ipynb` runs interactively on [GESIS Binder](https://notebooks.gesis.org/binder/)
+— free, no login, its own GitHub-API quota (avoids the `mybinder.org` rate-limit
+errors). The first launch builds the image (a few minutes); later launches are cached.
+
 ## Files
 
 | File | Purpose |
@@ -53,10 +61,11 @@ using JuMinuit, DataFrames, CSV, Distributions
 # … see notebook for the rest
 ```
 
-The notebook's `using IMinuit` cell should be changed to
-`using JuMinuit` — the rest of the API (`Minuit`, `migrad`, `minos`,
-`args`, `matrix`, `Data`, `chisq`, `model_fit`, `@model_fit`,
-`mncontour`, …) is drop-in compatible.
+The notebook already uses `using JuMinuit` (migrated from `using IMinuit`);
+the rest of the API (`Minuit`, `migrad`, `minos`, `args`, `matrix`, `Data`,
+`chisq`, `model_fit`, `@model_fit`, `mncontour`, …) is drop-in compatible
+with IMinuit.jl. The online launch above uses the ready-made `.binder/`
+environment, so no manual setup is needed there.
 
 ## Citing
 
