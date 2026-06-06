@@ -101,9 +101,14 @@
         # Symmetric, positive-diagonal
         @test V[1, 1] > 0 && V[2, 2] > 0
         @test V[1, 2] ≈ V[2, 1] atol = 1e-12
-        # Correlation form
+        # Correlation form. IMinuit.jl-parity: `correlation` is a keyword
+        # argument, so BOTH the comma form `matrix(m, correlation=true)`
+        # and the semicolon form `matrix(m; correlation=true)` are valid
+        # Julia and must give identical results (a typo'd keyword like
+        # `corrletion=` correctly errors — we do NOT swallow unknown kwargs).
         C = matrix(m; correlation = true)
         @test all(isapprox.(diag(C), 1.0; atol = 1e-12))
+        @test matrix(m, correlation = true) == C   # comma form ≡ semicolon form
         # Full (with fixed rows/cols if any)
         Vfull = matrix(m; skip_fixed = false)
         @test size(Vfull) == (2, 2)
