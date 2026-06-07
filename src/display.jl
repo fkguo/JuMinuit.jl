@@ -449,6 +449,56 @@ function _render_corr_warning_text(io::IO, m::Minuit)
     end
 end
 
+# Free parameters whose MINOS ran but did NOT fully validate. For these
+# the table falls back to the symmetric HESSE error (see `_param_row_data`:
+# the asymmetric form is used only when BOTH sides are valid), which would
+# otherwise be indistinguishable from "MINOS was never run". Returns
+# `(name, side)` per such parameter, with `side ∈ ("both", "upper",
+# "lower")` naming the direction(s) that failed to converge. An at-bound
+# termination is a CLEAN MINOS result (`upper_valid` / `lower_valid` stay
+# `true` there — see the `MinosError` docstring), so it is NOT flagged,
+# mirroring the table's own gate. Iterates in external-index order so the
+# warning lists parameters top-to-bottom as they appear in the table.
+function _minos_failed(m::Minuit)
+    out = Tuple{String,String}[]
+    isempty(m.minos_errors) && return out
+    for i in 1:n_pars(m.params)
+        haskey(m.minos_errors, i) || continue
+        e = m.minos_errors[i]
+        (e.upper_valid && e.lower_valid) && continue
+        side = !e.upper_valid && !e.lower_valid ? "both" :
+               !e.upper_valid ? "upper" : "lower"
+        push!(out, (m.params.pars[i].name, side))
+    end
+    return out
+end
+
+# Render the MINOS-failure warning (text). Surfaces the otherwise-silent
+# fall-back from a non-converged MINOS cross-search to the symmetric HESSE
+# error, so a plain `±` row after `minos!` can be told apart from a genuine
+# asymmetric result and from a never-run MINOS.
+function _render_minos_warning_text(io::IO, m::Minuit)
+    failed = _minos_failed(m)
+    isempty(failed) && return
+    parts = [s == "both" ? string("`", nm, "`") : string("`", nm, "` (", s, " side)")
+             for (nm, s) in failed]
+    println(io, "⚠ MINOS did not converge for ", join(parts, ", "),
+            " — showing the symmetric HESSE error instead.")
+end
+
+function _render_minos_warning_html(io::IO, m::Minuit)
+    failed = _minos_failed(m)
+    isempty(failed) && return
+    parts = [s == "both" ?
+             string("<code>", _html_escape(nm), "</code>") :
+             string("<code>", _html_escape(nm), "</code> (", s, " side)")
+             for (nm, s) in failed]
+    print(io, """<div style="color:#bf8700;margin-top:0.4em">""")
+    print(io, "⚠ MINOS did not converge for ", join(parts, ", "),
+          " — showing the symmetric HESSE error instead.")
+    print(io, "</div>")
+end
+
 # ── G: LaTeX export ──────────────────────────────────────────────────────────
 
 # Escape the LaTeX-special characters that can appear in a user parameter

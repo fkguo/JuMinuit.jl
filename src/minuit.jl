@@ -2325,6 +2325,10 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
 
     # Strong-correlation (near-degeneracy) warnings.
     _render_corr_warning_text(io, m)
+    # MINOS-failure warning: a non-converged cross-search falls back to the
+    # symmetric HESSE error in the table — flag it so a plain `±` row after
+    # `minos!` isn't mistaken for a real symmetric/never-run result.
+    _render_minos_warning_text(io, m)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2425,6 +2429,8 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     # Correlation-matrix heatmap + strong-correlation warnings.
     _render_heatmap_html(io, m)
     _render_corr_warning_html(io, m)
+    # MINOS-failure warning (see the text/plain show for the rationale).
+    _render_minos_warning_html(io, m)
     print(io, "</div>")
 end
 

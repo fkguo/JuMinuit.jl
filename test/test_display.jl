@@ -109,6 +109,43 @@ plain(m) = (io = IOBuffer(); show(io, MIME"text/plain"(), m); String(take!(io)))
         @test !occursin("strongly correlated", html(miquad))
     end
 
+    @testset "F: MINOS-failure (silent-fallback) warning" begin
+        mf = Minuit(p -> (p[1] - 8.0)^2 + (p[2] - 2.0)^2, [7.0, 1.0];
+                    names = ["x", "y"])
+        migrad!(mf)
+        minos!(mf)
+        # Clean fit: MINOS validates both sides → NO failure warning, and the
+        # table shows the asymmetric form (proves the warning isn't spurious).
+        @test isempty(_D._minos_failed(mf))
+        @test !occursin("MINOS did not converge", plain(mf))
+        @test !occursin("MINOS did not converge", html(mf))
+
+        # Inject an INVALID MINOS for "x" (both sides not validated) — exactly
+        # what an unconverged cross-search stores (±σ_HESSE placeholder). The
+        # table then falls back to symmetric HESSE; the warning must surface it.
+        ix = findfirst(i -> mf.params.pars[i].name == "x", 1:_D.n_pars(mf.params))
+        o = mf.minos_errors[ix]
+        mf.minos_errors[ix] = _D.MinosError(o.par_idx, o.min_par_value,
+            o.upper, o.lower, false, false, false, false, false, false, o.nfcn)
+        failed = _D._minos_failed(mf)
+        @test length(failed) == 1
+        @test failed[1] == ("x", "both")
+        p = plain(mf); h = html(mf)
+        @test occursin("MINOS did not converge", p)
+        @test occursin("`x`", p)
+        @test occursin("MINOS did not converge", h)
+        @test occursin("<code>x</code>", h)
+        # "y" still validated → stays asymmetric in the table (sup/sub present).
+        @test occursin("<sup>+", h)
+
+        # A one-sided failure annotates which side did not converge.
+        mf.minos_errors[ix] = _D.MinosError(o.par_idx, o.min_par_value,
+            o.upper, o.lower, false, true, false, false, false, false, o.nfcn)
+        f2 = _D._minos_failed(mf)
+        @test f2 == [("x", "upper")]
+        @test occursin("upper side", plain(mf))
+    end
+
     # ── C: validity checklist ────────────────────────────────────────────────
     @testset "C: validity checklist chips" begin
         checks = _D._validity_checks(mc)
