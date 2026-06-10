@@ -103,12 +103,22 @@ Mirrors `SimplexBuilder::Minimum` in
   Simplex does not apply it. Pass a smaller `minedm` explicitly for a
   tighter (non-C++-default) stopping rule.
 - `prec::MachinePrecision` — floating-point precision (rarely tuned).
+- `warn_nonfinite::Bool = true` — emit the single end-of-run warning
+  when the FCN returned non-finite values AND the run did not end
+  valid (P6, same policy as [`migrad`](@ref)). Inner probes (the
+  `use_simplex` multistart inside `migrad!`) pass `false`.
 
 # Returns
 
 `FunctionMinimum` with `state.parameters.x` = best vertex, errors
 derived from the simplex extent (no inverse Hessian — covariance is
 `nothing`). Run a follow-up `hesse(cf, state)` if you need a covariance.
+
+A non-finite final fval is never valid (P6): the result comes back
+`is_valid = false` with the explicit `nonfinite_fval = true` reason, and
+`n_nonfinite_calls` counts the FCN evaluations that returned NaN/±Inf
+during this run. iminuit parity: `m.simplex()` on an all-NaN FCN reports
+`fval=nan, valid=False`.
 
 # Notes
 
@@ -126,11 +136,17 @@ function simplex(
     maxfcn::Union{Integer,Nothing} = nothing,
     minedm::Union{Real,Nothing} = nothing,
     prec::MachinePrecision = MachinePrecision(),
+    warn_nonfinite::Bool = true,
 )
     n = length(x0)
     length(errs) == n ||
         throw(DimensionMismatch("simplex: errs length $(length(errs)) != x0 length $n"))
     n > 0 || throw(ArgumentError("simplex needs at least one parameter"))
+
+    # P6: baseline BEFORE the seed evaluation so a non-finite f(x0) at
+    # call #1 is included in the run's non-finite tally (mirrors
+    # `nonfinite_baseline` in `_migrad_loop`).
+    nf_base = nonfinite_calls(cf)
 
     maxfcn_eff = maxfcn === nothing ? (200 + 100 * n + 5 * n^2) : Int(maxfcn)
     # C++ Simplex EDM goal = effective_toler = toler·Up() with the canonical
@@ -372,17 +388,31 @@ function simplex(
                           ncalls(cf))
 
     seed_state_obj = state   # simplex doesn't track a separate seed
-    is_valid = !fcn_limit && !above_max_edm
+    # P6: a non-finite incumbent fval can NEVER be a valid minimum — and
+    # no C++-mirrored flag catches it here: with an all-NaN FCN `edm(sp)`
+    # is NaN, so both loop guards (`NaN > minedm` = false) break
+    # immediately AND `above_max_edm = (NaN > minedm) && …` stays false,
+    # so the verdict came out `is_valid = true` with `fval = NaN` (same
+    # hole as `_migrad_loop`'s verdict, handoff F7). iminuit 2.31
+    # observable for the same FCN under `m.simplex()`: fval=nan,
+    # valid=False (surfaced there via is_above_max_edm; JuMinuit reports
+    # the explicit `nonfinite_fval` reason, exactly like MIGRAD).
+    nonfinite_final = !isfinite(ybar)
+    is_valid = !fcn_limit && !above_max_edm && !nonfinite_final
     # `hesse_failed = false`: simplex never RAN Hesse, so calling it
     # "failed" is misleading. The `available = false` flag on
     # `state.error` is the authoritative "no covariance" indicator.
     # Review IMPORTANT #4.
-    return FunctionMinimum(state, seed_state_obj, cf.up;
-                            is_valid = is_valid,
-                            reached_call_limit = fcn_limit,
-                            above_max_edm = above_max_edm,
-                            hesse_failed = false,
-                            made_pos_def = false)
+    fm = FunctionMinimum(state, seed_state_obj, cf.up;
+                          is_valid = is_valid,
+                          reached_call_limit = fcn_limit,
+                          above_max_edm = above_max_edm,
+                          hesse_failed = false,
+                          made_pos_def = false,
+                          nonfinite_fval = nonfinite_final,
+                          n_nonfinite_calls = nonfinite_calls(cf) - nf_base)
+    warn_nonfinite && _warn_nonfinite_fcn(fm; minimizer = "SIMPLEX")
+    return fm
 end
 
 # Bare-function convenience overload — wraps `f` in a CostFunction
@@ -422,6 +452,7 @@ function simplex(
     maxfcn::Union{Integer,Nothing} = nothing,
     minedm::Union{Real,Nothing} = nothing,
     prec::MachinePrecision = MachinePrecision(),
+    warn_nonfinite::Bool = true,
 )
     n_active = n_free(params)
     n_active > 0 ||
@@ -431,8 +462,12 @@ function simplex(
     int_errs = initial_int_errors(params)
     cf_internal = _wrap_fcn_internal_to_external(cf, params)
 
+    # P6: `warn_nonfinite` is forwarded — the inner low-level simplex owns
+    # the single end-of-run warning (same split as bounded `migrad`);
+    # `migrad!`'s `use_simplex` multistart probe passes `false`.
     fmin_int = simplex(cf_internal, int_vals, int_errs;
-                        maxfcn = maxfcn, minedm = minedm, prec = prec)
+                        maxfcn = maxfcn, minedm = minedm, prec = prec,
+                        warn_nonfinite = warn_nonfinite)
 
     # Build ext_values + ext_errors directly via the int→ext Jacobian.
     # We do NOT call `_internal_to_external_results` because:

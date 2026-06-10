@@ -1085,11 +1085,12 @@ function _migrad_loop(
 end
 
 """
-    _warn_nonfinite_fcn(fm::FunctionMinimum, n::Integer = fm.n_nonfinite_calls)
+    _warn_nonfinite_fcn(fm::FunctionMinimum, n::Integer = fm.n_nonfinite_calls;
+                        minimizer = "MIGRAD")
 
 P6: single end-of-run diagnostic for FCNs that returned non-finite
-values (NaN/Inf) during MIGRAD — emitted only when the OUTCOME was
-affected:
+values (NaN/Inf) during a minimizer run — emitted only when the OUTCOME
+was affected:
 
 - the final fval itself is non-finite (`fm.nonfinite_fval`), or
 - non-finite values occurred AND the fit ended invalid (the blocked /
@@ -1104,25 +1105,28 @@ warnings via MnPrint are suppressed at the default print level). The
 count stays queryable on `fm.n_nonfinite_calls` either way.
 
 The count `n` can be overridden by drivers that aggregate several
-passes (the `migrad!` retry loop). No-op when `n == 0`.
+passes (the `migrad!` retry loop). No-op when `n == 0`. `minimizer`
+labels the message ("MIGRAD" for all migrad entries, "SIMPLEX" for the
+simplex ones — same verdict gate, see `simplex`).
 """
-function _warn_nonfinite_fcn(fm::FunctionMinimum, n::Integer = fm.n_nonfinite_calls)
+function _warn_nonfinite_fcn(fm::FunctionMinimum, n::Integer = fm.n_nonfinite_calls;
+                              minimizer::AbstractString = "MIGRAD")
     n > 0 || return nothing
     if fm.nonfinite_fval
-        @warn "MIGRAD: the FCN returned a non-finite value (NaN/Inf) in " *
+        @warn "$minimizer: the FCN returned a non-finite value (NaN/Inf) in " *
               "$n of the evaluations, and the final fval itself is " *
               "non-finite — the minimum is INVALID (nonfinite_fval). " *
               "This typically means the FCN is undefined at (or within " *
-              "one gradient step of) the start point. Check the seed and " *
+              "one exploration step of) the start point. Check the seed and " *
               "the parameter region where your model is well-defined."
     elseif !fm.is_valid
-        @warn "MIGRAD: the FCN returned a non-finite value (NaN/Inf) in " *
+        @warn "$minimizer: the FCN returned a non-finite value (NaN/Inf) in " *
               "$n of the evaluations and the fit did not converge. " *
               "Non-finite trial points are never accepted as improvements " *
               "over a finite incumbent (they are rejected like +∞), but " *
-              "they can block line searches and stall convergence — the " *
-              "fit may have ended early at the edge of the well-defined " *
-              "region."
+              "they can block the minimizer's progress and stall " *
+              "convergence — the fit may have ended early at the edge of " *
+              "the well-defined region."
     end
     return nothing
 end

@@ -18,10 +18,11 @@
 #     Strategy ≥ 1 the run CRASHED with a raw LAPACK
 #     `ArgumentError("matrix contains Infs or NaNs")` out of
 #     make_posdef!/hesse (iminuit never crashes: fval=nan, valid=False).
-#   • Every public migrad entry warns ONCE at the end when any
-#     non-finite value was returned (iminuit warns per occurrence via
-#     MnPrint, invisible at default print level); inner/warm-restart
-#     probes stay silent.
+#   • Every public migrad entry (and `simplex` — same verdict gate,
+#     see the SIMPLEX testset below) warns ONCE at the end when any
+#     non-finite value was returned AND the fit did not end valid
+#     (iminuit warns per occurrence via MnPrint, invisible at default
+#     print level); inner/warm-restart/multistart probes stay silent.
 
 using JuMinuit
 using Test
@@ -252,5 +253,73 @@ end
         @test occursin("FCN value finite", JuMinuit._checklist_text(m))
         db = JuMinuit.to_dict(m.fmin)
         @test db["nonfinite_fval"] === true
+    end
+
+    # ── SIMPLEX: same verdict gate as MIGRAD (P6 follow-up) ──────────
+    # Regression: `simplex` on an all-NaN FCN returned fval=NaN with
+    # valid=true — `edm(sp)` is NaN, so both loop guards AND the
+    # above_max_edm flag (IEEE `>` is false for NaN) miss it, and no
+    # verdict gate checked isfinite(fval). iminuit 2.31 observable for
+    # `m.simplex()` on the same FCN: fval=nan, valid=False (±Inf FCNs
+    # likewise valid=False).
+
+    @testset "SIMPLEX low-level: all-non-finite FCN ⇒ invalid + explicit reason" begin
+        for wallval in (NaN, Inf, -Inf)
+            f = _wall_fcn(-1.0, wallval)
+            fm = simplex(f, [0.0, 0.0], [0.1, 0.1]; warn_nonfinite = false)
+            @test !is_valid(fm)
+            @test fm.nonfinite_fval
+            @test nonfinite_fval(fm)
+            @test !isfinite(fval(fm))
+            @test fm.n_nonfinite_calls > 0
+            @test n_nonfinite_calls(fm) == fm.n_nonfinite_calls
+        end
+    end
+
+    @testset "SIMPLEX front end: simplex(m) on NaN FCN ⇒ valid=false, ONE warning" begin
+        # The exact reproducer from the handoff (was fval=NaN, valid=true).
+        m = Minuit(x -> NaN, [0.0, 0.0]; error = 0.1)
+        @test_logs (:warn, r"non-finite") simplex(m)
+        @test !m.valid
+        @test isnan(m.fval)
+        @test m.fmin.internal.nonfinite_fval
+        @test m.fmin.internal.n_nonfinite_calls > 0
+    end
+
+    @testset "SIMPLEX NaN wall: finite incumbent kept, counted, invalid" begin
+        # Minimum beyond the wall — reflections cross into NaN (the NaN
+        # ρ-step never updates the simplex) so the call budget burns out,
+        # but the published incumbent is the finite low vertex: counted
+        # non-finite returns, NO nonfinite_fval flag.
+        f = _wall_fcn(0.5, NaN; c1 = 1.0)
+        fm = simplex(f, [0.0, 0.0], [0.1, 0.1]; warn_nonfinite = false)
+        @test !is_valid(fm)
+        @test fm.reached_call_limit
+        @test isfinite(fval(fm))
+        @test fval(fm) <= 1.0 + 1e-12          # never worse than the seed
+        @test !fm.nonfinite_fval
+        @test fm.n_nonfinite_calls > 0
+    end
+
+    @testset "SIMPLEX clean fit: valid, zero counts, no warning" begin
+        f = x -> (x[1] - 1.0)^2 + 4.0 * (x[2] - 2.0)^2
+        m = Minuit(f, [0.0, 0.0]; error = 0.1)
+        @test_logs simplex(m)                     # asserts NO log records
+        @test m.valid
+        @test !m.fmin.internal.nonfinite_fval
+        @test m.fmin.internal.n_nonfinite_calls == 0
+        @test nonfinite_calls(m.fcn) == 0
+    end
+
+    @testset "use_simplex multistart probe stays silent (ONE aggregate warning)" begin
+        # Blocked-wall fit: every migrad pass ends invalid, so the opt-in
+        # Simplex multistart probes run between passes. The probes must
+        # not add warnings of their own — exactly one aggregate warning
+        # for the whole migrad! run.
+        f = _wall_fcn(0.5, NaN; c1 = 1.0)
+        m = Minuit(f, [0.0, 0.0]; error = 0.1, strategy = 1)
+        @test_logs (:warn, r"non-finite") migrad!(m; maxfcn = 300,
+                                                   use_simplex = true)
+        @test !m.valid
     end
 end

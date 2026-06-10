@@ -679,7 +679,10 @@ function migrad!(m::Minuit;
             pass_strategy = retry_strategy
             factor = _retry_perturb_factor(_pass)
             params_pert = _retry_scaled_params(m, params_next, factor, base_errs)
-            sx = simplex(m.fcn, params_pert; maxfcn = maxfcn, prec = m.prec)
+            # P6: inner probe — never warns (the migrad! retry loop emits
+            # ONE aggregate warning at the end, like the migrad passes).
+            sx = simplex(m.fcn, params_pert; maxfcn = maxfcn, prec = m.prec,
+                          warn_nonfinite = false)
             params_next = _build_resume_params(m, sx)
         end
 
