@@ -81,6 +81,7 @@ include("cost_functions.jl")
 include("resampling.jl")
 include("error_sampling.jl")
 include("mcmc.jl")
+include("extremize.jl")
 include("serialize.jl")
 include("plot_recipes.jl")
 include("plot_text.jl")
@@ -180,6 +181,10 @@ export eigenvalues, global_cc
 # Multi-modal solution detection (beyond iminuit) — cluster Δχ² samples
 export SolutionMode, SolutionModes, find_solution_modes
 export find_deeper_minimum, find_global_minimum  # latter deprecated → find_deeper_minimum
+
+# Derived-quantity Δχ²-region intervals & pointwise profile bands
+# (beyond iminuit — "MINOS for a function"; extremize.jl)
+export extremize, profile_band, ExtremizeResult, ProfileBand
 
 # IMinuit.jl-compatible algorithm wrappers
 export mncontour, profile, mnprofile

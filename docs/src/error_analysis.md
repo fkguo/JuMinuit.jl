@@ -1,16 +1,18 @@
 # Error analysis in JuMinuit — which method, when
 
-JuMinuit offers six ways to put an uncertainty on a fitted parameter (or on any
-quantity derived from the parameters). They are **not** interchangeable: they
-answer genuinely different questions, and they diverge in exactly the
-situations where it matters. This page is the map.
+JuMinuit offers seven ways to put an uncertainty on a fitted parameter — or on
+a **derived quantity** (any scalar `f(θ)`, or a model curve's pointwise error
+band). They are **not** interchangeable: they answer genuinely different
+questions, and they diverge in exactly the situations where it matters. This
+page is the map.
 
 ## The conceptual split
 
 There are two families, and the difference is **what is held fixed**.
 
-- **Likelihood-interrogating methods — HESSE, MINOS, MC-Δχ², the MCMC
-  ensemble** vary the **parameters** with the **data held fixed**. They ask:
+- **Likelihood-interrogating methods — HESSE, MINOS, extremize/profile_band,
+  MC-Δχ², the MCMC ensemble** vary the **parameters** with the **data held
+  fixed**. They ask:
 
   > *"Given **this** dataset, which parameter values are statistically
   > consistent with it?"*
@@ -54,6 +56,7 @@ or when you want a model-light cross-check before quoting a result.
 |---|---|---|---|---|
 | **HESSE** | parameters (analytic 2nd-derivative covariance at the minimum) | a converged fit with a positive-definite covariance | a fast, symmetric error on a near-Gaussian, near-linear fit; the default | wrong when the cost surface is non-parabolic (nonlinear model); requires a valid, pos-def covariance — a `made_pos_def` status (the covariance had to be *forced* positive-definite) ⇒ treat with suspicion |
 | **MINOS** | parameters (profiles each one, re-minimising the rest) | a converged, valid fit (`fmin` = the fit-minimum result; must be valid) | reporting **asymmetric** errors under mild–moderate nonlinearity | fails / misleads on an invalid `fmin`, strong nonlinearity, or a multimodal surface; one inner-minimisation per scan point (costlier than HESSE) |
+| **extremize / profile_band** | parameters (constrained extremization of a derived `f(θ)` over the `Δχ²` region) | a converged, valid fit; seeds covering every low-χ² corridor | an interval on a **derived quantity** (a scalar `f(θ)` that is not a parameter), or the pointwise **error band** of a curve family — "MINOS for a function" | likelihood method (trusts the error model); a single seed can stop at a *local* tangency on a multi-corridor region and silently under-cover — pass `seeds`, audit `.diagnostics` |
 | **MC-Δχ² region** | parameters (fixed data), using the **true** `Δχ²` not a quadratic | the `χ²`/`−2lnL` plus a proposal (the fit covariance, or an explicit parameter range) | mapping a **non-Gaussian** confidence region, or a **joint** N-D region, where MINOS' 1-D profile is not enough | the proposal must **over-cover** when the covariance is unreliable, or the region is clipped; still *trusts the error model* (it is a likelihood method) |
 | **Likelihood-ensemble MCMC** | parameters (fixed data): a Metropolis chain on the **true** likelihood `∝ exp(−fcn/(2·up))` | a fit to start from (HESSE helps the proposal); an FCN cheap enough for ~10⁴–10⁵ evaluations | **marginal quantiles & pointwise bands of derived quantities** (curves, ratios, …) under non-Gaussianity or active parameter limits; a reusable, likelihood-weighted error set | the quantile band is a *marginal* construction: at an active limit it can legitimately exclude the best fit (mode ≠ median — a property, not a failure); single chain — watch the acceptance and mixing; trusts the error model |
 | **Bootstrap** | **data** (resample with replacement, then re-fit) | a resamplable dataset and many cheap re-fits | the error model is **uncertain or misspecified**; you want the estimator's empirical sampling distribution and robust, possibly asymmetric, CIs | expensive (`nresample` full re-fits); needs enough independent points; weak for binned / heavily-aggregated / strongly-correlated data |
@@ -84,6 +87,79 @@ pair of generally **asymmetric** errors that follow real curvature of the cost
 valley — the standard HEP choice when the parabolic HESSE error is too crude.
 MINOS needs a genuinely valid minimum; on a broken or multimodal fit its
 crossings are meaningless.
+
+### Derived quantities — `extremize(m, f)` / `profile_band(m, f, xs)`
+
+MINOS answers "which values of **parameter** `θᵢ` are consistent with the
+data"; it has no notion of a **derived** scalar `f(θ)` — a peak position, a
+ratio of amplitudes, the model curve at one energy, a Legendre moment.
+[`extremize`](@ref JuMinuit.extremize) is MINOS-for-a-function: the exact
+profile interval
+
+```
+[min f(θ), max f(θ)]   over   { θ : FCN(θ) ≤ FCN_min + up·delta_chisq(cl, 1) }
+```
+
+with **all free parameters varied simultaneously** (limits and fixed
+parameters honoured). The threshold uses `ndof = 1` no matter how many
+parameters move: the quoted statement is ONE number — re-parametrize so `f`
+is itself a coordinate and this is a single-parameter interval with the rest
+profiled out (Wilks: one constraint ⇒ 1 dof; in the linear-Gaussian limit the
+answer is exactly the projection theorem `f̂ ± √(Δχ²·cᵀCc)`, full parameter
+correlations included). For `f(θ) = θ[i]` it reproduces the MINOS interval.
+
+[`profile_band`](@ref JuMinuit.profile_band) sweeps the same construction
+along a grid for a curve family `f(θ, x)` — the standard **pointwise**
+profile-likelihood error band for figures. Each `x` carries its own `cl`
+statement, and the band **contains the best-fit curve by construction** —
+the marginal `quantile_band` need not, when a parameter sits on a limit and
+pushes the likelihood mass to one side (the two constructions are compared
+side-by-side in the MCMC section below). Warm starts plus forward/reverse
+passes keep the sweep cheap and the band edges smooth in `x`.
+
+```julia
+migrad!(m)
+
+# 68.3 % profile interval of a derived scalar
+r = extremize(m, θ -> θ[1] + θ[2] * 15.0)
+r.lo, r.hi          # the interval (contains f at the best fit)
+r.plo, r.phi        # the extremal parameter vectors realizing the endpoints
+r.diagnostics       # per-seed audit: convergence, acceptance, who won
+
+# pointwise 68.3 % band of a model curve on a grid, seeded from an
+# mcmc_sample ensemble's f-extreme members (the ready-made seed bank)
+S(θ) = model_moment(θ, 4420.0) - model_moment(θ, 4465.0)
+ext = sort(collect(ens); by = S)
+band = profile_band(m, (θ, x) -> model_moment(θ, x), 4360.0:2.0:4520.0;
+                    seeds = [ext[1], ext[end]])
+band.nfail == 0 || @warn "inspect band.diagnostics"
+# plot: ribbon between band.lo and band.hi, central curve band.fbest
+```
+
+**Seed coverage is load-bearing, not a tuning knob.** Each endpoint comes
+from an exterior-penalty MIGRAD (a stiffening `λ`-continuation ladder with
+warm restarts) run from every seed. A single seed finds a **local** tangency:
+when the `Δχ²` region has several disconnected low-χ² corridors (multi-basin
+fits; a parameter pinned at a limit feeding a monotone map), a single-seed
+interval comes out **silently too narrow** — under-extremization. Pass
+everything that touches other corridors via `seeds` (`mcmc_sample` ensemble
+members extreme in `f` — see the MCMC section below — and
+`find_solution_modes` representatives) and audit `r.diagnostics`: per-seed
+acceptance and `f` records, plus the winning seed per side (`winner_* == 0`
+with `naccepted_* > 0` means the best fit is genuinely extremal; with
+`naccepted_* == 0` it means that side FAILED).
+
+Every reported endpoint is gate-certified: `FCN ≤ bound + accept_tol·up`
+always, and `FCN ≤ bound` exactly whenever the local boundary pull-back
+applies (the typical case) — the `fcn_*` diagnostics fields carry the
+values, so feasibility can be checked rather than trusted.
+
+For a genuinely **joint** statement (e.g. tracing a 2-D support function),
+override the threshold explicitly: `extremize(m, f; delta = delta_chisq(cl, 2))`.
+
+When the band goes into a figure, write **pointwise** in the caption: each
+`x` is its own 68 % statement, and the whole true curve lies inside the band
+everywhere-at-once with lower probability.
 
 ### MC-Δχ² region — `get_contours_samples(m; ...)` / `contour_df_samples`
 Samples trial parameter vectors (proposal = the fit covariance, or a user range),
@@ -207,7 +283,8 @@ never visits the `Δχ² ≤ 1` shell — and a region sampler asked for
 `get_contours_samples` when the deliverable is a **joint confidence region**;
 use `mcmc_sample` when the deliverable is **likelihood-weighted quantiles of
 derived quantities**. (The ensemble is also a ready-made *seed bank* for
-constrained-extremization band fits — its extreme members tell a profile
+[`extremize`](@ref JuMinuit.extremize) / [`profile_band`](@ref JuMinuit.profile_band)
+— pass the members extreme in `f` via `seeds`; they tell the profile
 optimizer where the low-χ² corridors are.)
 
 **Marginal quantile band vs profile envelope band — quote which one you used.**
@@ -216,10 +293,10 @@ parameter limit they legitimately differ:
 
 | | profile envelope band | likelihood-ensemble quantile band |
 |---|---|---|
-| construction | pointwise `[min, max]` of `f` over `{Δχ² ≤ delta_chisq(cl, k)}` (constrained extremization) | pointwise 16–84% quantiles of `f` over the likelihood ensemble |
+| construction | pointwise `[min, max]` of `f` over `{Δχ² ≤ delta_chisq(cl, 1)}` (constrained extremization — [`profile_band`](@ref JuMinuit.profile_band); explicit `delta = delta_chisq(cl, k)` only for joint statements) | pointwise 16–84% quantiles of `f` over the likelihood ensemble (`quantile_band`) |
 | nature | frequentist confidence band | likelihood/posterior-mass band |
 | best fit | **contained by construction** | **need not be contained** (mode ≠ median) |
-| needs | an optimizer reaching the region edge (multi-start; seeds!) | likelihood-weighted samples (this section) |
+| needs | an optimizer reaching the region edge (`extremize`/`profile_band`; multi-start, seeds!) | likelihood-weighted samples (this section) |
 | agree when | near-Gaussian interior — the two coincide | same |
 | separate when | at an active parameter limit the envelope truncates at the boundary side | the truncation piles the mass on one side ⇒ the whole band shifts |
 
@@ -242,7 +319,8 @@ volume effect above makes hitting the region hopeless in high dimension;
 the band (it misses the region's corners); (iii) quantiles of *uniform-in-region*
 samples answer no calibrated statistical question. Sampling is the right tool
 for **likelihood-weighted quantiles** (this section); region *edges* are an
-**optimization** problem (constrained extremization / MINOS / `contour_exact`).
+**optimization** problem ([`extremize`](@ref JuMinuit.extremize) / MINOS /
+`contour_exact`).
 
 **Tuning (field-tested recipe).** Proposal step ≈ `0.25–0.35 ×` the HESSE σ
 gives acceptance ≈ 0.2–0.3 for ~10 free parameters; the defaults
@@ -706,8 +784,10 @@ usual. See [`src/plot_recipes.jl`](https://github.com/fkguo/JuMinuit.jl/blob/mai
 3. **Error on a derived quantity or a curve** (a ratio, a lineshape, a moment —
    not a single fit parameter): build a **likelihood ensemble** with
    `mcmc_sample` and read `quantiles` / `quantile_band` (marginal construction);
-   for a band that must contain the best fit, extremize the quantity over
-   `Δχ² ≤ delta_chisq(cl, k)` instead (profile construction). At parameter
+   for a band that must contain the best fit, use [`extremize`](@ref JuMinuit.extremize) /
+   [`profile_band`](@ref JuMinuit.profile_band) over `Δχ² ≤ delta_chisq(cl, 1)`
+   instead (profile construction; an explicit `delta = delta_chisq(cl, k)` is
+   for genuinely joint statements only). At parameter
    limits the two differ legitimately — see the comparison table above.
 4. **Doubt the error model** (don't trust the quoted `σ`, suspect correlations or
    mis-scaling): cross-check with the **nonparametric bootstrap** — a bootstrap

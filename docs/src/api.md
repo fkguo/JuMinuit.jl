@@ -163,6 +163,15 @@ JuMinuit.contour_df_samples
 JuMinuit.contour_parameter_sets
 ```
 
+## Derived quantities (Δχ²-region intervals & profile bands)
+
+```@docs
+JuMinuit.extremize
+JuMinuit.profile_band
+JuMinuit.ExtremizeResult
+JuMinuit.ProfileBand
+```
+
 ## Likelihood-ensemble MCMC (marginal quantile bands)
 
 ```@docs

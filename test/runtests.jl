@@ -54,6 +54,7 @@ using Test
     include("test_eigen_corr.jl")
     include("test_solution_modes.jl")
     include("test_global_min.jl")
+    include("test_extremize.jl")
     include("test_phase1_cleanup.jl")
     include("test_print_level.jl")
     # Optim.jl is a test dependency; guard the alternative-minimizer bridge

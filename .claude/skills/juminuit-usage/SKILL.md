@@ -6,6 +6,7 @@ description: >-
   χ²/likelihood and analyze fit errors. Use when writing or editing Julia code
   that fits data with `Minuit`, `migrad!`, `minos!`, `hesse!`, the cost-function
   objects (`LeastSquares`/`UnbinnedNLL`/`BinnedNLL`/…), `mncontour`/`profile`,
+  `extremize`/`profile_band` (derived-quantity intervals & error bands),
   `bootstrap`/`jackknife`, `get_contours_samples`, `find_solution_modes`, or
   `find_deeper_minimum`; or when porting Python-iminuit or IMinuit.jl fitting
   code to JuMinuit. Covers the bang-method idiom (`migrad!(m)` not `m.migrad()`),
@@ -202,6 +203,37 @@ to_latex(m)                                      # LaTeX table of the result (Ju
   surface (`is_valid(me)==false`, `upper_new_min` fires, ragged contour) → use
   the sampling tools below.
 
+## Derived quantities: `extremize` / `profile_band` (post-0.5.0; no iminuit equivalent)
+
+"MINOS for a function": the profile interval of ANY scalar `f(θ)` over the
+`Δχ² ≤ delta_chisq(cl,1)·up` region (all free params vary; limits/fixed
+honoured; `f(θ)=θ[i]` ≡ MINOS; linear-Gaussian limit = `f̂ ± √(Δχ²·cᵀCc)`).
+`ndof=1` regardless of n_params — the quoted statement is ONE number.
+
+```julia
+r = extremize(m, θ -> θ[1] + θ[2]*15.0)          # cl=1 (68.3%); cl=2, cl=0.95 ok
+r.lo, r.hi          # interval; r.plo / r.phi = extremal param vectors
+r.diagnostics       # PER-SEED audit: accepted? f? winner_min/max (0 = best-fit fallback)
+
+ext = sort(collect(mcmc_sample(m; seed = 1)); by = θ -> model(θ, 4.42))
+band = profile_band(m, (θ, x) -> model(θ, x), 4360.0:2.0:4520.0;
+                    seeds = [ext[1], ext[end]])  # ensemble f-extremes = seed bank
+band.lo, band.hi, band.fbest                     # ribbon + central curve
+band.nfail == 0 || @warn "inspect band.diagnostics"
+```
+- **Seed coverage is load-bearing**: a single seed stops at a LOCAL tangency —
+  on a multi-corridor region (multi-basin, param on a limit) the interval is
+  silently too narrow. Pass `seeds =` `mcmc_sample` ensemble members extreme
+  in `f` / `find_solution_modes` representatives (vector-of-vectors or matrix
+  rows); the best fit is always seed 1. ALWAYS check `r.diagnostics` for who
+  won (`winner_*==0` + `naccepted_*>0` = best fit genuinely extremal;
+  `naccepted_*==0` = that side FAILED).
+- Band is **pointwise** (each x its own 68%) and contains the best-fit curve
+  by construction — say "pointwise" in the figure caption.
+- Joint statement instead? `extremize(m, f; delta = delta_chisq(cl, 2))`.
+- Cost ≈ `2 × seeds × ≤3 ladder stages × rounds` MIGRADs (band: × points ×
+  passes); budget with `maxfcn`, `rounds`, fewer seeds.
+
 ## Gradients: AD & threading (beyond C++ Minuit2)
 
 Default is serial central-difference numerical — right for cheap FCNs. Two extras:
@@ -282,6 +314,7 @@ Two families that **agree** on a clean near-Gaussian fit and **diverge** when it
 |---|---|---|
 | **HESSE** | `hesse!(m)` → `m.errors`, `m.covariance` | default; fast symmetric error, near-Gaussian fit |
 | **MINOS** | `minos!(m)` → `m.merrors` | asymmetric errors under mild–moderate nonlinearity |
+| **extremize / profile band** | `extremize(m, f; seeds=…)`, `profile_band(m, f, xs; …)` | **profile interval/band of a derived quantity** ("MINOS for a function"); contains the best fit by construction |
 | **MC-Δχ²** | `get_contours_samples(m; …)` | non-Gaussian or **joint** N-D confidence region |
 | **MCMC ensemble** | `mcmc_sample(m; …)` → `quantiles` / `quantile_band` | **marginal quantile bands of derived quantities** (curves, ratios); active limits |
 | **bootstrap** | `bootstrap(model, Data(x,y,σ), start)`, `bootstrap(cost, start)`, or `bootstrap(refit, data)` | you **doubt the error model** (quoted σ); want empirical sampling dist |
@@ -322,8 +355,9 @@ save_ensemble("ens.dat", ens; comment="…"); ens = load_ensemble("ens.dat")  # 
 - `limits` enforced by **rejection** → the chain samples the TRUNCATED likelihood:
   one-sided pile-up at an active boundary is physics, and the 16–84% band may then
   legitimately **exclude the best fit** (mode ≠ median — property, not bug). A band
-  that must contain the best fit is the *profile envelope* construction
-  (extremize `f` over `Δχ² ≤ delta_chisq(cl, k)`) — quote which one you used.
+  that must contain the best fit is `profile_band` (the `extremize` profile-envelope
+  construction) — quote which one you used. The ensemble doubles as the `seeds=`
+  pool for `extremize`/`profile_band` (pass the members extreme in `f`).
 - `minimum(ens.fvals) < ens.fbest` ⇒ chain found a deeper minimum → `find_deeper_minimum`.
 - Fixed params don't move; `m.nfcn` untouched; `seed=`/`rng=` for reproducibility.
 
@@ -343,7 +377,7 @@ save_ensemble("ens.dat", ens; comment="…"); ens = load_ensemble("ens.dat")  # 
 12. On multi-basin surfaces: `find_deeper_minimum` first, **then** local errors; bootstrap/jackknife unreliable.
 13. **Extensions** load on demand: `using Plots` (plotting / `draw_*`), `using Optim` (`optim`/`minimize_with`), `using ForwardDiff` (AD / `CostFunctionAD`), `using DataFrames` (`contour_df_samples`, `Data(::DataFrame)`, `DataFrame(bootstrap/jackknife result)`), `using Clustering` (`find_solution_modes(...; method=:dbscan)`).
 14. `Fit` / `ArrayFit` are **aliases of `Minuit`** (no behavioral difference).
-15. `mcmc_sample` quantile bands are **marginal** — at an active limit they may exclude the best fit (correct!); the always-contains-best-fit band is the profile envelope (`Δχ²≤delta_chisq(cl,k)` extremization). Don't "fix" one to match the other.
+15. `mcmc_sample` quantile bands are **marginal** — at an active limit they may exclude the best fit (correct!); the always-contains-best-fit band is `profile_band` (the `extremize` `Δχ²≤delta_chisq(cl,1)` envelope). Don't "fix" one to match the other — quote which you used.
 
 ## Authoritative docs (read these for depth beyond this skill)
 

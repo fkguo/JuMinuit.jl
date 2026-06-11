@@ -52,6 +52,45 @@ All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachan
     fixed-parameter invariance, exact save/load round-trip + hand-rolled
     format compatibility, seeded reproducibility, and the
     unreliable-covariance fallback.
+- **`extremize(m, f; cl, seeds, …)` — "MINOS for a function"** (no iminuit
+  equivalent): the exact profile interval `[min f, max f]` of a **derived
+  scalar** `f(θ)` over the region `FCN ≤ FCN_min + delta_chisq(cl, 1)·up`,
+  all free parameters varied simultaneously, limits/fixed honoured. For
+  `f(θ) = θ[i]` it reproduces MINOS; in the linear-Gaussian limit it is the
+  projection theorem `f̂ ± √(Δχ²·cᵀCc)` (verified digit-level in the tests).
+  Implementation: exterior-penalty MIGRAD with a stiffening λ-continuation
+  ladder (`1 → 100 → lambda`, warm-restarted up to `rounds` times — a single
+  stiff fit demonstrably stalls on the penalty shell), an acceptance gate
+  `FCN ≤ bound + accept_tol·up`, and a strictly LOCAL pull-back of the
+  endpoint onto the boundary (never across a χ² barrier). Returns an
+  `ExtremizeResult` with the extremal parameter vectors and a **per-seed
+  audit trail** (`diagnostics`: converged/accepted/`f`/winner per seed).
+  Multiple seeds are load-bearing: a single seed stops at a local tangency
+  and silently under-covers on a multi-corridor region — pass ensemble
+  extremes via `seeds` and audit the diagnostics (regression-tested on a
+  two-corridor toy where the default seed provably misses the far corridor).
+- **`profile_band(m, f, xs; cl, seeds, warm, passes, …)`** — the pointwise
+  profile-likelihood **error band** of a curve family `f(θ, x)`: per grid
+  point the same Δχ²(`ndof = 1`) extremization, swept with warm starts
+  (neighbour's extremal parameters seed the next point), alternating
+  forward/reverse passes keeping the better envelope, and a
+  contains-the-best-fit guarantee (`include_best`, on by default — the
+  construction property posterior-quantile bands lack at parameter limits).
+  Returns a `ProfileBand` with the envelope, per-point extremal vectors,
+  the best-fit curve, a failure counter (`nfail`) and per-point diagnostics.
+  Pointwise agreement with the analytic band is verified on a correlated
+  3-parameter Gaussian.
+- Both accept `cl` in the package-wide `delta_chisq` convention (`cl ≥ 1` →
+  nσ, `0 < cl < 1` → probability; threshold `delta_chisq(cl, 1)`), an
+  explicit `delta` override for joint statements (e.g.
+  `delta = delta_chisq(0.68, 2)` for support-function tracing), `up`-scaled
+  acceptance for −lnL fits (NLL/χ² parity is tested), and per-fit `maxfcn`
+  budgets. New docs section in `docs/src/error_analysis.md`; API reference
+  entries; `juminuit-usage` skill updated. Together with `mcmc_sample`/
+  `quantile_band` above this completes the in-package error-analysis
+  triangulation: profile extremization ↔ ensemble quantiles ↔ MINOS (a
+  `LikelihoodEnsemble` is also a ready-made `seeds` pool for `extremize` —
+  feed it the members extreme in `f`).
 
 ## [0.5.0] — 2026-06-10
 
