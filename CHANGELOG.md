@@ -3,6 +3,56 @@
 All notable changes to JuMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 + [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Likelihood-ensemble MCMC + marginal quantile bands** (`src/mcmc.jl`) — the
+  second leg of the error-analysis triangulation (profile extremization ↔
+  ensemble quantiles ↔ MINOS), absorbing the hand-rolled Metropolis chains
+  used in downstream analyses into a native feature. iminuit has no analogue
+  (Python users bolt on emcee).
+  - `mcmc_sample(m; nsteps=52_000, burn=2_000, thin=25, proposal=:hesse,
+    scale=0.3, target_accept, seed/rng)` — random-walk Metropolis on the
+    **exact FCN** (`exp(−Δfcn/(2·up))`, so χ² and `−log L` fits are handled
+    uniformly), started at the best fit. Parameter `limits` are enforced by
+    **rejection** (the chain samples the likelihood truncated to the allowed
+    box — the one-sided mass pile-up at an active boundary is the correct
+    marginal, not a bug); fixed parameters never move; non-finite FCN values
+    are never accepted; `m.nfcn` is untouched. Proposal options: `:hesse`
+    (fit covariance, correlation-aware; falls back to `:errors` with a warning
+    when the covariance is unreliable), `:errors` (per-coordinate parabolic
+    errors — the classic hand-rolled choice), an explicit per-coordinate σ
+    vector, or an explicit covariance matrix. With `target_accept` the scale
+    is adapted during burn-in only, then frozen (fixed kernel for the kept
+    chain). Returns a `LikelihoodEnsemble` (samples in full external
+    coordinates + FCN values + post-burn acceptance + metadata; iterable as a
+    collection of parameter vectors).
+  - `quantiles(ens, f; p=(0.16, 0.5, 0.84))` — marginal quantiles of a scalar
+    derived quantity over the ensemble; `quantile_band(ens, f, xs;
+    p=(0.16, 0.84), curve=false)` — pointwise quantile band of a curve
+    (`curve=true` evaluates whole curves, one call per member, for expensive
+    models).
+  - `save_ensemble` / `load_ensemble` — plain-text persistence (`#` header +
+    `fval p₁ p₂ …` rows) as reusable error sets; exact float round-trip;
+    reads existing hand-rolled ensemble files (foreign headers ⇒ placeholder
+    metadata, with `names`/`up` override keywords).
+  - Docs: `error_analysis.md` gains the marginal-quantile-band vs
+    profile-envelope-band comparison (the constructions legitimately separate
+    at parameter limits — the band may exclude the best fit), the
+    high-dimensional volume effect (`P(Δχ²₉ ≤ 1) ≈ 5.6e-4` — why a likelihood
+    chain is *not* a `Δχ² ≤ 1` region sampler and vice versa), and the
+    field-tested tuning recipe (step ≈ 0.25–0.35 × HESSE σ → acceptance
+    0.2–0.3).
+  - Tests (`test/test_mcmc.jl`): chain calibration on a known-covariance
+    Gaussian target (mean/covariance/`Δχ² ~ χ²ₙ` PIT), analytic
+    truncated-Gaussian quantiles on a boundary-pinned target (all samples
+    in-box, one-sided pile-up, band excludes the best fit by construction),
+    `up = 0.5` equivalence, burn-in scale adaptation both directions,
+    fixed-parameter invariance, exact save/load round-trip + hand-rolled
+    format compatibility, seeded reproducibility, and the
+    unreliable-covariance fallback.
+
 ## [0.5.0] — 2026-06-10
 
 Two independent overhauls. **`find_solution_modes`** gains cloud-scale whitening,

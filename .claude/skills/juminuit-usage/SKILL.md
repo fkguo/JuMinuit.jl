@@ -283,6 +283,7 @@ Two families that **agree** on a clean near-Gaussian fit and **diverge** when it
 | **HESSE** | `hesse!(m)` → `m.errors`, `m.covariance` | default; fast symmetric error, near-Gaussian fit |
 | **MINOS** | `minos!(m)` → `m.merrors` | asymmetric errors under mild–moderate nonlinearity |
 | **MC-Δχ²** | `get_contours_samples(m; …)` | non-Gaussian or **joint** N-D confidence region |
+| **MCMC ensemble** | `mcmc_sample(m; …)` → `quantiles` / `quantile_band` | **marginal quantile bands of derived quantities** (curves, ratios); active limits |
 | **bootstrap** | `bootstrap(model, Data(x,y,σ), start)`, `bootstrap(cost, start)`, or `bootstrap(refit, data)` | you **doubt the error model** (quoted σ); want empirical sampling dist |
 | **jackknife** | `jackknife(model, Data(x,y,σ), start)` (or a `cost` / `refit` form) | quick error **+ explicit bias** estimate |
 
@@ -300,6 +301,32 @@ For a correlation matrix use `correlation(result)` on a **bootstrap/jackknife
 result or a `Minuit`** — there is **no** `correlation` method for this sampler
 NamedTuple; for the accepted cloud compute it directly (`using Statistics; cor(r.samples)`).
 
+**Likelihood-ensemble MCMC** (`mcmc_sample`, 0.5+): Metropolis chain on the **exact
+FCN** (`exp(−Δfcn/(2·up))`) — NOT a `Δχ²` region sampler; samples live at the typical
+set `Δχ² ≈ n_free` (volume effect: `P(Δχ²₉ ≤ 1) ≈ 5.6e-4`), which is what makes it the
+right tool for **derived-quantity bands** where `get_contours_samples(ndof=1)` accepts
+almost nothing in high dimension.
+
+```julia
+ens = mcmc_sample(m; seed = 11)          # defaults 52k/burn 2k/thin 25 → 2000 sets; needs migrad! first
+ens.acceptance                            # ~10D heuristic ≈ 0.2–0.3 (low-dim accepts higher, ~0.8 fine); target_accept=0.25 autotunes
+q16, q50, q84 = quantiles(ens, θ -> θ[2]/θ[1])                  # scalar marginal quantiles
+B = quantile_band(ens, (x, θ) -> model(x, θ), xs)               # nx×2 pointwise 16–84% band
+B = quantile_band(ens, θ -> curve(xs, θ), xs; curve = true)     # 1 call/member (expensive models)
+save_ensemble("ens.dat", ens; comment="…"); ens = load_ensemble("ens.dat")  # reusable error set
+```
+- `proposal=:hesse` (default; auto-falls back to `:errors` if Σ unreliable) /
+  `:errors` / explicit `[σ₁,…]` per free param (the escape hatch when a parameter
+  sits AT a limit and HESSE σ there is squeezed/meaningless) / explicit Σ matrix.
+  Proposal shape affects **mixing only**, never the stationary distribution.
+- `limits` enforced by **rejection** → the chain samples the TRUNCATED likelihood:
+  one-sided pile-up at an active boundary is physics, and the 16–84% band may then
+  legitimately **exclude the best fit** (mode ≠ median — property, not bug). A band
+  that must contain the best fit is the *profile envelope* construction
+  (extremize `f` over `Δχ² ≤ delta_chisq(cl, k)`) — quote which one you used.
+- `minimum(ens.fvals) < ens.fbest` ⇒ chain found a deeper minimum → `find_deeper_minimum`.
+- Fixed params don't move; `m.nfcn` untouched; `seed=`/`rng=` for reproducibility.
+
 ## Gotchas cheat-sheet (the non-guessable list)
 
 1. `migrad!(m)` / `hesse!(m)` / `minos!(m)` — **bang functions, mutate `m`**; not `m.migrad()`.
@@ -316,6 +343,7 @@ NamedTuple; for the accepted cloud compute it directly (`using Statistics; cor(r
 12. On multi-basin surfaces: `find_deeper_minimum` first, **then** local errors; bootstrap/jackknife unreliable.
 13. **Extensions** load on demand: `using Plots` (plotting / `draw_*`), `using Optim` (`optim`/`minimize_with`), `using ForwardDiff` (AD / `CostFunctionAD`), `using DataFrames` (`contour_df_samples`, `Data(::DataFrame)`, `DataFrame(bootstrap/jackknife result)`), `using Clustering` (`find_solution_modes(...; method=:dbscan)`).
 14. `Fit` / `ArrayFit` are **aliases of `Minuit`** (no behavioral difference).
+15. `mcmc_sample` quantile bands are **marginal** — at an active limit they may exclude the best fit (correct!); the always-contains-best-fit band is the profile envelope (`Δχ²≤delta_chisq(cl,k)` extremization). Don't "fix" one to match the other.
 
 ## Authoritative docs (read these for depth beyond this skill)
 

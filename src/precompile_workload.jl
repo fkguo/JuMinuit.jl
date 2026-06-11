@@ -115,6 +115,15 @@ PrecompileTools.@setup_workload begin
             jackknife(_wl_line, _data, [1.0, 0.0])
             get_contours_samples(mw; nsamples = 64, adaptive = false,
                                  seed = 1, warn = false)
+            _ens = mcmc_sample(mw; nsteps = 60, burn = 10, thin = 5,
+                               seed = 1, warn = false)
+            quantiles(_ens, x -> x[1]; warn = false)
+            quantile_band(_ens, (t, x) -> x[1] + x[2] * t, [0.0, 1.0]; warn = false)
+            quantile_band(_ens, x -> [x[1], x[1] + x[2]], [0.0, 1.0];
+                          curve = true, warn = false)
+            _eio = IOBuffer()
+            save_ensemble(_eio, _ens)
+            load_ensemble(IOBuffer(take!(_eio)))
             _S = [0.98 1.99; 1.02 2.01; 1.00 2.00; 0.99 2.02; 1.01 1.98; 1.00 1.99]
             find_solution_modes(_S, mw)
         catch; end

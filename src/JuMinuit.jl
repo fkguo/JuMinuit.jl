@@ -22,7 +22,8 @@ C++-comparable (often better) performance.
   `minos!`, …) plus IMinuit.jl-compatible `Fit` / `ArrayFit`.
 - A Julia-native cost-function family (`LeastSquares`, `UnbinnedNLL`,
   `BinnedNLL`, …) composable with `CostSum`.
-- Error analysis beyond HESSE/MINOS: Monte-Carlo Δχ² regions, bootstrap,
+- Error analysis beyond HESSE/MINOS: Monte-Carlo Δχ² regions, a
+  likelihood-ensemble MCMC sampler with marginal quantile bands, bootstrap,
   jackknife and multi-modal solution detection (see `docs/src/error_analysis.md`).
 - AD-backed gradients (ForwardDiff extension), an opt-in threaded numerical
   gradient, and an `Optim.jl` alternative-minimizer bridge (`optim`).
@@ -79,6 +80,7 @@ include("iminuit_compat.jl")
 include("cost_functions.jl")
 include("resampling.jl")
 include("error_sampling.jl")
+include("mcmc.jl")
 include("serialize.jl")
 include("plot_recipes.jl")
 include("plot_text.jl")
@@ -135,6 +137,9 @@ export function_cross_multi
 # Sampling-based / contour error analysis (error_sampling.jl)
 export delta_chisq, chisq_cl
 export get_contours_samples, contour_df_samples
+# Likelihood-ensemble MCMC + marginal quantile bands (mcmc.jl)
+export LikelihoodEnsemble, mcmc_sample, quantiles, quantile_band
+export save_ensemble, load_ensemble
 export BoundedFunctionMinimum, ext_errors, ext_covariance, free_covariance
 export Minuit, migrad!, minos!
 # IMinuit.jl drop-in fit-type names (AbstractFit supertype; Fit/ArrayFit

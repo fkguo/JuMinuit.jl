@@ -91,6 +91,13 @@ common in coupled-channel / amplitude fits), JuMinuit adds:
   `Δχ² ≤ delta_chisq(cl, ndof)` region; captures non-Gaussian and joint
   multi-parameter shapes. Over-coverage-aware (inflation, adaptive widening,
   covariance-free box proposal).
+- **Likelihood-ensemble MCMC** (`mcmc_sample`) — a Metropolis chain on the
+  exact FCN (no Gaussian surrogate; parameter limits by rejection), feeding
+  marginal **quantile intervals and pointwise bands of derived quantities**
+  (`quantiles`, `quantile_band`) and reusable on-disk error sets
+  (`save_ensemble` / `load_ensemble`). The second leg of the
+  profile-extremization ↔ ensemble-quantiles ↔ MINOS triangulation; iminuit
+  has no native analogue (Python users bolt on emcee).
 - **Bootstrap** and **jackknife** (`bootstrap`, `jackknife`) — data-resampling
   errors that don't trust the quoted `σ`; with full covariance + `correlation`.
 - **Multi-modal solution detection** (`find_solution_modes`) — cluster the
@@ -343,8 +350,8 @@ On actual HEP fits (vs `iminuit` via PyCall; `julia -t 8` except where noted):
   bounded parameters, MINOS & contours), error analysis, cost functions, and the
   full API reference.
 - **[Error-analysis guide](docs/src/error_analysis.md)** — which uncertainty method
-  to use, when, and why (HESSE / MINOS / MC-Δχ² / bootstrap / jackknife /
-  multi-modal).
+  to use, when, and why (HESSE / MINOS / MC-Δχ² / MCMC ensemble / bootstrap /
+  jackknife / multi-modal).
 - **[`docs/dev/`](docs/dev/)** — design notes, the C++-fidelity audit, the
   roadmap, and the explicitly-deferred-features list.
 - **[`docs/UPSTREAM.md`](docs/UPSTREAM.md)** — upstream provenance and LGPL
@@ -356,7 +363,8 @@ This repository ships a [Claude Code](https://claude.com/claude-code) **skill**
 that teaches an AI coding agent the JuMinuit API — the `Minuit` / `migrad!` /
 `minos!` workflow, the Julia-native cost functions, bounds and fixed parameters,
 AD & threaded gradients, and the error-analysis tools (`mncontour`,
-`get_contours_samples`, `bootstrap` / `jackknife`, `find_deeper_minimum`, …).
+`get_contours_samples`, `mcmc_sample` / `quantile_band`, `bootstrap` /
+`jackknife`, `find_deeper_minimum`, …).
 With it installed, an agent writes **correct fits and error analysis** instead of
 guessing the API or falling back to Python-`iminuit` / `IMinuit.jl` syntax. The
 skill is a concise quick-reference; its authoritative source is the package's own

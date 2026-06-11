@@ -50,6 +50,7 @@ using Test
     include("test_resampling_cost.jl")
     include("test_simplex_scan.jl")
     include("test_error_sampling.jl")
+    include("test_mcmc.jl")
     include("test_eigen_corr.jl")
     include("test_solution_modes.jl")
     include("test_global_min.jl")

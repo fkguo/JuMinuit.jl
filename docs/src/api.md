@@ -163,6 +163,17 @@ JuMinuit.contour_df_samples
 JuMinuit.contour_parameter_sets
 ```
 
+## Likelihood-ensemble MCMC (marginal quantile bands)
+
+```@docs
+JuMinuit.mcmc_sample
+JuMinuit.LikelihoodEnsemble
+JuMinuit.quantiles
+JuMinuit.quantile_band
+JuMinuit.save_ensemble
+JuMinuit.load_ensemble
+```
+
 ## Resampling (bootstrap & jackknife)
 
 ```@docs

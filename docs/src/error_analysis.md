@@ -1,24 +1,27 @@
 # Error analysis in JuMinuit — which method, when
 
-JuMinuit offers five ways to put an uncertainty on a fitted parameter. They are
-**not** interchangeable: they answer two genuinely different questions, and they
-diverge in exactly the situations where it matters. This page is the map.
+JuMinuit offers six ways to put an uncertainty on a fitted parameter (or on any
+quantity derived from the parameters). They are **not** interchangeable: they
+answer genuinely different questions, and they diverge in exactly the
+situations where it matters. This page is the map.
 
 ## The conceptual split
 
 There are two families, and the difference is **what is held fixed**.
 
-- **Likelihood-interrogating methods — HESSE, MINOS, MC-Δχ²** vary the
-  **parameters** with the **data held fixed**. They ask:
+- **Likelihood-interrogating methods — HESSE, MINOS, MC-Δχ², the MCMC
+  ensemble** vary the **parameters** with the **data held fixed**. They ask:
 
   > *"Given **this** dataset, which parameter values are statistically
   > consistent with it?"*
 
   They read the shape of the cost surface `χ²(θ)` (or `−2 ln L(θ)`) around the
-  minimum — the curvature (HESSE), the `Δχ² = up` crossing along a profiled
-  axis (MINOS — `up` is the *error definition*: `1` for a χ² fit, `½` for `−2 ln L`,
-  defined just under the table below), or a Monte-Carlo sample of the whole `Δχ² ≤ threshold` region
-  (MC-Δχ²). The dataset never changes; only the trial parameters move.
+  minimum — the curvature (HESSE), the `ΔFCN = up` crossing along a profiled
+  axis (MINOS — `up` is the *error definition*: `1` for a χ² (or `−2 ln L`) fit,
+  `½` for a `−ln L` fit, defined just under the table below), a Monte-Carlo
+  sample of the whole `ΔFCN ≤ up·delta_chisq(cl, ndof)` region
+  (MC-Δχ²), or a likelihood-weighted Metropolis chain (`mcmc_sample`).
+  The dataset never changes; only the trial parameters move.
 
 - **Data-resampling methods — bootstrap, jackknife** resample the **data** and
   re-fit. They ask:
@@ -52,11 +55,17 @@ or when you want a model-light cross-check before quoting a result.
 | **HESSE** | parameters (analytic 2nd-derivative covariance at the minimum) | a converged fit with a positive-definite covariance | a fast, symmetric error on a near-Gaussian, near-linear fit; the default | wrong when the cost surface is non-parabolic (nonlinear model); requires a valid, pos-def covariance — a `made_pos_def` status (the covariance had to be *forced* positive-definite) ⇒ treat with suspicion |
 | **MINOS** | parameters (profiles each one, re-minimising the rest) | a converged, valid fit (`fmin` = the fit-minimum result; must be valid) | reporting **asymmetric** errors under mild–moderate nonlinearity | fails / misleads on an invalid `fmin`, strong nonlinearity, or a multimodal surface; one inner-minimisation per scan point (costlier than HESSE) |
 | **MC-Δχ² region** | parameters (fixed data), using the **true** `Δχ²` not a quadratic | the `χ²`/`−2lnL` plus a proposal (the fit covariance, or an explicit parameter range) | mapping a **non-Gaussian** confidence region, or a **joint** N-D region, where MINOS' 1-D profile is not enough | the proposal must **over-cover** when the covariance is unreliable, or the region is clipped; still *trusts the error model* (it is a likelihood method) |
+| **Likelihood-ensemble MCMC** | parameters (fixed data): a Metropolis chain on the **true** likelihood `∝ exp(−fcn/(2·up))` | a fit to start from (HESSE helps the proposal); an FCN cheap enough for ~10⁴–10⁵ evaluations | **marginal quantiles & pointwise bands of derived quantities** (curves, ratios, …) under non-Gaussianity or active parameter limits; a reusable, likelihood-weighted error set | the quantile band is a *marginal* construction: at an active limit it can legitimately exclude the best fit (mode ≠ median — a property, not a failure); single chain — watch the acceptance and mixing; trusts the error model |
 | **Bootstrap** | **data** (resample with replacement, then re-fit) | a resamplable dataset and many cheap re-fits | the error model is **uncertain or misspecified**; you want the estimator's empirical sampling distribution and robust, possibly asymmetric, CIs | expensive (`nresample` full re-fits); needs enough independent points; weak for binned / heavily-aggregated / strongly-correlated data |
 | **Jackknife** | **data** (leave-one-out, then re-fit) | a dataset and `N` (delete-1) re-fits | a quick, almost assumption-free error **plus an explicit bias estimate** | coarser than the bootstrap; unreliable for highly nonlinear or non-smooth estimators; the delete-`d` block variant is coarser still |
 
-`up` = `errordef` (1 for a `χ²` fit, 0.5 for a `−2 ln L` fit); the `1σ` level is
-`Δχ² = up`.
+`up` = `errordef` (1 for a `χ²` or `−2 ln L` fit, 0.5 for a `−ln L` fit — the
+factor-of-2 between `−ln L` and `−2 ln L` is exactly why the two carry different
+`up`). The `1σ` level is where the FCN rises by `up` above its minimum
+(`ΔFCN = up`): for a `χ²` fit that is `Δχ² = 1`; for a bare `−ln L` fit it is
+`ΔFCN = 0.5`. The χ²-equivalent displacement is always `ΔFCN / up`, so the `1σ`
+χ²-equivalent level is `ΔFCN / up = 1` regardless of `up` — that normalization by
+`up` is exactly what makes a `−ln L` fit and a `χ²` fit give the same errors.
 
 ## The methods in JuMinuit
 
@@ -154,6 +163,106 @@ Related: `contour_parameter_sets(ce)` returns the full parameter vector at every
 `contour_exact` / `mncontour` boundary point (the 2 contour coordinates + the
 profiled rest) at no extra cost — the native analogue of IMinuit.jl's
 `get_contours`.
+
+### Likelihood-ensemble MCMC — `mcmc_sample` / `quantiles` / `quantile_band`
+
+`mcmc_sample(m)` runs a random-walk Metropolis chain on the **exact FCN**
+(acceptance `exp(−Δfcn/(2·up))` — `exp(−Δχ²/2)` for a χ² fit, `exp(−Δ(−log L))`
+for `up = 0.5`) and returns a `LikelihoodEnsemble`: ~2000 parameter sets drawn
+from the likelihood `L(θ) ∝ exp(−fcn(θ)/(2·up))`, each with its FCN value. Any
+derived quantity then gets a **marginal quantile interval**
+(`quantiles(ens, f)`) or a **pointwise quantile band** over a grid
+(`quantile_band(ens, f, xs)`) by plain evaluation over the ensemble — no
+propagation formula, no linearization, no re-fitting. iminuit has no native
+analogue (Python users bolt on `emcee` for this).
+
+```julia
+m = Minuit(chi2, x0; names = names, limits = limits)
+migrad!(m); hesse!(m)                       # HESSE shapes the proposal
+
+ens = mcmc_sample(m; seed = 11)             # 52k steps, burn 2k, thin 25 → 2000 sets
+ens.acceptance                              # healthy: ≈ 0.2–0.4
+
+q16, q50, q84 = quantiles(ens, θ -> θ[2] - θ[1])          # scalar derived quantity
+band = quantile_band(ens, (x, θ) -> model(x, θ), xgrid)    # nx × 2: 16% and 84% edges
+
+save_ensemble("ensemble_B.dat", ens; comment = "error set B")   # reusable error set
+ens = load_ensemble("ensemble_B.dat")       # …in a later session: no re-sampling
+
+# A foreign / hand-rolled file (only `# …` comments + `fval p₁ p₂ …` rows, e.g.
+# a `# cols: chi2 a b` header) loads too, but a non-JuMinuit header is NOT
+# parsed as metadata: names default to p1,p2,… and `up` to NaN unless supplied.
+ens = load_ensemble("legacy.dat"; names = ["a", "b"], up = 1.0)
+```
+
+**Not the same animal as `get_contours_samples`.** The region sampler draws
+proposals and *keeps only* those inside `Δχ² ≤ delta_chisq(cl, ndof)` — a hard
+cut whose product is region **extents**. The MCMC ensemble has **no Δχ² cut at
+all**: samples are kept in proportion to their likelihood, so they concentrate
+at the *typical set* `Δχ² ≈ n_free`, not inside `Δχ² ≤ 1`. This is the
+high-dimensional **volume effect**: for 9 free parameters
+`chisq_cl(1, 9) = P(Δχ² ≤ 1) ≈ 5.6e-4`, so a 9-D likelihood chain essentially
+never visits the `Δχ² ≤ 1` shell — and a region sampler asked for
+`ndof = 1`-style thresholds in 9-D accepts almost nothing. Use
+`get_contours_samples` when the deliverable is a **joint confidence region**;
+use `mcmc_sample` when the deliverable is **likelihood-weighted quantiles of
+derived quantities**. (The ensemble is also a ready-made *seed bank* for
+constrained-extremization band fits — its extreme members tell a profile
+optimizer where the low-χ² corridors are.)
+
+**Marginal quantile band vs profile envelope band — quote which one you used.**
+For a curve `f(x; θ)` there are two honest "1σ band" constructions, and at a
+parameter limit they legitimately differ:
+
+| | profile envelope band | likelihood-ensemble quantile band |
+|---|---|---|
+| construction | pointwise `[min, max]` of `f` over `{Δχ² ≤ delta_chisq(cl, k)}` (constrained extremization) | pointwise 16–84% quantiles of `f` over the likelihood ensemble |
+| nature | frequentist confidence band | likelihood/posterior-mass band |
+| best fit | **contained by construction** | **need not be contained** (mode ≠ median) |
+| needs | an optimizer reaching the region edge (multi-start; seeds!) | likelihood-weighted samples (this section) |
+| agree when | near-Gaussian interior — the two coincide | same |
+| separate when | at an active parameter limit the envelope truncates at the boundary side | the truncation piles the mass on one side ⇒ the whole band shifts |
+
+The boundary case is worth spelling out (it alarms people the first time).
+Take a parameter with `limits = (0, ∞)` whose best fit lands **on** the
+boundary (a coupling `g ≥ 0` fitted to data that prefer `g < 0`, say). Every
+ensemble member has `g > 0`, so if `f` responds monotonically to `g`, the
+ensemble's `f` values sit systematically on one side of the best-fit curve —
+the 16–84% band can then **exclude the best fit entirely**. That is the
+correct marginal statement about where the likelihood mass is, not a sampler
+bug, and **more samples will not make it go away**; the profile envelope, by
+construction, still contains the best fit. Report the band you used; when both
+are quoted, their interior agreement (and explicable boundary separation) is a
+strong cross-check — the triangulation *profile extremization ↔ ensemble
+quantiles ↔ MINOS* in practice.
+
+**Why not "uniform points in `Δχ² ≤ 1` + envelope"?** Three reasons: (i) the
+volume effect above makes hitting the region hopeless in high dimension;
+(ii) an envelope over finitely many points systematically **under-estimates**
+the band (it misses the region's corners); (iii) quantiles of *uniform-in-region*
+samples answer no calibrated statistical question. Sampling is the right tool
+for **likelihood-weighted quantiles** (this section); region *edges* are an
+**optimization** problem (constrained extremization / MINOS / `contour_exact`).
+
+**Tuning (field-tested recipe).** Proposal step ≈ `0.25–0.35 ×` the HESSE σ
+gives acceptance ≈ 0.2–0.3 for ~10 free parameters; the defaults
+(`nsteps = 52_000, burn = 2_000, thin = 25`, `proposal = :hesse`,
+`scale = 0.3`) yield 2000 well-decorrelated sets. Set `target_accept = 0.25`
+to have the scale tuned automatically during burn-in (then frozen, so the kept
+chain has a fixed kernel). The proposal shape affects **mixing efficiency
+only** — any symmetric proposal converges to the same distribution (contrast
+the region sampler, where proposal under-coverage biases the result): when the
+covariance is unreliable the sampler falls back to per-coordinate `m.errors`
+steps with a warning, and `proposal = [σ₁, σ₂, …]` overrides everything (the
+escape hatch when a parameter sits at a limit and both Σ and the parabolic
+errors are meaningless there). Parameter `limits` are enforced by rejection —
+the chain samples the likelihood truncated to the allowed box, which is
+exactly what produces the one-sided boundary pile-up above. Convergence
+sanity: `minimum(ens.fvals)` should come within `Δχ² ≈ O(1)` of `ens.fbest`
+(in ~9-D it typically bottoms out around `Δχ² ~ 0.8` — the volume effect
+again), quantiles should be stable against halving the ensemble, and
+`minimum(ens.fvals) < ens.fbest` means the chain found a **deeper minimum** —
+re-minimize (`find_deeper_minimum`) before quoting any errors.
 
 ### Bootstrap — `bootstrap(model, data, start; ...)`
 Resamples the dataset and re-fits `nresample` times, returning a
@@ -594,12 +703,18 @@ usual. See [`src/plot_recipes.jl`](https://github.com/fkguo/JuMinuit.jl/blob/mai
    add **MINOS** for asymmetric errors.
 2. **Non-Gaussian or joint region** where MINOS' 1-D profile is insufficient:
    map it with **MC-Δχ²**.
-3. **Doubt the error model** (don't trust the quoted `σ`, suspect correlations or
+3. **Error on a derived quantity or a curve** (a ratio, a lineshape, a moment —
+   not a single fit parameter): build a **likelihood ensemble** with
+   `mcmc_sample` and read `quantiles` / `quantile_band` (marginal construction);
+   for a band that must contain the best fit, extremize the quantity over
+   `Δχ² ≤ delta_chisq(cl, k)` instead (profile construction). At parameter
+   limits the two differ legitimately — see the comparison table above.
+4. **Doubt the error model** (don't trust the quoted `σ`, suspect correlations or
    mis-scaling): cross-check with the **nonparametric bootstrap** — a bootstrap
    error far from the HESSE error tells you the `σ` are wrong.
-4. **Suspect estimator bias** (nonlinear, boundary, small `N`): run the
+5. **Suspect estimator bias** (nonlinear, boundary, small `N`): run the
    **jackknife** for an explicit bias estimate and a bias-corrected value.
-5. **Sanity check** that the resampling plumbing agrees with the curvature error:
+6. **Sanity check** that the resampling plumbing agrees with the curvature error:
    the **parametric bootstrap** should reproduce the HESSE error.
 
 ## See also
@@ -609,5 +724,8 @@ usual. See [`src/plot_recipes.jl`](https://github.com/fkguo/JuMinuit.jl/blob/mai
 - MC-Δχ² / `delta_chisq` implementation:
   [`src/error_sampling.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/error_sampling.jl); tests
   [`test/test_error_sampling.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/test/test_error_sampling.jl)
+- Likelihood-ensemble MCMC / quantile bands:
+  [`src/mcmc.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/mcmc.jl); tests
+  [`test/test_mcmc.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/test/test_mcmc.jl)
 - HESSE / MINOS / contours: [`src/hesse.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/hesse.jl),
   [`src/minos.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/minos.jl), [`src/contours.jl`](https://github.com/fkguo/JuMinuit.jl/blob/main/src/contours.jl)
