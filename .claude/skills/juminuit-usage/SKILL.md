@@ -233,6 +233,23 @@ band.nfail == 0 || @warn "inspect band.diagnostics"
 - Joint statement instead? `extremize(m, f; delta = delta_chisq(cl, 2))`.
 - Cost ≈ `2 × seeds × ≤3 ladder stages × rounds` MIGRADs (band: × points ×
   passes); budget with `maxfcn`, `rounds`, fewer seeds.
+- **Expensive FCN / `f` (≥ seconds/eval), near-linear ⇒ `mode = :directional`**
+  (0.5.3, on both `extremize` and `profile_band`): walks `d = C·∇f` and
+  secant/bisects the TRUE FCN to the boundary — `≈ n_free + ~15` paired evals
+  (~50× cheaper than the default `:full`; a band is `×points`), **exact in the
+  linear-Gaussian limit**. `r.mode`/`b.mode` flags it; pass `grad_f` (`θ->∇f`,
+  or `(x,θ)->∇_θf` for the band) to skip the numeric gradient. It IGNORES
+  `seeds`/limits and won't chase corridors — warns on bounded free params, and
+  `profile_band` flags + best-fit-falls-back any point with a non-finite `f`
+  or un-computable direction. Workflow: `:directional` first, then `:full`
+  (default) if you suspect non-linearity / a binding limit / they disagree.
+- On the `:full` path for an expensive FCN: `rounds=1, iterate=1, strategy=0`
+  (+ `maxfcn`) is the cheapest; `on_unit = u -> …` fires per penalty-MIGRAD for
+  live progress / external checkpointing.
+- **`f`-failure contract** (0.5.3): `f` may THROW or return a non-finite value
+  at infeasible θ — both are safe (treated as out-of-region; tallied
+  `f_nonfinite`). Do NOT return a sentinel like `0.0` from a failing `f` — that
+  silently biases the endpoint toward the centre.
 
 ## Gradients: AD & threading (beyond C++ Minuit2)
 
