@@ -102,7 +102,11 @@ methods plus iminuit-style property access.
 - `m.errors` — external 1σ errors.
 - `m.fval`, `m.edm`, `m.nfcn`, `m.valid`.
 - `m.covariance` — full external covariance matrix or `nothing`.
-- `m.params` — the underlying `Parameters`.
+- `m.params` — the `Parameters` (name/bounds/fixed structure). Once a
+  fit is cached it reflects the FIT: `m.params.pars[i].value/.error`
+  equal `m.values[i]`/`m.errors[i]` (iminuit parity, issue #38);
+  before any fit (or after `reset`/a mutation) it holds the
+  constructor-time initial values and steps.
 - `m.fmin` — the underlying `BoundedFunctionMinimum` (`nothing`
   before `migrad!`).
 """
@@ -571,9 +575,11 @@ default to whatever the user stored on `m` (settable via
 If a prior `m.fmin` exists, pass 1 starts from the previous converged
 point (iminuit-compatible implicit resume). Use `reset(m)` (or
 `migrad(m; resume=false)`) to drop the prior fit and restart from the
-constructor's initial values. `m.params` itself is NEVER mutated —
-the carry-forward builds a fresh `Parameters` only for the duration
-of the inner MIGRAD call.
+constructor's initial values. The stored configuration (initial
+values, user step sizes — `_init_params(m)`) is NEVER mutated; the
+carry-forward builds a fresh `Parameters` only for the duration of
+the inner MIGRAD call. (The public `m.params` *property* reflects the
+fit once converged — see the `Minuit` docstring.)
 """
 function migrad!(m::Minuit;
                   strategy::Union{Strategy,Integer} = m.strategy,
@@ -612,7 +618,7 @@ function migrad!(m::Minuit;
     # iminuit-style implicit resume: if we already converged once, carry
     # the prior ext_values forward as the new starting point. m.params
     # untouched (review BLOCKING #2 from the original `migrad!` review).
-    params_to_use = m.fmin === nothing ? m.params : _build_resume_params(m)
+    params_to_use = m.fmin === nothing ? _init_params(m) : _build_resume_params(m)
     bfm = _migrad_into!(m, params_to_use;
                          strategy = strategy, tol = tol, maxfcn = maxfcn,
                          threaded_gradient = _tg,

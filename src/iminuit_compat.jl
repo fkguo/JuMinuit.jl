@@ -430,7 +430,8 @@ minimize over other parameters — for that use [`mnprofile`](@ref).
 
 **Best-value retention (iminuit / C++ MnParameterScan semantics):** the scan
 runs around the CURRENT values (after a fit, the held parameters sit at
-`m.fmin`'s values, NOT the un-mutated constructor `m.params`), and as a side
+`m.fmin`'s converged values — what `m.values`/`m.params` now report — not the
+constructor initials), and as a side
 effect `m` is left at the lowest-fval grid point found (the central point is
 included in the comparison). So `m.values` / `m.fval` reflect the best grid
 point — with the other parameters' current values preserved — and a follow-up
