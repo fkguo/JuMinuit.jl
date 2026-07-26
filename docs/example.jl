@@ -56,13 +56,16 @@ e = m.merrors["a"]
 #
 # When MINOS hits a parameter bound, `e.upper_par_limit` is raised and
 # the published `e.upper` equals the physical distance to the bound
-# (matches iminuit's `m.merrors[name].upper`).
+# (matches iminuit's `m.merrors[name].upper`). This is a clean termination,
+# so `is_valid(e)` may still be true, but `has_closed_interval(e)` is false:
+# the requested ΔFCN crossing was not found on that side.
 
 m_at = Minuit(x -> (x[1] - 12.0)^2 + (x[2] - 2.0)^2, [5.0, 0.0];
               name = ["x", "y"],
               limits = [(nothing, 10.0), nothing])
 migrad(m_at); minos(m_at, 1)
 m_at.merrors["x"]    # upper saturated at bound = 10.0
+has_closed_interval(m_at.merrors["x"])
 
 # ## 5. Contours — 2D confidence regions
 #

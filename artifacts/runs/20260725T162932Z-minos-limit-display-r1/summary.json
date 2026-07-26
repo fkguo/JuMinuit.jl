@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "20260725T162932Z-minos-limit-display-r1",
+  "status": "verified",
+  "updated_at_utc": "2026-07-26T19:46:01Z",
+  "branch": "codex/minos-limit-display-fix",
+  "baseline_commit": "68980eec43acada67a6a78bc5d6a0367a9289089",
+  "scope": "Public MINOS at-limit presentation and export semantics",
+  "numerical_kernel_changed": false,
+  "result": {
+    "at_limit_semantics": "Preserve the raw signed bound distance and flags; label the value as distance-to-limit rather than a statistical uncertainty.",
+    "closed_interval_semantics": "Both finite, valid, non-limit Delta-FCN crossings are required.",
+    "plot_semantics": "At-limit and invalid sides are omitted from confidence whiskers.",
+    "serialization_semantics": "Raw values and parameter-limit flags round-trip; older payloads default missing limit flags to false."
+  },
+  "verification": {
+    "focused": {
+      "passed": 112,
+      "total": 112,
+      "log": "targeted_final.log",
+      "sha256": "b7b004d5fa3d257a1a082750662dea1868e6764686adcdc7e7e2b83b87cf8f6b"
+    },
+    "full_pkg_test": {
+      "passed": 5004,
+      "broken": 1,
+      "failed": 0,
+      "errored": 0,
+      "log": "pkg_test_offline.log",
+      "sha256": "aeaebcadc5d570b9d9123828056123c13c538d885c00059f196e7fe3f1ba35e5"
+    },
+    "documentation": {
+      "status": "passed_with_preexisting_warnonly_notices",
+      "log": "docs_build_final.log",
+      "sha256": "a9b1c6a5df1d0ceddcfc69930b70e8509cb192bb5c5b802b74524bef6984c205"
+    },
+    "integrity_record": "integrity.md"
+  },
+  "network_note": "Two online Pkg.test attempts stopped before test execution on TLS handshake failures. The complete test target was then resolved from installed compatible packages and executed with Pkg.offline(true)."
+}

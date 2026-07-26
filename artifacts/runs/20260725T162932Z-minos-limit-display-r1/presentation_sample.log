@@ -1,0 +1,18 @@
+TEXT_PLAIN
+┌───────────────────────────────────────────────────────────────────────┐
+│                            Minos — par x0                             │
+├───────────────────────────────────┬───────────────────────────────────┤
+│ value = 3.78                      │             Nfcn = 17             │
+├───────────────────────────────────┼───────────────────────────────────┤
+│ sides = at upper limit / −0.3     │               Valid               │
+├───────────────────────────────────┼───────────────────────────────────┤
+│Upper at limit; distance=+8.597e-07│             Lower: OK             │
+└───────────────────────────────────┴───────────────────────────────────┘
+COMPACT
+MinosError(par=1, val=3.7799991402523414, upper at limit (distance +8.597e-07), −0.3, valid=true, closed_interval=false)
+LATEX
+\num{3.78}^{\mathrm{at\ upper\ limit}\;(\mathrm{distance}=+\num{8.597e-07})}_{-0.30}
+PLOT_YERROR=([0.3], [0.0])
+PLOT_LABEL=par[1] MINOS (upper at limit omitted)
+SERIALIZED_LIMIT_FLAGS=(true, false)
+CLOSED_INTERVAL=false VALID=true

@@ -59,13 +59,19 @@ plot(contour_grid(m, 1, 2))               # ContourGrid → filled FCN-landscape
 | Recipe target | Picture |
 |---|---|
 | [`FunctionMinimum`](@ref) / [`BoundedFunctionMinimum`](@ref) (e.g. `m.fmin`) | value-per-parameter scatter with symmetric Hesse error bars (the bounded recipe also labels the axis by name and marks fixed parameters) |
-| [`MinosError`](@ref) (e.g. `m.merrors["a"]`) | one point at the central value with asymmetric `+upper / −lower` whiskers |
+| [`MinosError`](@ref) (e.g. `m.merrors["a"]`) | one point at the central value with whiskers only for genuine $\Delta \mathrm{FCN}$ crossings |
 | `Vector{MinosError}` (e.g. `collect(values(m.merrors))`) | the same, one point per parameter |
 | [`ContoursError`](@ref) | the boundary as a closed polygon in the `(par_x, par_y)` plane |
 | [`ContourGrid`](@ref) (from [`contour_grid`](@ref)) | filled contour of the FCN grid slice + a marker at the minimum (landscape view — NOT a confidence region; see the [`contour_grid`](@ref) docstring) |
 
 The recipes attach sensible defaults (markers, labels, `aspect_ratio` for the
 contour) and pass through any `plot` keyword.
+
+An at-limit value is the distance to a parameter bound, not a confidence
+error bar, so that side's whisker is omitted and the series label says which
+limit was reached. Invalid-side Hesse placeholders are omitted for the same
+reason. The raw `upper` / `lower` values and their flags remain available on
+the [`MinosError`](@ref).
 
 A worked example — a two-parameter linear fit, its Hesse error bars, and the exact
 joint 68 % confidence contour (both blocks share the fitted `m`):
@@ -218,12 +224,16 @@ print(to_latex(m; caption = "Fit result", label = "tab:fit"))  # wrap in a float
 
 Defaults to a `booktabs` rule set with `siunitx` `\num{}` numbers (so the
 preamble needs `\usepackage{booktabs}` and `\usepackage{siunitx}` unless you
-disable them). Asymmetric MINOS errors are written `\num{x}^{+hi}_{-lo}`, a
-symmetric Hesse error as `\num{x} \pm \num{e}`, and a fixed parameter as the bare
-value tagged `(fixed)`.
+disable them). Genuine asymmetric MINOS crossings are written
+`\num{x}^{+hi}_{-lo}`. An at-limit side is labeled as such and its number is
+identified as the distance to the limit; an invalid side is labeled `invalid`.
+A symmetric Hesse error is written as `\num{x} \pm \num{e}`, and a fixed
+parameter as the bare value tagged `(fixed)`.
 
 A second method renders a single [`MinosError`](@ref) as inline math
-(`\num{value}^{+hi}_{-lo}`, no surrounding `$…$`) for dropping into running text:
+(no surrounding `$…$`) for dropping into running text. Closed intervals use
+`\num{value}^{+hi}_{-lo}`; at-limit and invalid sides retain their explicit
+status labels:
 
 ```julia
 minos!(m, 1)                     # run MINOS so the asymmetric error exists

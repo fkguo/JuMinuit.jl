@@ -58,6 +58,7 @@ NativeMinuit.CovStatus
 ```@docs
 NativeMinuit.minos
 NativeMinuit.MinosError
+NativeMinuit.has_closed_interval
 NativeMinuit.minos_upper
 NativeMinuit.minos_lower
 NativeMinuit.function_cross

@@ -71,7 +71,9 @@ end
 """
     to_dict(e::MinosError) -> Dict{String,Any}
 
-Serialize a [`MinosError`](@ref).
+Serialize a [`MinosError`](@ref). The raw `upper` / `lower` values and all
+termination flags, including `upper_par_limit` / `lower_par_limit`, are
+preserved so a bound distance cannot lose its public meaning after a round-trip.
 """
 function to_dict(e::MinosError)
     return Dict{String,Any}(
@@ -86,6 +88,8 @@ function to_dict(e::MinosError)
         "lower_new_min" => e.lower_new_min,
         "upper_fcn_limit" => e.upper_fcn_limit,
         "lower_fcn_limit" => e.lower_fcn_limit,
+        "upper_par_limit" => e.upper_par_limit,
+        "lower_par_limit" => e.lower_par_limit,
         "nfcn" => e.nfcn,
     )
 end
@@ -115,7 +119,9 @@ end
 """
     minos_error_from_dict(d::AbstractDict) -> MinosError
 
-Reconstruct a `MinosError` from a `to_dict`-produced dictionary.
+Reconstruct a `MinosError` from a `to_dict`-produced dictionary. Payloads
+written before the parameter-limit flags were serialized remain readable and
+default those flags to `false`.
 """
 function minos_error_from_dict(d::AbstractDict)
     return MinosError(
@@ -129,6 +135,8 @@ function minos_error_from_dict(d::AbstractDict)
         Bool(d["lower_new_min"]),
         Bool(d["upper_fcn_limit"]),
         Bool(d["lower_fcn_limit"]),
+        Bool(get(d, "upper_par_limit", false)),
+        Bool(get(d, "lower_par_limit", false)),
         Int(d["nfcn"]),
     )
 end

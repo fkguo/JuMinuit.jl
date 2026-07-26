@@ -129,11 +129,17 @@ warning, and the bound makes the local error unreliable:
 **MINOS reports the bound distance, not an overflow.** When a MINOS scan
 runs into a bound before `χ²` rises by `up`, that side is a clean
 termination: the published error is the *distance to the bound*
-(`bound − value`), and the corresponding [`MinosError`](@ref) flag
+($x_{\mathrm{bound}} - x_{\min}$), and the corresponding
+[`MinosError`](@ref) flag
 (`upper_par_limit` / `lower_par_limit`) is raised — matching iminuit's
 `m.merrors[name].is_valid` semantics (hitting a bound is legitimate, not a
-failure). If a parameter sits at a bound, that is usually a sign your bound
-is too tight or the data don't constrain the parameter on that side.
+failure). It is not a tiny statistical uncertainty: the requested
+$\Delta \mathrm{FCN}$ interval did not close on that side. Consequently,
+`is_valid(e)` may be `true` while [`has_closed_interval(e)`](@ref) is `false`.
+The text, HTML, and LaTeX displays label this side `at limit` and identify the
+number as a distance to the limit. If a parameter sits at a bound, that is
+usually a sign your bound is too tight or the data don't constrain the
+parameter on that side.
 
 When a parameter rails against a bound and you suspect the error model is
 the culprit, the model-light cross-checks in the

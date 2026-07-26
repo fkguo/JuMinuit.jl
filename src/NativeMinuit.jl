@@ -128,7 +128,7 @@ export int_to_ext_vector, ext_to_int_vector
 export initial_int_values, initial_int_errors
 export hesse, hesse!, HesseResult
 export squeeze_symmetric, squeeze_error
-export MnCross, MinosError, minos, minos_lower, minos_upper
+export MnCross, MinosError, minos, minos_lower, minos_upper, has_closed_interval
 # NB: the bare `contour` (≤ 0.4 the ellipse approximation) is deliberately
 # NOT exported — it collides with `Plots.contour` / `GR.contour` under
 # `using NativeMinuit, Plots`. `NativeMinuit.contour` survives as a deprecated
