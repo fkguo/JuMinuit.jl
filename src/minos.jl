@@ -30,9 +30,11 @@ The asymmetric error result for a single parameter. Mirrors C++
   analysis completed cleanly on that side. **True also when the
   search saturated against a parameter bound** (the corresponding
   `upper_par_limit` / `lower_par_limit` flag is then raised and the
-  published value is the physical bound_distance — `x_bound − x_min`).
+  published value is the physical bound distance — `x_bound − x_min`).
   This matches iminuit's `m.merrors[name].is_valid` semantics: hitting
-  a bound is a legitimate MINOS termination, not a failure.
+  a bound is a legitimate MINOS termination, not a failure. The bound
+  distance is not a ΔFCN crossing or a statistical uncertainty; use
+  [`has_closed_interval`](@ref) when both crossings are required.
 - `upper_new_min::Bool`, `lower_new_min::Bool` — `true` if a lower
   minimum was discovered during the scan (caller should restart
   MIGRAD from the better point).
@@ -126,10 +128,56 @@ end
 True if both upper and lower MINOS analyses completed cleanly.
 Includes the at-bound case (`upper_par_limit` / `lower_par_limit`):
 saturating against a parameter bound is treated as a clean termination
-with a physically meaningful published value (the bound distance),
-matching iminuit's `m.merrors[name].is_valid`.
+whose published value is the bound distance, matching iminuit's
+`m.merrors[name].is_valid`. This does not imply that both ΔFCN
+crossings were found; use [`has_closed_interval`](@ref) for that test.
 """
 is_valid(e::MinosError) = e.upper_valid && e.lower_valid
+
+"""
+    has_closed_interval(e::MinosError) -> Bool
+
+Return `true` only when both MINOS sides found finite ΔFCN crossings.
+
+This is stricter than `is_valid(e)`: a scan that reaches a parameter
+bound is a clean termination and therefore remains valid, but its reported
+`upper` or `lower` value is only the distance to that limit. Such a side does
+not close the requested confidence interval.
+"""
+has_closed_interval(e::MinosError) =
+    e.upper_valid && e.lower_valid &&
+    !e.upper_par_limit && !e.lower_par_limit &&
+    isfinite(e.upper) && isfinite(e.lower) &&
+    e.upper > 0 && e.lower < 0
+
+# Classify a public MINOS side without interpreting a bound distance or an
+# invalid-side HESSE placeholder as a ΔFCN crossing.
+function _minos_side_status(e::MinosError, side::Symbol)
+    if side === :upper
+        e.upper_par_limit && return :at_limit
+        return e.upper_valid && isfinite(e.upper) && e.upper > 0 ?
+               :crossing : :invalid
+    elseif side === :lower
+        e.lower_par_limit && return :at_limit
+        return e.lower_valid && isfinite(e.lower) && e.lower < 0 ?
+               :crossing : :invalid
+    end
+    throw(ArgumentError("MINOS side must be :upper or :lower"))
+end
+
+function _minos_show_side(e::MinosError, side::Symbol)
+    status = _minos_side_status(e, side)
+    value = side === :upper ? e.upper : e.lower
+    sign = side === :upper ? "+" : "−"
+    magnitude = _fmt_num(abs(value))
+    if status === :at_limit
+        return string(side, " at limit (distance ", sign, magnitude, ")")
+    elseif status === :crossing
+        return string(sign, magnitude)
+    else
+        return string(side, " invalid")
+    end
+end
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -446,6 +494,14 @@ end
 # Pretty-print (iminuit-style box) — Phase 3 parity polish
 # ─────────────────────────────────────────────────────────────────────────────
 
+# The status label consumes 26 of the 35 cell columns, leaving nine for
+# the distance. Preserve the usual formatting unless its exponent needs
+# a more compact scientific notation.
+function _minos_box_distance(x::Real)
+    distance = _fmt_num(abs(x))
+    return textwidth(distance) <= 9 ? distance : @sprintf("%.3g", abs(x))
+end
+
 function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     # iminuit "Minos" box: 71-char width, 3-row status
     println(io, "┌", "─"^71, "┐")
@@ -455,14 +511,38 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     nfcn_str = _center("Nfcn = $(e.nfcn)", 35)
     println(io, "│", _ljust(val_str, 35), "│", nfcn_str, "│")
     println(io, "├", "─"^35, "┼", "─"^35, "┤")
-    err_str = " error = +$(_fmt_num(e.upper))  −$(_fmt_num(-e.lower))"
+    if has_closed_interval(e)
+        err_str = " error = +$(_fmt_num(e.upper))  −$(_fmt_num(-e.lower))"
+    else
+        upper_status = _minos_side_status(e, :upper)
+        lower_status = _minos_side_status(e, :lower)
+        if upper_status === :at_limit && lower_status === :at_limit
+            err_str = " sides = at upper/lower limits"
+        else
+            upper_side = if upper_status === :at_limit
+                "at upper limit"
+            elseif upper_status === :crossing
+                _minos_show_side(e, :upper)
+            else
+                "invalid"
+            end
+            lower_side = if lower_status === :at_limit
+                "at lower limit"
+            elseif lower_status === :crossing
+                _minos_show_side(e, :lower)
+            else
+                "invalid"
+            end
+            err_str = string(" sides = ", upper_side, " / ", lower_side)
+        end
+    end
     valid_str = is_valid(e) ? "Valid" : "INVALID"
     println(io, "│", _ljust(err_str, 35), "│", _center(valid_str, 35), "│")
     println(io, "├", "─"^35, "┼", "─"^35, "┤")
     up_status = if e.upper_new_min
         "Upper: NEW MIN found"
     elseif e.upper_par_limit
-        "Upper: AT LIMIT"
+        "Upper at limit; distance=+$(_minos_box_distance(e.upper))"
     elseif e.upper_fcn_limit
         "Upper: call-limit hit"
     elseif e.upper_valid
@@ -473,7 +553,7 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     lo_status = if e.lower_new_min
         "Lower: NEW MIN found"
     elseif e.lower_par_limit
-        "Lower: AT LIMIT"
+        "Lower at limit; distance=−$(_minos_box_distance(e.lower))"
     elseif e.lower_fcn_limit
         "Lower: call-limit hit"
     elseif e.lower_valid
@@ -485,10 +565,19 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     println(io, "└", "─"^35, "┴", "─"^35, "┘")
 end
 
-Base.show(io::IO, e::MinosError) =
-    print(io, "MinosError(par=", e.par_idx, ", val=", e.min_par_value,
+function Base.show(io::IO, e::MinosError)
+    if has_closed_interval(e)
+        print(io, "MinosError(par=", e.par_idx, ", val=", e.min_par_value,
               ", +", e.upper, " −", -e.lower,
               ", valid=", is_valid(e), ")")
+    else
+        print(io, "MinosError(par=", e.par_idx, ", val=", e.min_par_value,
+              ", ", _minos_show_side(e, :upper),
+              ", ", _minos_show_side(e, :lower),
+              ", valid=", is_valid(e),
+              ", closed_interval=false)")
+    end
+end
 
 # Vector{MinosError} — one box per error
 function Base.show(io::IO, mime::MIME"text/plain", es::AbstractVector{MinosError})

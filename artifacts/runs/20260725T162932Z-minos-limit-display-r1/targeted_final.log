@@ -1,0 +1,5 @@
+Precompiling packages...
+  32736.3 ms  ✓ NativeMinuit
+  1 dependency successfully precompiled in 33 seconds. 9 already precompiled.
+Test Summary:                      | Pass  Total  Time
+MINOS at-limit public presentation |  112    112  4.6s

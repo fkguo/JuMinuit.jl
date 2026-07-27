@@ -227,7 +227,9 @@ end
 const _MINOS_INVALID = "invalid"
 
 """
-    _format_minos_err(value, lower, upper; mode=:text) -> String
+    _format_minos_err(value, lower, upper;
+                      lower_at_limit=false, upper_at_limit=false,
+                      mode=:text) -> String
 
 The MINOS asymmetric error WITHOUT the central value, for the post-MINOS
 comparison layout's dedicated column: `+hi / −lo` (`:text`) or
@@ -235,31 +237,57 @@ comparison layout's dedicated column: `+hi / −lo` (`:text`) or
 when the value scale calls for it. `value` only sets the rounding frame.
 
 Each side is rendered **independently**: `lower` / `upper` may be `nothing`
-for a side whose crossing did not converge. A converged side shows its
-signed magnitude; the non-converged side shows the [`_MINOS_INVALID`] marker
-— so a ONE-sided MINOS still publishes the side it obtained (iminuit-style)
-instead of discarding both. Returns `"—"` only when NEITHER side is a
-usable (finite, positive) error.
+for a side whose crossing did not converge. A ΔFCN crossing shows its signed
+magnitude; a non-converged side shows the [`_MINOS_INVALID`] marker. A side
+whose `*_at_limit` flag is set is instead labeled `at limit` and its numeric
+value is explicitly identified as a distance to the limit, never as an
+uncertainty. Returns `"—"` only when neither side has publishable information.
 """
 function _format_minos_err(value::Real,
                            lower::Union{Nothing,Real},
                            upper::Union{Nothing,Real};
+                           lower_at_limit::Bool = false,
+                           upper_at_limit::Bool = false,
                            mode::Symbol = :text)
     v = Float64(value)
-    _usable(x) = x !== nothing && isfinite(Float64(x)) && abs(Float64(x)) > 0
-    hi = _usable(upper) ? abs(Float64(upper)) : nothing
-    lo = _usable(lower) ? abs(Float64(lower)) : nothing
-    (hi === nothing && lo === nothing) && return "—"
-    # One shared rounding frame over whichever side(s) converged: for a
-    # one-sided result the single valid magnitude sets precision + factor.
-    present = Tuple(x for x in (hi, lo) if x !== nothing)
-    e10, _, estrs = _round_to_uncertainty(v, present)
+    _finite(x) = x !== nothing && isfinite(Float64(x))
+    _crossing(x, at_limit) = _finite(x) && !at_limit && abs(Float64(x)) > 0
+    _limited(x, at_limit) = _finite(x) && at_limit
+    hi_status = _limited(upper, upper_at_limit) ? :at_limit :
+                _crossing(upper, upper_at_limit) ? :crossing : :invalid
+    lo_status = _limited(lower, lower_at_limit) ? :at_limit :
+                _crossing(lower, lower_at_limit) ? :crossing : :invalid
+    if hi_status === :invalid && lo_status === :invalid &&
+       upper === nothing && lower === nothing
+        return "—"
+    end
+
+    hi = hi_status === :crossing ? abs(Float64(upper)) : nothing
+    lo = lo_status === :crossing ? abs(Float64(lower)) : nothing
+    # A bound distance is not an uncertainty and therefore must not set the
+    # rounding precision for a genuine crossing on the opposite side.
+    crossings = Tuple(x for x in (hi, lo) if x !== nothing)
+    factor = hi_status !== :at_limit && lo_status !== :at_limit
+    e10, _, estrs = _round_to_uncertainty(v, crossings; factor = factor)
     idx = 1
     hi_str = nothing; lo_str = nothing
     if hi !== nothing; hi_str = estrs[idx]; idx += 1; end
     if lo !== nothing; lo_str = estrs[idx]; end
-    up_part = hi_str === nothing ? _MINOS_INVALID : string("+", hi_str)
-    lo_part = lo_str === nothing ? _MINOS_INVALID : string("−", lo_str)
+
+    up_part = if hi_status === :at_limit
+        string("upper at limit (distance +", _fmt_g(abs(Float64(upper))), ")")
+    elseif hi_status === :crossing
+        string("+", hi_str)
+    else
+        _MINOS_INVALID
+    end
+    lo_part = if lo_status === :at_limit
+        string("lower at limit (distance −", _fmt_g(abs(Float64(lower))), ")")
+    elseif lo_status === :crossing
+        string("−", lo_str)
+    else
+        _MINOS_INVALID
+    end
     if mode === :html
         core = string("<sup>", up_part, "</sup><sub>", lo_part, "</sub>")
         return e10 == 0 ? core : string(core, "×10<sup>", e10, "</sup>")
@@ -293,7 +321,12 @@ function _split_cells(r; mode::Symbol = :text)
     minos_cell = if r.fixed
         ""
     elseif r.minos_lo !== nothing || r.minos_hi !== nothing
-        _format_minos_err(v, r.minos_lo, r.minos_hi; mode = mode)
+        _format_minos_err(
+            v, r.minos_lo, r.minos_hi;
+            lower_at_limit = r.minos_lo_at_limit,
+            upper_at_limit = r.minos_hi_at_limit,
+            mode = mode,
+        )
     elseif r.minos_ran
         _MINOS_INVALID   # MINOS ran but BOTH sides failed to converge
     else
@@ -624,13 +657,67 @@ function _latex_escape(s::AbstractString)
     return String(take!(out))
 end
 
+function _latex_minos_value(value::Real,
+                            lower::Union{Nothing,Real},
+                            upper::Union{Nothing,Real};
+                            lower_at_limit::Bool = false,
+                            upper_at_limit::Bool = false,
+                            num = identity)
+    v = Float64(value)
+    _finite(x) = x !== nothing && isfinite(Float64(x))
+    _crossing(x, at_limit) = _finite(x) && !at_limit && abs(Float64(x)) > 0
+    _limited(x, at_limit) = _finite(x) && at_limit
+    hi_status = _limited(upper, upper_at_limit) ? :at_limit :
+                _crossing(upper, upper_at_limit) ? :crossing : :invalid
+    lo_status = _limited(lower, lower_at_limit) ? :at_limit :
+                _crossing(lower, lower_at_limit) ? :crossing : :invalid
+
+    hi = hi_status === :crossing ? abs(Float64(upper)) : nothing
+    lo = lo_status === :crossing ? abs(Float64(lower)) : nothing
+    crossings = Tuple(x for x in (hi, lo) if x !== nothing)
+    if isempty(crossings)
+        vstr = _fmt_g(v)
+        estrs = ()
+    else
+        _, vstr, estrs = _round_to_uncertainty(v, crossings; factor = false)
+    end
+    idx = 1
+    hi_str = nothing; lo_str = nothing
+    if hi !== nothing; hi_str = estrs[idx]; idx += 1; end
+    if lo !== nothing; lo_str = estrs[idx]; end
+
+    upper_part = if hi_status === :at_limit
+        string("\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+",
+               num(_fmt_g(abs(Float64(upper)))), ")")
+    elseif hi_status === :crossing
+        string("+", hi_str)
+    else
+        "\\mathrm{invalid}"
+    end
+    lower_part = if lo_status === :at_limit
+        string("\\mathrm{at\\ lower\\ limit}\\;(\\mathrm{distance}=-",
+               num(_fmt_g(abs(Float64(lower)))), ")")
+    elseif lo_status === :crossing
+        string("-", lo_str)
+    else
+        "\\mathrm{invalid}"
+    end
+    return string(num(vstr), "^{", upper_part, "}_{", lower_part, "}")
+end
+
 function _latex_value_cell(r, num)
     v = Float64(r.value)
-    if r.minos_lo !== nothing && r.minos_hi !== nothing
-        _, vstr, estrs = _round_to_uncertainty(v,
-            (abs(Float64(r.minos_hi)), abs(Float64(r.minos_lo))); factor = false)
-        histr, lostr = estrs
-        return string("\$", num(vstr), "^{+", histr, "}_{-", lostr, "}\$")
+    if r.minos_ran && !r.fixed
+        return string(
+            "\$",
+            _latex_minos_value(
+                v, r.minos_lo, r.minos_hi;
+                lower_at_limit = r.minos_lo_at_limit,
+                upper_at_limit = r.minos_hi_at_limit,
+                num = num,
+            ),
+            "\$",
+        )
     elseif r.hesse !== nothing && isfinite(r.hesse) && r.hesse > 0
         _, vstr, estrs = _round_to_uncertainty(v, (Float64(r.hesse),); factor = false)
         return string("\$", num(vstr), " \\pm ", num(estrs[1]), "\$")
@@ -646,10 +733,13 @@ end
 Render the fitted parameters of `m` as a publication-ready LaTeX table.
 
 Defaults to a `booktabs` rule set with `siunitx` `\\num{}` numbers.
-Asymmetric MINOS errors (when `minos!` has run) are written as
-`\\num{x}^{+hi}_{-lo}`; otherwise a symmetric `\\num{x} \\pm \\num{e}` is
-used. Numbers are rounded to the uncertainty (1–2 significant figures on
-the error). Fixed parameters show the value alone, tagged `(fixed)`.
+Asymmetric MINOS crossings (when `minos!` has run) are written as
+`\\num{x}^{+hi}_{-lo}`. A side stopped by a parameter bound is labeled
+`at upper limit` or `at lower limit`, and its number is labeled as the
+distance to that limit rather than as an uncertainty. Invalid sides are
+labeled `invalid`. Otherwise a symmetric `\\num{x} \\pm \\num{e}` is used.
+Numbers are rounded to the uncertainty (1–2 significant figures on the
+error). Fixed parameters show the value alone, tagged `(fixed)`.
 
 Set `siunitx=false` for plain numbers (no `\\num{}`), `booktabs=false`
 for `\\hline` rules, and pass `caption`/`label` to wrap the `tabular` in a
@@ -710,18 +800,19 @@ end
 """
     to_latex(e::MinosError; value=e.min_par_value, siunitx=true) -> String
 
-Render a single asymmetric MINOS result as `\\num{value}^{+hi}_{-lo}`
-(no surrounding math delimiters), suitable for dropping into running text.
-
-If either MINOS side failed to converge (a non-finite `upper`/`lower`),
-there is no meaningful asymmetric error, so the central value alone is
-returned (`\\num{value}`).
+Render a single MINOS result without surrounding math delimiters. Genuine
+ΔFCN crossings use the usual `\\num{value}^{+hi}_{-lo}` notation. At-limit
+sides are explicitly labeled and report their distance to the limit; invalid
+sides are labeled `invalid`.
 """
 function to_latex(e::MinosError; value::Real = e.min_par_value, siunitx::Bool = true)
     num(s) = siunitx ? string("\\num{", s, "}") : s
-    (isfinite(e.upper) && isfinite(e.lower)) || return num(_fmt_g(Float64(value)))
-    _, vstr, estrs = _round_to_uncertainty(Float64(value),
-        (abs(e.upper), abs(e.lower)); factor = false)
-    histr, lostr = estrs
-    return string(num(vstr), "^{+", histr, "}_{-", lostr, "}")
+    upper = (_minos_side_status(e, :upper) !== :invalid) ? e.upper : nothing
+    lower = (_minos_side_status(e, :lower) !== :invalid) ? e.lower : nothing
+    return _latex_minos_value(
+        value, lower, upper;
+        lower_at_limit = e.lower_par_limit,
+        upper_at_limit = e.upper_par_limit,
+        num = num,
+    )
 end

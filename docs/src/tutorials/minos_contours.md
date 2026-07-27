@@ -35,16 +35,18 @@ comparison view: separate `Value`, `Hesse` and `MINOS` columns, so the
 asymmetric MINOS error sits next to its symmetric Hesse counterpart. A MINOS
 side that failed to converge is marked `invalid` (so a one-sided MINOS still
 shows the side it got, and a fully-failed one shows `invalid`); `—` means
-MINOS was not run for that parameter. Non-converged parameters are also
-listed in a warning line below the table. Each
+MINOS was not run for that parameter. A side that reached a bound is instead
+marked `at limit`; its number is labeled as the distance to that limit, not as
+an uncertainty. Non-converged parameters are also listed in a warning line
+below the table. Each
 [`MinosError`](@ref) carries:
 
 | Field             | Meaning                                                       |
 |:------------------|:--------------------------------------------------------------|
 | `par_idx`         | 1-based parameter index                                       |
 | `min_par_value`   | parameter value at the minimum                                |
-| `upper`           | positive 1σ error (≥ 0)                                       |
-| `lower`           | negative 1σ error (≤ 0)                                       |
+| `upper`           | positive offset: $\Delta \mathrm{FCN}$ crossing or bound distance, as flagged |
+| `lower`           | negative offset: $\Delta \mathrm{FCN}$ crossing or bound distance, as flagged |
 | `upper_valid`     | `true` if the upper crossing converged (or hit a bound)       |
 | `lower_valid`     | `true` if the lower crossing converged (or hit a bound)       |
 | `upper_new_min`   | `true` if a deeper minimum was found scanning upward          |
@@ -58,9 +60,13 @@ listed in a warning line below the table. Each
 | `lower_state`     | full parameter vector at the lower crossing (`nothing` if invalid) |
 
 `is_valid(me)` is `true` when both sides terminated cleanly (a bound counts
-as clean — see [Bounded parameters](bounded.md)). Always gate on
-`upper_valid` / `lower_valid` before trusting a side: on a failed crossing
-the published value falls back to the symmetric Hesse placeholder.
+as clean — see [Bounded parameters](bounded.md)); it does not mean that both
+$\Delta \mathrm{FCN}$ crossings were found. Use
+[`has_closed_interval(me)`](@ref) when the statistical interval must be
+closed on both sides. Always gate on `upper_valid` / `lower_valid` before
+using a side: on a failed crossing the published value falls back to the
+symmetric Hesse placeholder, while an at-limit side publishes only the
+distance to the bound.
 
 If you only need one side, `minos_upper(m, "a")` /
 `minos_lower(m, "a")` return just that value without mutating

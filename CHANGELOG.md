@@ -3,6 +3,17 @@
 All notable changes to NativeMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- MINOS results that stop at a parameter bound now retain their kernel values
+  and validity flags while every public presentation labels the value as a
+  distance to the limit rather than a statistical uncertainty. Plot recipes
+  omit at-limit and invalid-side whiskers, JSON dictionaries preserve the
+  parameter-limit flags, and `has_closed_interval` distinguishes two genuine
+  $\Delta \mathrm{FCN}$ crossings from a merely clean termination.
+
 ## [0.6.2] — 2026-07-06
 
 ### Changed

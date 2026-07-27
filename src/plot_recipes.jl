@@ -66,13 +66,37 @@ RecipesBase.@recipe function f(g::ContourGrid)
     end
 end
 
-# MinosError as an asymmetric error-bar at the central value.
-# For a 1D plot: x = par_idx, y = min_par_value ± (upper / lower).
+# MinosError as an asymmetric error-bar at the central value. Only genuine
+# ΔFCN crossings become whiskers: an at-limit value is a bound distance, and
+# an invalid-side value is a HESSE placeholder, so both are omitted.
+_minos_plot_error(e::MinosError, side::Symbol) =
+    _minos_side_status(e, side) === :crossing ?
+        abs(side === :upper ? e.upper : e.lower) : 0.0
+
+function _minos_plot_label(e::MinosError)
+    upper_status = _minos_side_status(e, :upper)
+    lower_status = _minos_side_status(e, :lower)
+    if upper_status === :at_limit && lower_status === :at_limit
+        note = "limits omitted"
+    elseif upper_status === :at_limit && lower_status === :crossing
+        note = "upper at limit omitted"
+    elseif lower_status === :at_limit && upper_status === :crossing
+        note = "lower at limit omitted"
+    elseif upper_status === :invalid || lower_status === :invalid
+        note = (upper_status === :at_limit || lower_status === :at_limit) ?
+               "non-crossing sides omitted" : "invalid side omitted"
+    else
+        return "par[$(e.par_idx)] MINOS"
+    end
+    return "par[$(e.par_idx)] MINOS ($note)"
+end
+
 RecipesBase.@recipe function f(e::MinosError)
     seriestype := :scatter
-    yerror --> ([abs(e.lower)], [e.upper])  # (lower_err, upper_err)
+    yerror --> ([_minos_plot_error(e, :lower)],
+                [_minos_plot_error(e, :upper)])
     markersize --> 5
-    label --> "par[$(e.par_idx)] MINOS"
+    label --> _minos_plot_label(e)
     xguide --> "parameter index"
     yguide --> "value"
     return [e.par_idx], [e.min_par_value]
@@ -83,11 +107,13 @@ RecipesBase.@recipe function f(errs::Vector{MinosError})
     seriestype := :scatter
     xs = [e.par_idx for e in errs]
     ys = [e.min_par_value for e in errs]
-    lower_errs = [abs(e.lower) for e in errs]
-    upper_errs = [e.upper for e in errs]
+    lower_errs = [_minos_plot_error(e, :lower) for e in errs]
+    upper_errs = [_minos_plot_error(e, :upper) for e in errs]
     yerror --> (lower_errs, upper_errs)
     markersize --> 5
-    label --> "MINOS errors"
+    has_omitted = any(e -> !has_closed_interval(e), errs)
+    label --> (has_omitted ? "MINOS crossings (non-crossing sides omitted)" :
+                            "MINOS errors")
     xguide --> "parameter index"
     yguide --> "value"
     return xs, ys

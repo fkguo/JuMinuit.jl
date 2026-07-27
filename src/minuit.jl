@@ -2357,6 +2357,8 @@ function _param_row_data(m::Minuit, i::Int)
     hesse_err = fixed ? nothing : m.errors[i]
     minos_lo = nothing
     minos_hi = nothing
+    minos_lo_at_limit = false
+    minos_hi_at_limit = false
     # `minos_ran` distinguishes "MINOS ran for this parameter but both sides
     # failed" (→ the cell shows `invalid`) from "MINOS was not run here" (→
     # the cell shows `—`); see `_split_cells`.
@@ -2368,12 +2370,16 @@ function _param_row_data(m::Minuit, i::Int)
         # this single test covers both clean-crossing and at-limit.
         minos_lo = me.lower_valid ? me.lower : nothing
         minos_hi = me.upper_valid ? me.upper : nothing
+        minos_lo_at_limit = me.lower_par_limit
+        minos_hi_at_limit = me.upper_par_limit
     end
     limit_lo = has_lower_limit(p) ? p.lower : nothing
     limit_hi = has_upper_limit(p) ? p.upper : nothing
     return (idx = i, name = p.name, value = value,
             hesse = hesse_err, minos_lo = minos_lo, minos_hi = minos_hi,
             minos_ran = minos_ran,
+            minos_lo_at_limit = minos_lo_at_limit,
+            minos_hi_at_limit = minos_hi_at_limit,
             limit_lo = limit_lo, limit_hi = limit_hi, fixed = fixed)
 end
 

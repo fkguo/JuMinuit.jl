@@ -1,0 +1,131 @@
+     Testing NativeMinuit
+┌ Warning: could not download https://pkg.julialang.org/registries
+│   exception = RequestError: HTTP/1.1 200 Connection established (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading) while requesting https://pkg.julialang.org/registries
+└ @ Pkg.Registry /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Registry/Registry.jl:83
+ERROR: failed to clone from https://github.com/TuringLang/AbstractMCMC.jl.git, error: GitError(Code:ERROR, Class:SSL, unexpected return value from ssl handshake -9806)
+Stacktrace:
+  [1] pkgerror(msg::String)
+    @ Pkg.Types /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Types.jl:68
+  [2] clone(io::Base.DevNull, url::String, source_path::String; header::String, credentials::Nothing, isbare::Bool, kwargs::@Kwargs{})
+    @ Pkg.GitTools /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:139
+  [3] clone
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:93 [inlined]
+  [4] #ensure_clone#2
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:79 [inlined]
+  [5] ensure_clone
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:75 [inlined]
+  [6] install_git(io::Base.DevNull, uuid::Base.UUID, name::String, hash::Base.SHA1, urls::Set{String}, version_path::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:845
+  [7] download_source(ctx::Pkg.Types.Context, pkgs::Base.ValueIterator{Dict{Base.UUID, Pkg.Types.PackageEntry}}; readonly::Bool)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1234
+  [8] download_source
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1112 [inlined]
+  [9] download_source
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1110 [inlined]
+ [10] up(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel; skip_writing_project::Bool, preserve::Nothing)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2003
+ [11] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1977 [inlined]
+ [12] up(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; level::UpgradeLevel, mode::PackageMode, preserve::Nothing, update_registry::Bool, skip_writing_project::Bool, workspace::Bool, kwargs::@Kwargs{io::Base.DevNull})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:450
+ [13] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:419 [inlined]
+ [14] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:174 [inlined]
+ [15] #resolve#171
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:456 [inlined]
+ [16] resolve
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:455 [inlined]
+ [17] (::Pkg.Operations.var"#190#191"{String, Pkg.Types.EnvCache, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec})()
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2294
+ [18] with_temp_env(fn::Pkg.Operations.var"#190#191"{String, Pkg.Types.EnvCache, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec}, temp_env::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2164
+ [19] (::Pkg.Operations.var"#186#187"{Dict{String, Any}, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec, String, String})(tmp::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2278
+ [20] mktempdir(fn::Pkg.Operations.var"#186#187"{Dict{String, Any}, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec, String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:936
+ [21] #sandbox#182
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2225 [inlined]
+ [22] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2481
+ [23] test
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2387 [inlined]
+ [24] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Cmd, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:552
+ [25] test(pkgs::Vector{PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:169
+ [26] test(pkgs::Vector{PackageSpec})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:158
+ [27] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::PackageMode, subdir::Nothing, kwargs::@Kwargs{})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:186
+ [28] test()
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:175
+ [29] top-level scope
+    @ none:1
+
+caused by: GitError(Code:ERROR, Class:SSL, unexpected return value from ssl handshake -9806)
+Stacktrace:
+  [1] macro expansion
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/LibGit2/src/error.jl:124 [inlined]
+  [2] clone(repo_url::SubString{String}, repo_path::String, clone_opts::LibGit2.CloneOptions)
+    @ LibGit2 /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/LibGit2/src/repository.jl:470
+  [3] clone(repo_url::SubString{String}, repo_path::String; branch::String, isbare::Bool, remote_cb::Ptr{Nothing}, credentials::LibGit2.CachedCredentials, callbacks::Dict{Symbol, Tuple{Ptr{Nothing}, Any}})
+    @ LibGit2 /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/LibGit2/src/LibGit2.jl:584
+  [4] clone
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/LibGit2/src/LibGit2.jl:557 [inlined]
+  [5] clone(io::Base.DevNull, url::String, source_path::String; header::String, credentials::Nothing, isbare::Bool, kwargs::@Kwargs{})
+    @ Pkg.GitTools /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:128
+  [6] clone
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:93 [inlined]
+  [7] #ensure_clone#2
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:79 [inlined]
+  [8] ensure_clone
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/GitTools.jl:75 [inlined]
+  [9] install_git(io::Base.DevNull, uuid::Base.UUID, name::String, hash::Base.SHA1, urls::Set{String}, version_path::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:845
+ [10] download_source(ctx::Pkg.Types.Context, pkgs::Base.ValueIterator{Dict{Base.UUID, Pkg.Types.PackageEntry}}; readonly::Bool)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1234
+ [11] download_source
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1112 [inlined]
+ [12] download_source
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1110 [inlined]
+ [13] up(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel; skip_writing_project::Bool, preserve::Nothing)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2003
+ [14] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:1977 [inlined]
+ [15] up(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; level::UpgradeLevel, mode::PackageMode, preserve::Nothing, update_registry::Bool, skip_writing_project::Bool, workspace::Bool, kwargs::@Kwargs{io::Base.DevNull})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:450
+ [16] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:419 [inlined]
+ [17] up
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:174 [inlined]
+ [18] #resolve#171
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:456 [inlined]
+ [19] resolve
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:455 [inlined]
+ [20] (::Pkg.Operations.var"#190#191"{String, Pkg.Types.EnvCache, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec})()
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2294
+ [21] with_temp_env(fn::Pkg.Operations.var"#190#191"{String, Pkg.Types.EnvCache, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec}, temp_env::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2164
+ [22] (::Pkg.Operations.var"#186#187"{Dict{String, Any}, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec, String, String})(tmp::String)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2278
+ [23] mktempdir(fn::Pkg.Operations.var"#186#187"{Dict{String, Any}, Bool, Bool, Bool, Pkg.Operations.var"#205#206"{Bool, Cmd, Cmd, Nothing, Pkg.Types.Context, Vector{Tuple{String, Base.Process}}, String, PackageSpec}, Pkg.Types.Context, PackageSpec, String, String}, parent::String; prefix::String)
+    @ Base.Filesystem ./file.jl:936
+ [24] #sandbox#182
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2225 [inlined]
+ [25] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+    @ Pkg.Operations /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2481
+ [26] test
+    @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/Operations.jl:2387 [inlined]
+ [27] test(ctx::Pkg.Types.Context, pkgs::Vector{PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Cmd, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:552
+ [28] test(pkgs::Vector{PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:169
+ [29] test(pkgs::Vector{PackageSpec})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:158
+ [30] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::PackageMode, subdir::Nothing, kwargs::@Kwargs{})
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:186
+ [31] test()
+    @ Pkg.API /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Pkg/src/API.jl:175
+ [32] top-level scope
+    @ none:1

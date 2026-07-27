@@ -1,0 +1,187 @@
+{
+  "run_id": null,
+  "run_status": "idle",
+  "execution_mode": null,
+  "workflow_id": null,
+  "current_step": null,
+  "pending_approval": null,
+  "gate_satisfied": {},
+  "artifacts": {},
+  "workflow_outputs": {},
+  "current_run_workflow_outputs": null,
+  "current_run_workflow_outputs_error": null,
+  "current_run_workflow_outputs_source": null,
+  "legacy_workflow_projection": null,
+  "resume_context": {
+    "read_order": [
+      "AGENTS.md",
+      "project_charter.md",
+      "research_plan.md",
+      "research_contract.md",
+      "research_notebook.md"
+    ],
+    "status_command": "nullius status --json",
+    "current_run_id": null,
+    "run_status": "idle",
+    "plan_md_path": null,
+    "workflow_output_keys": [],
+    "curated_workflow_output_keys": [
+      "topic_analysis",
+      "critical_analysis",
+      "network_analysis",
+      "connection_scan"
+    ],
+    "workflow_handoff_contracts": {},
+    "human_status_entry": "research_plan.md#Current Status",
+    "recommended_files": [
+      "AGENTS.md",
+      "project_charter.md",
+      "research_plan.md",
+      "research_contract.md"
+    ]
+  },
+  "recovery_context": {
+    "status_commands": {
+      "canonical": "nullius status --json",
+      "project_local_fallback": ".nullius/bin/nullius status --json",
+      "harness_entrypoint": ".nullius/bin/nullius status --json"
+    },
+    "control_files": {
+      "harness": {
+        "path": ".nullius/HARNESS",
+        "exists": true,
+        "valid": true,
+        "payload": {
+          "schema_version": 1,
+          "kind": "nullius_project_harness",
+          "status_receipt_required": true,
+          "project_local_status_command": ".nullius/bin/nullius status --json",
+          "fallback_status_command": "nullius status --json",
+          "host_skill": "research-harness",
+          "lifecycle_authority": "nullius",
+          "milestone_executor": "research-team"
+        },
+        "issue_code": null,
+        "message": null
+      },
+      "state_json": {
+        "path": ".nullius/state.json",
+        "exists": true
+      },
+      "plan_md": {
+        "path": ".nullius/plan.md",
+        "exists": false
+      },
+      "ledger_jsonl": {
+        "path": ".nullius/ledger.jsonl",
+        "exists": true
+      },
+      "project_local_launcher": {
+        "path": ".nullius/bin/nullius",
+        "repair_command": "nullius init --runtime-only",
+        "checked_paths": [
+          "/opt/homebrew/Cellar/node/23.9.0/bin/node",
+          "/Users/fkg/Coding/Agents/nullius/packages/orchestrator/dist/cli.js"
+        ],
+        "missing_paths": [],
+        "exists": true,
+        "executable": true,
+        "healthy": true,
+        "issue_code": null,
+        "message": null
+      }
+    },
+    "current_run": {
+      "run_id": null,
+      "workflow_id": null,
+      "run_status": "idle",
+      "current_step": null,
+      "pending_approval": null,
+      "notes": "",
+      "source": "state"
+    },
+    "plan_focus": null,
+    "latest_ledger_event": {
+      "event_type": "initialized",
+      "timestamp_utc": "2026-07-05T11:54:19Z",
+      "derived_run_status": "idle",
+      "run_id": null,
+      "workflow_id": null
+    },
+    "human_status_entry": "research_plan.md#Current Status",
+    "recommended_files": [
+      "AGENTS.md"
+    ],
+    "derivation_warnings": [
+      {
+        "code": "RECOVERY_PLAN_FOCUS_UNAVAILABLE",
+        "message": "recovery_context.plan_focus could not be derived from state.plan or .nullius/plan.md."
+      }
+    ]
+  },
+  "notes": "",
+  "uri": null,
+  "is_paused": false,
+  "plan_view": null,
+  "plan_view_warning": null,
+  "final_conclusions": null,
+  "final_conclusions_error": null,
+  "research_outcome_projection": null,
+  "research_outcome_projection_error": null,
+  "repair_mutation_proposal": null,
+  "repair_mutation_proposal_error": null,
+  "optimize_mutation_proposal": null,
+  "optimize_mutation_proposal_error": null,
+  "innovate_mutation_proposal": null,
+  "innovate_mutation_proposal_error": null,
+  "skill_proposal": null,
+  "skill_proposal_error": null,
+  "learning_summary": null,
+  "learning_summary_error": null,
+  "team_summary": null,
+  "team_summary_error": null,
+  "project_recent_digest": {
+    "reliable": true,
+    "recent_runs": [],
+    "latest_final_conclusions": null,
+    "latest_proposals": {
+      "repair": null,
+      "skill": null,
+      "optimize": null,
+      "innovate": null
+    },
+    "active_team_run": null
+  },
+  "project_recent_digest_error": null,
+  "project_surface_drift": {
+    "status": "warning_only",
+    "warning_count": 1,
+    "issues": [
+      {
+        "code": "EXECUTION_MODE_UNDECLARED_LOOKS_FILE_MODE",
+        "path": ".nullius/state.json",
+        "message": "Engine state has stayed at its init values while dated run evidence accumulates, so this looks like a file-mode project that never declared it. Declare the mode so reconnecting agents read the right truth surface: `nullius init --mode=file` if work is executed by hand or external runners (durable truth in research_plan.md / research_contract.md and run directories), or `nullius init --mode=engine` if the run/approve lifecycle is still intended to drive this project.",
+        "recommended_action": "declare_execution_mode",
+        "evidence": {
+          "dated_run_dirs_observed": 2,
+          "latest_run_dir": "artifacts/runs/20260727T033506Z-minos-display-width-r2",
+          "harness_milestone_executor": "research-team",
+          "team_run_dirs_observed": 0
+        }
+      }
+    ]
+  },
+  "project_surface_drift_error": null,
+  "decision_ledger": {
+    "path": ".nullius/decisions.jsonl",
+    "exists": false,
+    "decided_count": 0,
+    "pending_count": 0,
+    "open_count": 0,
+    "open_items": [],
+    "open_items_omitted": 0,
+    "latest_decided": null,
+    "invalid_lines": 0
+  },
+  "decision_ledger_error": null
+}
