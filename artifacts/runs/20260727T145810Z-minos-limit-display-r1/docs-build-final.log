@@ -1,0 +1,150 @@
+[ Info: SetupBuildDirectory: setting up build directory.
+[ Info: Doctest: running doctests.
+[ Info: ExpandTemplates: expanding markdown templates.
+[ Info: CrossReferences: building cross-references.
+┌ Warning: Cannot resolve @ref for md"[`nonfinite_calls`](@ref)" in docs/src/api.md.
+│ - No docstring found in doc for binding `NativeMinuit.nonfinite_calls`.
+│ - No docstring found in doc for binding `NativeMinuit.nonfinite_calls`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`contour`](@ref)" in docs/src/api.md.
+│ - No docstring found in doc for binding `NativeMinuit.contour`.
+│ - No docstring found in doc for binding `Main.contour`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`contour`](@ref)" in docs/src/api.md.
+│ - No docstring found in doc for binding `NativeMinuit.contour`.
+│ - No docstring found in doc for binding `Main.contour`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+┌ Warning: Cannot resolve @ref for md"[`AbstractCostFunction`](@ref)" in docs/src/api.md.
+│ - No docstring found in doc for binding `NativeMinuit.AbstractCostFunction`.
+│ - No docstring found in doc for binding `Main.AbstractCostFunction`.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+[ Info: CheckDocument: running document checks.
+┌ Warning: 108 docstrings not included in the manual:
+│
+│     NativeMinuit.initial_gradient :: Union{Tuple{MinimumParameters, AbstractVector{Float64}, CostFunction}, Tuple{MinimumParameters, AbstractVector{Float64}, CostFunction, MachinePrecision}}
+│     NativeMinuit.has_negative_g2 :: Union{Tuple{FunctionGradient}, Tuple{FunctionGradient, MachinePrecision}}
+│     NativeMinuit._gammp :: Tuple{Float64, Float64}
+│     NativeMinuit._trace_warn :: Tuple{Integer, AbstractString, AbstractString}
+│     NativeMinuit._mn_bins :: Tuple{Real, Real, Int64}
+│     NativeMinuit.sym_eigvals :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit._at_limit_indices :: Tuple{Minuit}
+│     NativeMinuit.is_posdef_enough :: Union{Tuple{MinimumError}, Tuple{MinimumError, MachinePrecision}}
+│     NativeMinuit._mc_chisq_region :: Tuple{Vector{Float64}, Any, Real, Real}
+│     NativeMinuit.free_covariance :: Tuple{BoundedFunctionMinimum}
+│     NativeMinuit.sum_sym :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit._get_scratch! :: Tuple{Base.RefValue{Union{Nothing, NativeMinuit.MigradScratch}}, Integer}
+│     NativeMinuit.sym_mul! :: Union{Tuple{AbstractVector{Float64}, LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, AbstractVector{Float64}}, Tuple{AbstractVector{Float64}, LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, AbstractVector{Float64}, Real}, Tuple{AbstractVector{Float64}, LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, AbstractVector{Float64}, Real, Real}}
+│     NativeMinuit.reset_ncalls! :: Tuple{CostFunction}
+│     NativeMinuit._migrad_second_pass_invalid :: Tuple{Integer, MinimumState, Real, Real}
+│     NativeMinuit.sqrtup_ext2int :: Union{Tuple{Float64, Float64}, Tuple{Float64, Float64, MachinePrecision}}
+│     NativeMinuit._format_value_minos :: Tuple{Real, Real, Real}
+│     NativeMinuit.int_to_ext_vector :: Tuple{Parameters, AbstractVector{<:Real}}
+│     NativeMinuit._chi2_pvalue :: Tuple{Real, Integer}
+│     NativeMinuit.sin_dint2ext :: Tuple{Float64, Float64, Float64}
+│     NativeMinuit.AbstractCostFunction
+│     NativeMinuit.hessian_gradient! :: Union{Tuple{AbstractVector{Float64}, AbstractVector{Float64}, AbstractVector{Float64}, AbstractVector{Float64}, MinimumParameters, NativeMinuit.AbstractCostFunction, AbstractVector{Float64}, Strategy}, Tuple{AbstractVector{Float64}, AbstractVector{Float64}, AbstractVector{Float64}, AbstractVector{Float64}, MinimumParameters, NativeMinuit.AbstractCostFunction, AbstractVector{Float64}, Strategy, MachinePrecision}}
+│     NativeMinuit.initial_int_errors :: Tuple{Parameters}
+│     NativeMinuit.ext_to_int_vector :: Tuple{Parameters, AbstractVector{<:Real}}
+│     NativeMinuit.sqrtlow_dint2ext :: Tuple{Float64, Float64}
+│     NativeMinuit._parabola_solve_for_aim :: Tuple{Float64, Float64, Float64, Float64, MachinePrecision}
+│     NativeMinuit.is_valid :: Tuple{MinosError}
+│     NativeMinuit._round_to_uncertainty :: Tuple{Float64, Tuple{Vararg{Float64}}}
+│     NativeMinuit.ParabolaPoint
+│     NativeMinuit.numerical_gradient :: Union{Tuple{MinimumParameters, FunctionGradient, CostFunction, Strategy}, Tuple{MinimumParameters, FunctionGradient, CostFunction, Strategy, MachinePrecision}}
+│     NativeMinuit.numerical_gradient :: Union{Tuple{MinimumParameters, CostFunction, Strategy}, Tuple{MinimumParameters, CostFunction, Strategy, MachinePrecision}}
+│     NativeMinuit._trace_iter :: Tuple{Integer, AbstractString, Integer, Real, Real, Real, Integer}
+│     NativeMinuit.MinimumError
+│     NativeMinuit.numerical_gradient! :: Union{Tuple{FunctionGradient, AbstractVector{Float64}, MinimumParameters, FunctionGradient, CostFunction, Strategy}, Tuple{FunctionGradient, AbstractVector{Float64}, MinimumParameters, FunctionGradient, CostFunction, Strategy, MachinePrecision}}
+│     NativeMinuit.sin_ext2int :: Union{Tuple{Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, MachinePrecision}}
+│     NativeMinuit.sym_rank1_update! :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, Real, AbstractVector{Float64}}
+│     NativeMinuit.squeeze_error :: Tuple{MinimumError, Integer}
+│     NativeMinuit.sym_eigvals! :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit.sym_invert! :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit.sqrtup_dint2ext :: Tuple{Float64, Float64}
+│     NativeMinuit.initial_gradient! :: Union{Tuple{FunctionGradient, MinimumParameters, AbstractVector{Float64}, Real}, Tuple{FunctionGradient, MinimumParameters, AbstractVector{Float64}, Real, MachinePrecision}}
+│     NativeMinuit.minimum_summary_from_dict :: Tuple{AbstractDict}
+│     NativeMinuit.make_posdef! :: Union{Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}, Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, MachinePrecision}}
+│     NativeMinuit.function_cross_external :: Tuple{Any, NativeMinuit.AbstractCostFunction, Integer, Real}
+│     NativeMinuit.ext_covariance :: Tuple{BoundedFunctionMinimum}
+│     NativeMinuit.add_sym! :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit.NativeMinuit
+│     NativeMinuit.estimate_edm :: Tuple{FunctionGradient, MinimumError}
+│     NativeMinuit.MigradScratch
+│     NativeMinuit.hessian_gradient :: Union{Tuple{MinimumParameters, FunctionGradient, NativeMinuit.AbstractCostFunction, Strategy}, Tuple{MinimumParameters, FunctionGradient, NativeMinuit.AbstractCostFunction, Strategy, MachinePrecision}}
+│     NativeMinuit.estimate_edm! :: Tuple{AbstractVector{Float64}, FunctionGradient, MinimumError}
+│     NativeMinuit.ext_to_int_value :: Tuple{Parameters, Integer, Real}
+│     NativeMinuit._verify_thread_safety :: Tuple{Any, MinimumState, Strategy, MachinePrecision}
+│     NativeMinuit.MinimumParameters
+│     NativeMinuit.ext_errors :: Tuple{BoundedFunctionMinimum}
+│     NativeMinuit.ext_index :: Tuple{Parameters, AbstractString}
+│     NativeMinuit.davidon_update :: Tuple{MinimumError, AbstractVector{Float64}, AbstractVector{Float64}}
+│     NativeMinuit.to_dict :: Tuple{ContoursError}
+│     NativeMinuit.to_dict :: Tuple{BoundedFunctionMinimum}
+│     NativeMinuit.to_dict :: Tuple{FunctionMinimum}
+│     NativeMinuit.to_dict :: Tuple{MinosError}
+│     NativeMinuit.make_posdef :: Union{Tuple{MinimumError}, Tuple{MinimumError, MachinePrecision}}
+│     NativeMinuit.make_posdef :: Union{Tuple{MinimumState}, Tuple{MinimumState, MachinePrecision}}
+│     NativeMinuit._warn_nonfinite_fcn :: Union{Tuple{FunctionMinimum}, Tuple{FunctionMinimum, Integer}}
+│     NativeMinuit._format_value_uncertainty :: Tuple{Real, Real}
+│     NativeMinuit.n_pars :: Tuple{Parameters}
+│     NativeMinuit.sqrtup_int2ext :: Tuple{Float64, Float64}
+│     NativeMinuit._migrad_loop :: Tuple{MinimumState, Any, Strategy, Real, Integer, MachinePrecision}
+│     NativeMinuit._invgammp :: Tuple{Float64, Float64}
+│     NativeMinuit.squeeze_symmetric :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, Integer}
+│     NativeMinuit.minos_error_from_dict :: Tuple{AbstractDict}
+│     NativeMinuit._fix_one_param :: Tuple{CostFunctionWithGradient, Integer, Float64, Integer}
+│     NativeMinuit._fix_one_param :: Tuple{CostFunction, Integer, Float64, Integer}
+│     NativeMinuit._trace_state :: Tuple{Integer, AbstractString, Integer, AbstractVector{<:Real}, AbstractVector{<:Real}}
+│     NativeMinuit._three_point_classify :: Tuple{AbstractVector{<:Real}, AbstractVector{<:Real}, Float64}
+│     NativeMinuit.ncalls :: Tuple{CostFunction}
+│     NativeMinuit.FunctionGradient
+│     NativeMinuit.int_to_ext_value :: Tuple{Parameters, Integer, Real}
+│     NativeMinuit._format_minos_err :: Tuple{Real, Union{Nothing, Real}, Union{Nothing, Real}}
+│     NativeMinuit.sqrtlow_int2ext :: Tuple{Float64, Float64}
+│     NativeMinuit.nonfinite_calls :: Tuple{CostFunction}
+│     NativeMinuit._trace_info :: Tuple{Integer, AbstractString, AbstractString}
+│     NativeMinuit.SYMMETRIC_UPLO
+│     NativeMinuit.warm_restart_state :: Tuple{MinimumState, NativeMinuit.AbstractCostFunction}
+│     NativeMinuit._effective_maxfcn :: Tuple{Union{Nothing, Integer}, Integer}
+│     NativeMinuit.sqrtlow_ext2int :: Union{Tuple{Float64, Float64}, Tuple{Float64, Float64, MachinePrecision}}
+│     NativeMinuit.MinimumState
+│     NativeMinuit.line_search :: Union{Tuple{Any, MinimumParameters, AbstractVector{Float64}, Real}, Tuple{Any, MinimumParameters, AbstractVector{Float64}, Real, MachinePrecision}}
+│     NativeMinuit._connected_components :: Tuple{AbstractMatrix{<:Real}, Real}
+│     NativeMinuit.@plt_data :: Tuple{Any, Vararg{Any}}
+│     NativeMinuit.parameter_names :: Tuple{AbstractCost}
+│     NativeMinuit.seed_state :: Union{Tuple{CostFunction, AbstractVector{<:Real}, AbstractVector{<:Real}}, Tuple{CostFunction, AbstractVector{<:Real}, AbstractVector{<:Real}, Strategy}, Tuple{CostFunction, AbstractVector{<:Real}, AbstractVector{<:Real}, Strategy, MachinePrecision}}
+│     NativeMinuit._fix_multi_params :: Tuple{CostFunctionWithGradient, AbstractVector{<:Integer}, AbstractVector{<:Real}, Integer}
+│     NativeMinuit.davidon_update! :: Tuple{LinearAlgebra.Symmetric{Float64, Matrix{Float64}}, AbstractVector{Float64}, AbstractVector{Float64}, Real, AbstractVector{Float64}, LinearAlgebra.Symmetric{Float64, Matrix{Float64}}}
+│     NativeMinuit._extract_minor_cov :: Tuple{AbstractMatrix, Int64, Int64}
+│     NativeMinuit.initial_int_values :: Tuple{Parameters}
+│     NativeMinuit.negative_g2_line_search :: Union{Tuple{MinimumState, CostFunction, Strategy}, Tuple{MinimumState, CostFunction, Strategy, MachinePrecision}}
+│     NativeMinuit.sin_int2ext :: Tuple{Float64, Float64, Float64}
+│     NativeMinuit._hesse_diagonal_failure :: Tuple{MinimumState, Vector{Float64}, MachinePrecision, Integer, CovStatus}
+│     NativeMinuit.dint2ext_value :: Tuple{Parameters, Integer, Real}
+│     Base.reset :: Tuple{Minuit}
+│     NativeMinuit.analytical_gradient! :: Union{Tuple{FunctionGradient, MinimumParameters, CostFunctionWithGradient, FunctionGradient}, Tuple{FunctionGradient, MinimumParameters, CostFunctionWithGradient, FunctionGradient, MachinePrecision}}
+│     NativeMinuit._parabola_fit3 :: Tuple{AbstractVector{<:Real}, AbstractVector{<:Real}}
+│     NativeMinuit._check_user_gradient :: Union{Tuple{MinimumParameters, FunctionGradient, CostFunctionWithGradient}, Tuple{MinimumParameters, FunctionGradient, CostFunctionWithGradient, MachinePrecision}}
+│     NativeMinuit._init_params :: Tuple{Minuit}
+│     NativeMinuit.@plt_best :: Tuple{Any, Any, Any, Vararg{Any}}
+│     NativeMinuit.int_to_ext_vector! :: Tuple{AbstractVector{<:Real}, Parameters, AbstractVector{<:Real}}
+│     NativeMinuit.n_free :: Tuple{Parameters}
+│
+│ These are docstrings in the checked modules (configured with the modules keyword)
+│ that are not included in canonical @docs or @autodocs blocks.
+└ @ Documenter ~/.julia/packages/Documenter/AXNMp/src/utilities/utilities.jl:49
+[ Info: Populate: populating indices.
+[ Info: RenderDocument: rendering document.
+[ Info: HTMLWriter: rendering HTML pages.
+┌ Warning: Generated HTML over size_threshold_warn limit: api.md
+│     Generated file size: 327.58 (KiB)
+│     size_threshold_warn: 292.97 (KiB)
+│     size_threshold:      585.94 (KiB)
+│     HTML file:           api.html
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:2003
+┌ Warning: For 4 @example blocks, the 'text/html' representation of the resulting
+│ object is above the threshold (example_size_threshold: 8192 bytes).
+│ - 4 blocks had 'image/svg+xml' fallback image representation available, using that.
+│   On pages: bayesian.md, guides/plotting.md
+└ @ Documenter.HTMLWriter ~/.julia/packages/Documenter/AXNMp/src/html/HTMLWriter.jl:915
+[ Info: Automatic `version="0.6.2"` for inventory from ../Project.toml

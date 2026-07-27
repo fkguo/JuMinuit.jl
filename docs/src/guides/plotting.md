@@ -225,10 +225,11 @@ print(to_latex(m; caption = "Fit result", label = "tab:fit"))  # wrap in a float
 Defaults to a `booktabs` rule set with `siunitx` `\num{}` numbers (so the
 preamble needs `\usepackage{booktabs}` and `\usepackage{siunitx}` unless you
 disable them). Genuine asymmetric MINOS crossings are written
-`\num{x}^{+hi}_{-lo}`. An at-limit side is labeled as such and its number is
-identified as the distance to the limit; an invalid side is labeled `invalid`.
-A symmetric Hesse error is written as `\num{x} \pm \num{e}`, and a fixed
-parameter as the bare value tagged `(fixed)`.
+`\num{x}^{+hi}_{-lo}`. A side whose scan reaches a parameter limit is labeled
+as truncated and its number is identified as a boundary displacement, not a
+MINOS error; an invalid side is labeled `invalid`. A symmetric Hesse error is
+written as `\num{x} \pm \num{e}`, and a fixed parameter as the bare value
+tagged `(fixed)`.
 
 A second method renders a single [`MinosError`](@ref) as inline math
 (no surrounding `$…$`) for dropping into running text. Closed intervals use

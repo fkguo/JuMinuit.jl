@@ -118,17 +118,18 @@ two-sided `Int2extError` formula for `m.errors`, which probes the map at
 `int ± err` and averages, capturing the curvature near the bound. So the
 reported symmetric error stays sensible even close to a limit.
 
-**A parameter pinned at a bound is flagged.** If MIGRAD ends with a value
-sitting on its `lower` or `upper` limit, the rich result table prints a
-warning, and the bound makes the local error unreliable:
+**A best-fit parameter close to a bound is flagged.** If MIGRAD ends with a
+value close to or at its `lower` or `upper` limit, the rich result table prints
+a proximity warning because the bound may make the local error unreliable:
 
 ```
-⚠ Parameter `frac` is at its lower limit — Hesse/MINOS error is unreliable.
+⚠ Best-fit value for parameter `frac` is close to or at its lower limit — Hesse/MINOS errors may be unreliable.
 ```
 
-**MINOS reports the bound distance, not an overflow.** When a MINOS scan
+**MINOS reports a boundary displacement, not an error, on a truncated side.**
+When a MINOS scan
 runs into a bound before `χ²` rises by `up`, that side is a clean
-termination: the published error is the *distance to the bound*
+termination: the returned number is the *boundary displacement*
 ($x_{\mathrm{bound}} - x_{\min}$), and the corresponding
 [`MinosError`](@ref) flag
 (`upper_par_limit` / `lower_par_limit`) is raised — matching iminuit's
@@ -136,10 +137,11 @@ termination: the published error is the *distance to the bound*
 failure). It is not a tiny statistical uncertainty: the requested
 $\Delta \mathrm{FCN}$ interval did not close on that side. Consequently,
 `is_valid(e)` may be `true` while [`has_closed_interval(e)`](@ref) is `false`.
-The text, HTML, and LaTeX displays label this side `at limit` and identify the
-number as a distance to the limit. If a parameter sits at a bound, that is
-usually a sign your bound is too tight or the data don't constrain the
-parameter on that side.
+The text, HTML, and LaTeX displays label this event as a MINOS scan reaching a
+parameter limit and identify the returned number as a boundary displacement.
+This scan status is independent of the best-fit proximity warning above: an
+interior best-fit value can still have a confidence scan truncated by a
+parameter limit.
 
 When a parameter rails against a bound and you suspect the error model is
 the culprit, the model-light cross-checks in the

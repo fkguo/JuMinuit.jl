@@ -2365,9 +2365,10 @@ function _param_row_data(m::Minuit, i::Int)
     minos_ran = haskey(m.minos_errors, i)
     if minos_ran
         me = m.minos_errors[i]
-        # New semantics: `lower_valid`/`upper_valid` are TRUE also at
-        # par_limit (the bound_distance is physically meaningful), so
-        # this single test covers both clean-crossing and at-limit.
+        # `lower_valid`/`upper_valid` remain true at `par_limit`, matching
+        # iminuit's independent validity and at-limit flags. The corresponding
+        # number is a boundary displacement, not a MINOS error; the display
+        # formatter uses the `*_at_limit` fields below to keep those distinct.
         minos_lo = me.lower_valid ? me.lower : nothing
         minos_hi = me.upper_valid ? me.upper : nothing
         minos_lo_at_limit = me.lower_par_limit
@@ -2468,12 +2469,14 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
     end
     println(io, bottom)
 
-    # At-limit warnings (Phase 3 C1 (a))
+    # Best-fit proximity warnings. These describe the fitted parameter value,
+    # not whether a subsequent MINOS profile scan reached a limit.
     al = _at_limit_indices(m)
     if !isempty(al)
         for i in al
             p = m.params.pars[i]
-            print(io, "⚠ Parameter `", p.name, "` is at its ")
+            print(io, "⚠ Best-fit value for parameter `", p.name,
+                  "` is close to or at its ")
             v = m.values[i]
             # has_limits(p) is true for one-sided too (it's
             # `has_lower_limit || has_upper_limit`), so the
@@ -2485,12 +2488,15 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
             else
                 "lower"
             end
-            println(io, side, " limit — Hesse/MINOS error is unreliable.")
+            println(io, side, " limit — Hesse/MINOS errors may be unreliable.")
         end
     end
 
     # Strong-correlation (near-degeneracy) warnings.
     _render_corr_warning_text(io, m)
+    # Boundary truncation is distinct from both best-fit proximity and an
+    # invalid MINOS computation.
+    _render_minos_limit_warning_text(io, m)
     # MINOS-failure warning: a non-converged cross-search falls back to the
     # symmetric HESSE error in the table — flag it so a plain `±` row after
     # `minos!` isn't mistaken for a real symmetric/never-run result.
@@ -2577,7 +2583,8 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     end
     print(io, "</tbody></table>")
 
-    # At-limit warnings
+    # Best-fit proximity warnings. These describe the fitted parameter value,
+    # not whether a subsequent MINOS profile scan reached a limit.
     al = _at_limit_indices(m)
     if !isempty(al)
         print(io, """<div style="color:#bf8700;margin-top:0.5em">""")
@@ -2594,9 +2601,9 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
             else
                 "lower"
             end
-            print(io, "⚠ Parameter ", _warn_code_chip(p.name),
-                  " is at its ", side,
-                  " limit — Hesse/MINOS error is unreliable.<br>")
+            print(io, "⚠ Best-fit value for parameter ", _warn_code_chip(p.name),
+                  " is close to or at its ", side,
+                  " limit — Hesse/MINOS errors may be unreliable.<br>")
         end
         print(io, "</div>")
     end
@@ -2604,6 +2611,8 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     # Correlation-matrix heatmap + strong-correlation warnings.
     _render_heatmap_html(io, m)
     _render_corr_warning_html(io, m)
+    # Boundary truncation and invalid MINOS computation are separate events.
+    _render_minos_limit_warning_html(io, m)
     # MINOS-failure warning (see the text/plain show for the rationale).
     _render_minos_warning_html(io, m)
     print(io, "</div>")

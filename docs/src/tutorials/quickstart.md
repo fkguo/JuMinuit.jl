@@ -30,7 +30,7 @@ Displaying `m` in a REPL or notebook prints the rich result table:
 
 ```
 NativeMinuit.Minuit  fval=0  edm=0  nfcn=36
-[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [✓ No params at limit]
+[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [✓ Best-fit parameters away from limits]
 ┌───┬──────┬─────────────┬─────────┬─────────┬───────┐
 │ # │ Name │ Value       │ Limit − │ Limit + │ Fixed │
 ├───┼──────┼─────────────┼─────────┼─────────┼───────┤

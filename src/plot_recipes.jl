@@ -77,14 +77,13 @@ function _minos_plot_label(e::MinosError)
     upper_status = _minos_side_status(e, :upper)
     lower_status = _minos_side_status(e, :lower)
     if upper_status === :at_limit && lower_status === :at_limit
-        note = "limits omitted"
-    elseif upper_status === :at_limit && lower_status === :crossing
-        note = "upper at limit omitted"
-    elseif lower_status === :at_limit && upper_status === :crossing
-        note = "lower at limit omitted"
+        note = "interval truncated by parameter limits; boundary displacements omitted"
+    elseif upper_status === :at_limit
+        note = "interval truncated by parameter limit; upper boundary displacement omitted"
+    elseif lower_status === :at_limit
+        note = "interval truncated by parameter limit; lower boundary displacement omitted"
     elseif upper_status === :invalid || lower_status === :invalid
-        note = (upper_status === :at_limit || lower_status === :at_limit) ?
-               "non-crossing sides omitted" : "invalid side omitted"
+        note = "invalid side omitted"
     else
         return "par[$(e.par_idx)] MINOS"
     end
@@ -111,9 +110,13 @@ RecipesBase.@recipe function f(errs::Vector{MinosError})
     upper_errs = [_minos_plot_error(e, :upper) for e in errs]
     yerror --> (lower_errs, upper_errs)
     markersize --> 5
-    has_omitted = any(e -> !has_closed_interval(e), errs)
-    label --> (has_omitted ? "MINOS crossings (non-crossing sides omitted)" :
-                            "MINOS errors")
+    has_truncated = any(e -> e.upper_par_limit || e.lower_par_limit, errs)
+    has_invalid = any(e -> _minos_side_status(e, :upper) === :invalid ||
+                           _minos_side_status(e, :lower) === :invalid, errs)
+    label --> (has_truncated ?
+               "MINOS crossings (intervals truncated by parameter limits; boundary displacements omitted)" :
+               has_invalid ? "MINOS crossings (invalid sides omitted)" :
+                             "MINOS errors")
     xguide --> "parameter index"
     yguide --> "value"
     return xs, ys
