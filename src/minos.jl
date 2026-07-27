@@ -171,7 +171,8 @@ function _minos_show_side(e::MinosError, side::Symbol)
     sign = side === :upper ? "+" : "−"
     magnitude = _fmt_num(abs(value))
     if status === :at_limit
-        return string(side, " at limit (distance ", sign, magnitude, ")")
+        return string(side, " scan at limit (boundary displacement ",
+                      sign, magnitude, ")")
     elseif status === :crossing
         return string(sign, magnitude)
     else
@@ -494,16 +495,44 @@ end
 # Pretty-print (iminuit-style box) — Phase 3 parity polish
 # ─────────────────────────────────────────────────────────────────────────────
 
-# The status label consumes 26 of the 35 cell columns, leaving nine for
-# the distance. Preserve the usual formatting unless its exponent needs
-# a more compact scientific notation.
-function _minos_box_distance(x::Real)
-    distance = _fmt_num(abs(x))
-    return textwidth(distance) <= 9 ? distance : @sprintf("%.3g", abs(x))
+# Keep boundary displacements compact enough for the fixed-width MINOS box.
+function _minos_box_displacement(x::Real)
+    displacement = _fmt_num(abs(x))
+    return textwidth(displacement) <= 18 ? displacement : @sprintf("%.6g", abs(x))
+end
+
+function _minos_plain_side_lines(e::MinosError, side::Symbol)
+    label = side === :upper ? "Upper" : "Lower"
+    value = side === :upper ? e.upper : e.lower
+    sign = side === :upper ? "+" : "−"
+    status = _minos_side_status(e, side)
+    new_min = side === :upper ? e.upper_new_min : e.lower_new_min
+    fcn_limit = side === :upper ? e.upper_fcn_limit : e.lower_fcn_limit
+
+    if new_min
+        return [" $label scan found a new minimum",
+                "   requested confidence crossing: not found"]
+    elseif status === :at_limit
+        return [
+            " $label scan reached limit",
+            "   boundary displacement: $sign$(_minos_box_displacement(value))",
+            "   requested confidence crossing: not found",
+        ]
+    elseif fcn_limit
+        return [" $label scan reached call limit",
+                "   requested confidence crossing: not found"]
+    elseif status === :crossing
+        return [" $label: OK — MINOS error $sign$(_fmt_num(abs(value)))"]
+    else
+        return [" $label scan invalid",
+                "   requested confidence crossing: not found"]
+    end
 end
 
 function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
-    # iminuit "Minos" box: 71-char width, 3-row status
+    # iminuit-style MINOS box. The side-details section spans the full width
+    # so a boundary termination can be described without calling its returned
+    # displacement an error.
     println(io, "┌", "─"^71, "┐")
     println(io, "│", _center("Minos — par x$(e.par_idx-1)", 71), "│")
     println(io, "├", "─"^35, "┬", "─"^35, "┤")
@@ -513,56 +542,20 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     println(io, "├", "─"^35, "┼", "─"^35, "┤")
     if has_closed_interval(e)
         err_str = " error = +$(_fmt_num(e.upper))  −$(_fmt_num(-e.lower))"
+    elseif e.upper_par_limit || e.lower_par_limit
+        err_str = " interval = truncated"
     else
-        upper_status = _minos_side_status(e, :upper)
-        lower_status = _minos_side_status(e, :lower)
-        if upper_status === :at_limit && lower_status === :at_limit
-            err_str = " sides = at upper/lower limits"
-        else
-            upper_side = if upper_status === :at_limit
-                "at upper limit"
-            elseif upper_status === :crossing
-                _minos_show_side(e, :upper)
-            else
-                "invalid"
-            end
-            lower_side = if lower_status === :at_limit
-                "at lower limit"
-            elseif lower_status === :crossing
-                _minos_show_side(e, :lower)
-            else
-                "invalid"
-            end
-            err_str = string(" sides = ", upper_side, " / ", lower_side)
-        end
+        err_str = " interval = not closed"
     end
     valid_str = is_valid(e) ? "Valid" : "INVALID"
     println(io, "│", _ljust(err_str, 35), "│", _center(valid_str, 35), "│")
-    println(io, "├", "─"^35, "┼", "─"^35, "┤")
-    up_status = if e.upper_new_min
-        "Upper: NEW MIN found"
-    elseif e.upper_par_limit
-        "Upper at limit; distance=+$(_minos_box_distance(e.upper))"
-    elseif e.upper_fcn_limit
-        "Upper: call-limit hit"
-    elseif e.upper_valid
-        "Upper: OK"
-    else
-        "Upper: FAILED"
+    println(io, "├", "─"^71, "┤")
+    for side in (:upper, :lower)
+        for line in _minos_plain_side_lines(e, side)
+            println(io, "│", _ljust(line, 71), "│")
+        end
     end
-    lo_status = if e.lower_new_min
-        "Lower: NEW MIN found"
-    elseif e.lower_par_limit
-        "Lower at limit; distance=−$(_minos_box_distance(e.lower))"
-    elseif e.lower_fcn_limit
-        "Lower: call-limit hit"
-    elseif e.lower_valid
-        "Lower: OK"
-    else
-        "Lower: FAILED"
-    end
-    println(io, "│", _center(up_status, 35), "│", _center(lo_status, 35), "│")
-    println(io, "└", "─"^35, "┴", "─"^35, "┘")
+    println(io, "└", "─"^71, "┘")
 end
 
 function Base.show(io::IO, e::MinosError)

@@ -1,0 +1,778 @@
+wide quadratic finds both confidence crossings: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:70
+  Expression: occursin("MINOS error", single_plain)
+   Evaluated: occursin("MINOS error", "┌───────────────────────────────────────────────────────────────────────┐\n│                            Minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = -1.068e-04                │             Nfcn = 6              │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ error = +1.002  −1.002            │               Valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│             Upper: OK             │             Lower: OK             │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:61 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:70 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:92
+  Expression: occursin("upper scan reached limit", single_plain)
+   Evaluated: occursin("upper scan reached limit", "┌───────────────────────────────────────────────────────────────────────┐\n│                            minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = -0.01164                  │             nfcn = 20             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = at upper/lower limits     │               valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│  upper at limit; distance=+1.012  │ lower at limit; distance=−0.9884  │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:92 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:93
+  Expression: occursin("lower scan reached limit", single_plain)
+   Evaluated: occursin("lower scan reached limit", "┌───────────────────────────────────────────────────────────────────────┐\n│                            minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = -0.01164                  │             nfcn = 20             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = at upper/lower limits     │               valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│  upper at limit; distance=+1.012  │ lower at limit; distance=−0.9884  │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:93 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:94
+  Expression: count("requested confidence crossing: not found", single_plain) == 2
+   Evaluated: 0 == 2
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:94 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:96
+  Expression: occursin("scan at limit", table_plain)
+   Evaluated: occursin("scan at limit", "nativeminuit.minuit  fval=1.35461e-06  edm=1.35e-06  nfcn=24\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────────┬───────┬───────┬──────────────────────────────────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name     │ value │ hesse │ minos                                                                │ limit − │ limit + │ fixed │\n├───┼──────────┼───────┼───────┼──────────────────────────────────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ -0.0  │ ± 1.3 │ upper at limit (distance +1.012) / lower at limit (distance −0.9884) │ -1      │ 1       │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                                                    │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴──────────────────────────────────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its lower limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:96 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:97
+  Expression: occursin("boundary displacement", table_plain)
+   Evaluated: occursin("boundary displacement", "nativeminuit.minuit  fval=1.35461e-06  edm=1.35e-06  nfcn=24\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────────┬───────┬───────┬──────────────────────────────────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name     │ value │ hesse │ minos                                                                │ limit − │ limit + │ fixed │\n├───┼──────────┼───────┼───────┼──────────────────────────────────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ -0.0  │ ± 1.3 │ upper at limit (distance +1.012) / lower at limit (distance −0.9884) │ -1      │ 1       │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                                                    │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴──────────────────────────────────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its lower limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:97 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:98
+  Expression: occursin("scan at limit", table_html)
+   Evaluated: occursin("scan at limit", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>nativeminuit.minuit</strong>  fval=1.35461e-06  edm=1.35e-06  nfcn=24<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ edm below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ no params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">minos</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">-0.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.3</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>upper at limit (distance +1.012)</sup><sub>lower at limit (distance −0.9884)</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">-1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">nuisance</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0.4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its lower limit — hesse/minos error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">nuisance</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">nuisance</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:98 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:99
+  Expression: occursin("boundary displacement", table_html)
+   Evaluated: occursin("boundary displacement", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>nativeminuit.minuit</strong>  fval=1.35461e-06  edm=1.35e-06  nfcn=24<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ edm below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ no params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">minos</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">-0.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.3</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>upper at limit (distance +1.012)</sup><sub>lower at limit (distance −0.9884)</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">-1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">nuisance</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0.4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its lower limit — hesse/minos error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">nuisance</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">nuisance</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:99 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:100
+  Expression: occursin("\\mathrm{scan\\ at\\ limit}", table_tex)
+   Evaluated: occursin("\\mathrm{scan\\ at\\ limit}", "\\begin{tabular}{l c}\n\\toprule\nparameter & value \\\\\n\\midrule\nx & \$\\num{-0.01164}^{\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+\\num{1.012})}_{\\mathrm{at\\ lower\\ limit}\\;(\\mathrm{distance}=-\\num{0.9884})}\$ \\\\\nnuisance & \$\\num{0.4} \\pm \\num{1.0}\$ \\\\\n\\bottomrule\n\\end{tabular}\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:100 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+interior minimum with flat profile reaches both limits: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:101
+  Expression: occursin("\\mathrm{boundary\\ displacement}", table_tex)
+   Evaluated: occursin("\\mathrm{boundary\\ displacement}", "\\begin{tabular}{l c}\n\\toprule\nparameter & value \\\\\n\\midrule\nx & \$\\num{-0.01164}^{\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+\\num{1.012})}_{\\mathrm{at\\ lower\\ limit}\\;(\\mathrm{distance}=-\\num{0.9884})}\$ \\\\\nnuisance & \$\\num{0.4} \\pm \\num{1.0}\$ \\\\\n\\bottomrule\n\\end{tabular}\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:81 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:101 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+one-sided truncation preserves the crossing side: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:114
+  Expression: occursin("Upper: OK — MINOS error", single_plain)
+   Evaluated: occursin("Upper: OK — MINOS error", "┌───────────────────────────────────────────────────────────────────────┐\n│                            Minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = 4.718e-04                 │             Nfcn = 19             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = +0.9995 / at lower limit  │               Valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│             Upper: OK             │ Lower at limit; distance=−0.2505  │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:114 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+one-sided truncation preserves the crossing side: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:115
+  Expression: occursin("Lower scan reached limit", single_plain)
+   Evaluated: occursin("Lower scan reached limit", "┌───────────────────────────────────────────────────────────────────────┐\n│                            Minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = 4.718e-04                 │             Nfcn = 19             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = +0.9995 / at lower limit  │               Valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│             Upper: OK             │ Lower at limit; distance=−0.2505  │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:115 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+one-sided truncation preserves the crossing side: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:116
+  Expression: occursin("boundary displacement:", lowercase(single_plain))
+   Evaluated: occursin("boundary displacement:", "┌───────────────────────────────────────────────────────────────────────┐\n│                            minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = 4.718e-04                 │             nfcn = 19             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = +0.9995 / at lower limit  │               valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│             upper: ok             │ lower at limit; distance=−0.2505  │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:116 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+one-sided truncation preserves the crossing side: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:117
+  Expression: occursin("lower scan at limit", table_plain)
+   Evaluated: occursin("lower scan at limit", "nativeminuit.minuit  fval=6.81834e-07  edm=6.82e-07  nfcn=30\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────────┬───────┬────────┬────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name     │ value │ hesse  │ minos                                  │ limit − │ limit + │ fixed │\n├───┼──────────┼───────┼────────┼────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0e-1  │ ± 9e-1 │ +1 / lower at limit (distance −0.2505) │ -0.25   │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0  │ —                                      │ ─       │ ─       │       │\n└───┴──────────┴───────┴────────┴────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its lower limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:117 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+one-sided truncation preserves the crossing side: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:118
+  Expression: occursin("boundary displacement", table_plain)
+   Evaluated: occursin("boundary displacement", "nativeminuit.minuit  fval=6.81834e-07  edm=6.82e-07  nfcn=30\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────────┬───────┬────────┬────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name     │ value │ hesse  │ minos                                  │ limit − │ limit + │ fixed │\n├───┼──────────┼───────┼────────┼────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0e-1  │ ± 9e-1 │ +1 / lower at limit (distance −0.2505) │ -0.25   │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0  │ —                                      │ ─       │ ─       │       │\n└───┴──────────┴───────┴────────┴────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its lower limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:118 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:134
+  Expression: occursin("[⚠ Parameter(s) close to limit]", table_plain)
+   Evaluated: occursin("[⚠ Parameter(s) close to limit]", "NativeMinuit.Minuit  fval=4.88805e-07  edm=4.88e-07  nfcn=31\n[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [⚠ No params at limit]\n┌───┬──────────┬───────┬───────┬───────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ Name     │ Value │ Hesse │ MINOS                                     │ Limit − │ Limit + │ Fixed │\n├───┼──────────┼───────┼───────┼───────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0     │ ± 7   │ +1.0 / lower at limit (distance −0.05051) │ 0       │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                         │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴───────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ Parameter `x` is at its lower limit — Hesse/MINOS error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:134 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:135
+  Expression: occursin("[⚠ MINOS scan reached parameter limit]", table_plain)
+   Evaluated: occursin("[⚠ MINOS scan reached parameter limit]", "NativeMinuit.Minuit  fval=4.88805e-07  edm=4.88e-07  nfcn=31\n[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [⚠ No params at limit]\n┌───┬──────────┬───────┬───────┬───────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ Name     │ Value │ Hesse │ MINOS                                     │ Limit − │ Limit + │ Fixed │\n├───┼──────────┼───────┼───────┼───────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0     │ ± 7   │ +1.0 / lower at limit (distance −0.05051) │ 0       │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                         │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴───────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ Parameter `x` is at its lower limit — Hesse/MINOS error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:135 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:136
+  Expression: occursin("Best-fit value", table_plain)
+   Evaluated: occursin("Best-fit value", "NativeMinuit.Minuit  fval=4.88805e-07  edm=4.88e-07  nfcn=31\n[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [⚠ No params at limit]\n┌───┬──────────┬───────┬───────┬───────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ Name     │ Value │ Hesse │ MINOS                                     │ Limit − │ Limit + │ Fixed │\n├───┼──────────┼───────┼───────┼───────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0     │ ± 7   │ +1.0 / lower at limit (distance −0.05051) │ 0       │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                         │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴───────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ Parameter `x` is at its lower limit — Hesse/MINOS error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:136 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:137
+  Expression: occursin("MINOS scan reached parameter limit", table_plain)
+   Evaluated: occursin("MINOS scan reached parameter limit", "NativeMinuit.Minuit  fval=4.88805e-07  edm=4.88e-07  nfcn=31\n[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [⚠ No params at limit]\n┌───┬──────────┬───────┬───────┬───────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ Name     │ Value │ Hesse │ MINOS                                     │ Limit − │ Limit + │ Fixed │\n├───┼──────────┼───────┼───────┼───────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x        │ 0     │ ± 7   │ +1.0 / lower at limit (distance −0.05051) │ 0       │ 10      │       │\n│ 2 │ nuisance │ 0.4   │ ± 1.0 │ —                                         │ ─       │ ─       │       │\n└───┴──────────┴───────┴───────┴───────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ Parameter `x` is at its lower limit — Hesse/MINOS error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:137 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:138
+  Expression: occursin("Parameter(s) close to limit", table_html)
+   Evaluated: occursin("Parameter(s) close to limit", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>NativeMinuit.Minuit</strong>  fval=4.88805e-07  edm=4.88e-07  nfcn=31<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ EDM below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ No params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">MINOS</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 7</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>+1.0</sup><sub>lower at limit (distance −0.05051)</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">10</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">nuisance</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0.4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ Parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its lower limit — Hesse/MINOS error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">Correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">nuisance</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">−0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">nuisance</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">−0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:138 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+best-fit proximity and scan termination are distinct: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:139
+  Expression: occursin("MINOS scan reached parameter limit", table_html)
+   Evaluated: occursin("MINOS scan reached parameter limit", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>NativeMinuit.Minuit</strong>  fval=4.88805e-07  edm=4.88e-07  nfcn=31<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ EDM below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ No params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">MINOS</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 7</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>+1.0</sup><sub>lower at limit (distance −0.05051)</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">10</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">nuisance</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">0.4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1.0</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ Parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its lower limit — Hesse/MINOS error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">Correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">nuisance</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">−0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">nuisance</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">−0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:60 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:123 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:139 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+single-result text and LaTeX: Error During Test at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:154
+  Got exception outside of a @test
+  MethodError: no method matching show(::IOBuffer, ::MIME{Symbol("text/html")}, ::MinosError)
+  The function `show` exists, but no method is defined for this combination of argument types.
+
+  Closest candidates are:
+    show(::IO, ::MIME{Symbol("text/html")}, !Matched::Minuit)
+     @ NativeMinuit ~/Coding/Agents/ResearchWork/JuMinuit/src/minuit.jl:2522
+    show(::IO, ::MIME{Symbol("text/html")}, !Matched::Markdown.MD)
+     @ Markdown /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Markdown/src/render/html.jl:208
+    show(::IO, ::MIME{Symbol("text/html")}, !Matched::Method)
+     @ Base methodshow.jl:419
+    ...
+
+  Stacktrace:
+   [1] sprint(::typeof(show), ::MIME{Symbol("text/html")}, ::Vararg{Any}; context::Nothing, sizehint::Int64)
+     @ Base ./strings/io.jl:117
+   [2] sprint(::Function, ::MIME{Symbol("text/html")}, ::Vararg{Any})
+     @ Base ./strings/io.jl:110
+   [3] top-level scope
+     @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+   [4] macro expansion
+     @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [5] macro expansion
+     @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:155 [inlined]
+   [6] macro expansion
+     @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+   [7] macro expansion
+     @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:157 [inlined]
+single-result text box keeps its fixed width: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:215
+  Expression: occursin("upper scan reached limit", mixed_plain)
+   Evaluated: occursin("upper scan reached limit", "┌───────────────────────────────────────────────────────────────────────┐\n│                            minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = 3.78                      │             nfcn = 17             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = at upper limit / invalid  │              invalid              │\n├───────────────────────────────────┼───────────────────────────────────┤\n│upper at limit; distance=+8.597e-07│           lower: failed           │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:195 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:215 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+single-result text box keeps its fixed width: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:217
+  Expression: occursin("boundary displacement", lowercase(sprint(show, (MIME"text/plain")(), large_upper_limit)))
+   Evaluated: occursin("boundary displacement", "┌───────────────────────────────────────────────────────────────────────┐\n│                            minos — par x0                             │\n├───────────────────────────────────┬───────────────────────────────────┤\n│ value = 3.78                      │             nfcn = 17             │\n├───────────────────────────────────┼───────────────────────────────────┤\n│ sides = at upper limit / −0.3     │               valid               │\n├───────────────────────────────────┼───────────────────────────────────┤\n│upper at limit; distance=+1.23e+100│             lower: ok             │\n└───────────────────────────────────┴───────────────────────────────────┘\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:195 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:217 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:239
+  Expression: occursin("upper scan at limit", lowercase(table_plain))
+   Evaluated: occursin("upper scan at limit", "nativeminuit.minuit  fval=6.42009e-06  edm=5.22e-06  nfcn=39\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────┬───────┬───────┬─────────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name │ value │ hesse │ minos                                       │ limit − │ limit + │ fixed │\n├───┼──────┼───────┼───────┼─────────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x    │ 4     │ ± 12  │ upper at limit (distance +0.001896) / −0.30 │ ─       │ 3.78    │       │\n│ 2 │ y    │ 1     │ ± 1   │ —                                           │ ─       │ ─       │       │\n└───┴──────┴───────┴───────┴─────────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its upper limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:239 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:240
+  Expression: occursin("boundary displacement", lowercase(table_plain))
+   Evaluated: occursin("boundary displacement", "nativeminuit.minuit  fval=6.42009e-06  edm=5.22e-06  nfcn=39\n[✓ valid minimum] [✓ edm below goal] [✓ below call limit] [✓ covariance accurate] [⚠ no params at limit]\n┌───┬──────┬───────┬───────┬─────────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ name │ value │ hesse │ minos                                       │ limit − │ limit + │ fixed │\n├───┼──────┼───────┼───────┼─────────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x    │ 4     │ ± 12  │ upper at limit (distance +0.001896) / −0.30 │ ─       │ 3.78    │       │\n│ 2 │ y    │ 1     │ ± 1   │ —                                           │ ─       │ ─       │       │\n└───┴──────┴───────┴───────┴─────────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ parameter `x` is at its upper limit — hesse/minos error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:240 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:241
+  Expression: occursin("upper scan at limit", lowercase(table_html))
+   Evaluated: occursin("upper scan at limit", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>nativeminuit.minuit</strong>  fval=6.42009e-06  edm=5.22e-06  nfcn=39<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ edm below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ no params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">minos</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 12</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>upper at limit (distance +0.001896)</sup><sub>−0.30</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">3.78</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">y</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its upper limit — hesse/minos error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">y</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">y</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:241 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:242
+  Expression: occursin("boundary displacement", lowercase(table_html))
+   Evaluated: occursin("boundary displacement", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>nativeminuit.minuit</strong>  fval=6.42009e-06  edm=5.22e-06  nfcn=39<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ edm below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ no params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">minos</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 12</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>upper at limit (distance +0.001896)</sup><sub>−0.30</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">3.78</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">y</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its upper limit — hesse/minos error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">y</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">y</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:242 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:243
+  Expression: occursin("\\mathrm{upper\\ scan\\ at\\ limit}", table_tex)
+   Evaluated: occursin("\\mathrm{upper\\ scan\\ at\\ limit}", "\\begin{tabular}{l c}\n\\toprule\nParameter & Value \\\\\n\\midrule\nx & \$\\num{3.78}^{\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+\\num{0.001896})}_{-0.30}\$ \\\\\ny & \$\\num{1} \\pm \\num{1}\$ \\\\\n\\bottomrule\n\\end{tabular}\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:243 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:244
+  Expression: occursin("\\mathrm{boundary\\ displacement}", table_tex)
+   Evaluated: occursin("\\mathrm{boundary\\ displacement}", "\\begin{tabular}{l c}\n\\toprule\nParameter & Value \\\\\n\\midrule\nx & \$\\num{3.78}^{\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+\\num{0.001896})}_{-0.30}\$ \\\\\ny & \$\\num{1} \\pm \\num{1}\$ \\\\\n\\bottomrule\n\\end{tabular}\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:244 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:245
+  Expression: occursin("MINOS scan reached parameter limit", table_plain)
+   Evaluated: occursin("MINOS scan reached parameter limit", "NativeMinuit.Minuit  fval=6.42009e-06  edm=5.22e-06  nfcn=39\n[✓ Valid minimum] [✓ EDM below goal] [✓ Below call limit] [✓ Covariance accurate] [⚠ No params at limit]\n┌───┬──────┬───────┬───────┬─────────────────────────────────────────────┬─────────┬─────────┬───────┐\n│ # │ Name │ Value │ Hesse │ MINOS                                       │ Limit − │ Limit + │ Fixed │\n├───┼──────┼───────┼───────┼─────────────────────────────────────────────┼─────────┼─────────┼───────┤\n│ 1 │ x    │ 4     │ ± 12  │ upper at limit (distance +0.001896) / −0.30 │ ─       │ 3.78    │       │\n│ 2 │ y    │ 1     │ ± 1   │ —                                           │ ─       │ ─       │       │\n└───┴──────┴───────┴───────┴─────────────────────────────────────────────┴─────────┴─────────┴───────┘\n⚠ Parameter `x` is at its upper limit — Hesse/MINOS error is unreliable.\n")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:245 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+fit-table text, HTML, and LaTeX: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:246
+  Expression: occursin("MINOS scan reached parameter limit", table_html)
+   Evaluated: occursin("MINOS scan reached parameter limit", "<div style=\"font-family:monospace;font-size:0.95em\"><strong>NativeMinuit.Minuit</strong>  fval=6.42009e-06  edm=5.22e-06  nfcn=39<br><div style=\"margin:0.3em 0\"><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Valid minimum</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ EDM below goal</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Below call limit</span><span style=\"display:inline-block;border:1px solid #1a7f37;border-radius:10px;padding:0 8px;margin:1px 3px;color:#1a7f37\">✓ Covariance accurate</span><span style=\"display:inline-block;border:1px solid #bf8700;border-radius:10px;padding:0 8px;margin:1px 3px;color:#bf8700\">⚠ No params at limit</span></div><table style=\"border-collapse:collapse;margin-top:0.3em\"><thead><tr><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">#</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Name</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Value</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Hesse</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">MINOS</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit −</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Limit +</th><th style=\"border:1px solid #d0d7de;padding:2px 8px;background:#f6f8fa\">Fixed</th></tr></thead><tbody><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">x</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">4</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 12</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"><sup>upper at limit (distance +0.001896)</sup><sub>−0.30</sub></td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">3.78</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr><tr><td style=\"border:1px solid #d0d7de;padding:2px 8px\">2</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">y</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">± 1</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">—</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\">─</td><td style=\"border:1px solid #d0d7de;padding:2px 8px\"></td></tr></tbody></table><div style=\"color:#bf8700;margin-top:0.5em\">⚠ Parameter <code style=\"background:transparent;border:1px solid #bf8700;border-radius:4px;padding:0 0.35em;color:#bf8700\">x</code> is at its upper limit — Hesse/MINOS error is unreliable.<br></div><div style=\"margin-top:0.6em\"><div style=\"font-weight:bold;margin-bottom:0.2em\">Correlation matrix</div><table style=\"border-collapse:collapse;font-family:monospace;font-size:0.9em\"><tr><th style=\"padding:2px 6px\"></th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">x</th><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa\">y</th></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">x</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td></tr><tr><th style=\"border:1px solid #d0d7de;padding:2px 6px;background:#f6f8fa;text-align:left\">y</th><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:rgb(255,255,255);color:#000\">0.00</td><td style=\"border:1px solid #d0d7de;padding:2px 6px;text-align:right;background:#e8e8e8;color:#444\">1.00</td></tr></table></div></div>")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:222 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:246 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:257
+  Expression: occursin("interval truncated by parameter limit", lowercase(label_upper))
+   Evaluated: occursin("interval truncated by parameter limit", "par[1] minos (upper at limit omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:257 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:258
+  Expression: occursin("upper boundary displacement omitted", lowercase(label_upper))
+   Evaluated: occursin("upper boundary displacement omitted", "par[1] minos (upper at limit omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:258 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:262
+  Expression: occursin("interval truncated by parameter limit", lowercase(label_lower))
+   Evaluated: occursin("interval truncated by parameter limit", "par[1] minos (lower at limit omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:262 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:263
+  Expression: occursin("lower boundary displacement omitted", lowercase(label_lower))
+   Evaluated: occursin("lower boundary displacement omitted", "par[1] minos (lower at limit omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:263 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:267
+  Expression: occursin("interval truncated by parameter limits", lowercase(label_both))
+   Evaluated: occursin("interval truncated by parameter limits", "par[1] minos (limits omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:267 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:268
+  Expression: occursin("boundary displacements omitted", lowercase(label_both))
+   Evaluated: occursin("boundary displacements omitted", "par[1] minos (limits omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:268 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+plot recipes omit non-crossing whiskers: Test Failed at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:281
+  Expression: occursin("intervals truncated by parameter limits", lowercase(vector_recipe.plotattributes[:label]))
+   Evaluated: occursin("intervals truncated by parameter limits", "minos crossings (non-crossing sides omitted)")
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:250 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:281 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+Test Summary:                                              | Pass  Fail  Error  Total  Time
+MINOS at-limit public presentation                         |  116    38      1    155  8.6s
+  real bounded profile regressions                         |   27    21            48  6.3s
+    wide quadratic finds both confidence crossings         |   14     1            15  6.0s
+    interior minimum with flat profile reaches both limits |    6     9            15  0.1s
+    one-sided truncation preserves the crossing side       |    5     5            10  0.1s
+    best-fit proximity and scan termination are distinct   |    2     6             8  0.1s
+  closed-interval semantics                                |    8                   8  0.0s
+  single-result text and LaTeX                             |                 1      1  0.7s
+  single-result text box keeps its fixed width             |    7     2             9  0.1s
+    both sides invalid                                     |    2                   2  0.0s
+    upper at limit and lower invalid                       |    2                   2  0.0s
+    large at-limit distance                                |    2                   2  0.0s
+  fit-table text, HTML, and LaTeX                          |          8             8  1.2s
+  plot recipes omit non-crossing whiskers                  |    7     7            14  0.2s
+  serialization preserves boundary flags and compatibility |   67                  67  0.2s
+RNG of the outermost testset: Random.Xoshiro(0xf604475e0b389a25, 0xb5e65fa6dc1cd9d9, 0x7dddb5f67a457095, 0xbf3b32c29dbc4870, 0xc7aa5775531055a9)
+ERROR: LoadError: Some tests did not pass: 116 passed, 38 failed, 1 errored, 0 broken.
+in expression starting at /Users/fkg/Coding/Agents/ResearchWork/JuMinuit/test/test_minos_limit_display.jl:8

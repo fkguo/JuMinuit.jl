@@ -1,0 +1,13 @@
+Precompiling packages...
+  57456.4 ms  ✓ NativeMinuit
+  1 dependency successfully precompiled in 58 seconds. 9 already precompiled.
+Test Summary:                      | Pass  Total  Time
+MINOS at-limit public presentation |  183    183  6.7s
+Test Summary:                          | Pass  Total   Time
+display.jl — Jupyter-first rich output |  151    151  41.3s
+Test Summary:               | Pass  Total   Time
+plot_recipes.jl — Phase 2.3 |   25     25  18.8s
+Test Summary:                            | Pass  Total   Time
+plot_recipes.jl — error-analysis recipes |   81     81  21.3s
+Test Summary:                            | Pass  Total     Time
+minuit.jl — iminuit-style Minuit wrapper |  187    187  1m16.8s

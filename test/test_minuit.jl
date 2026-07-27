@@ -461,7 +461,7 @@
         # so the prior `if has_limits(p) ... elseif has_upper_limit(p)`
         # path made the elseif/else branches unreachable. Regression:
         # a LowerOnly param sitting at its lower bound must print
-        # "is at its **lower** limit", not "upper".
+        # "close to or at its **lower** limit", not "upper".
         cf = x -> (x[1] - 0.5)^2
         m_lo = Minuit(cf, [0.6]; name = ["a"], limit_a = (0.45, nothing))
         migrad(m_lo)

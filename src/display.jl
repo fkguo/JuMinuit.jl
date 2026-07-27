@@ -210,7 +210,8 @@ end
 # Used for the COMPACT layout (no MINOS run); after MINOS the table splits
 # value / Hesse / MINOS into separate columns via `_split_cells`.
 function _value_cell(r; mode::Symbol = :text)
-    if r.minos_lo !== nothing && r.minos_hi !== nothing
+    if r.minos_lo !== nothing && r.minos_hi !== nothing &&
+       !r.minos_lo_at_limit && !r.minos_hi_at_limit
         return _format_value_minos(r.value, r.minos_lo, r.minos_hi; mode = mode)
     elseif r.hesse !== nothing && isfinite(r.hesse) && r.hesse > 0
         # The symmetric string contains no HTML-special characters, so it
@@ -239,9 +240,10 @@ when the value scale calls for it. `value` only sets the rounding frame.
 Each side is rendered **independently**: `lower` / `upper` may be `nothing`
 for a side whose crossing did not converge. A ΔFCN crossing shows its signed
 magnitude; a non-converged side shows the [`_MINOS_INVALID`] marker. A side
-whose `*_at_limit` flag is set is instead labeled `at limit` and its numeric
-value is explicitly identified as a distance to the limit, never as an
-uncertainty. Returns `"—"` only when neither side has publishable information.
+whose `*_at_limit` flag is set is instead labeled as a scan terminated by the
+parameter limit and its numeric value is explicitly identified as a boundary
+displacement, never as an uncertainty. Returns `"—"` only when neither side
+has publishable information.
 """
 function _format_minos_err(value::Real,
                            lower::Union{Nothing,Real},
@@ -275,14 +277,16 @@ function _format_minos_err(value::Real,
     if lo !== nothing; lo_str = estrs[idx]; end
 
     up_part = if hi_status === :at_limit
-        string("upper at limit (distance +", _fmt_g(abs(Float64(upper))), ")")
+        string("upper scan at limit (boundary displacement +",
+               _fmt_g(abs(Float64(upper))), ")")
     elseif hi_status === :crossing
         string("+", hi_str)
     else
         _MINOS_INVALID
     end
     lo_part = if lo_status === :at_limit
-        string("lower at limit (distance −", _fmt_g(abs(Float64(lower))), ")")
+        string("lower scan at limit (boundary displacement −",
+               _fmt_g(abs(Float64(lower))), ")")
     elseif lo_status === :crossing
         string("−", lo_str)
     else
@@ -333,6 +337,36 @@ function _split_cells(r; mode::Symbol = :text)
         "—"              # MINOS was not run for this parameter
     end
     return (value_cell, hesse_cell, minos_cell)
+end
+
+function Base.show(io::IO, ::MIME"text/html", e::MinosError)
+    print(io, """<div style="font-family:monospace;font-size:0.95em">""",
+          "<strong>Minos — par x", e.par_idx - 1, "</strong>",
+          "<div>value = ", _fmt_num(e.min_par_value),
+          "&nbsp;&nbsp;Nfcn = ", e.nfcn,
+          "&nbsp;&nbsp;", is_valid(e) ? "Valid" : "INVALID", "</div>")
+    for side in (:upper, :lower)
+        label = side === :upper ? "Upper" : "Lower"
+        value = side === :upper ? e.upper : e.lower
+        sign = side === :upper ? "+" : "−"
+        status = _minos_side_status(e, side)
+        if status === :at_limit
+            print(io, "<div style=\"margin-top:0.25em\"><strong>",
+                  label, " scan reached limit</strong><br>",
+                  "&nbsp;&nbsp;boundary displacement: ", sign,
+                  _fmt_num(abs(value)), "<br>",
+                  "&nbsp;&nbsp;requested confidence crossing: not found</div>")
+        elseif status === :crossing
+            print(io, "<div style=\"margin-top:0.25em\"><strong>",
+                  label, " MINOS error:</strong> ", sign,
+                  _fmt_num(abs(value)), "</div>")
+        else
+            print(io, "<div style=\"margin-top:0.25em\"><strong>",
+                  label, " scan invalid</strong><br>",
+                  "&nbsp;&nbsp;requested confidence crossing: not found</div>")
+        end
+    end
+    print(io, "</div>")
 end
 
 # ── E: χ²/ndf + p-value (self-contained, no SpecialFunctions dep) ────────────
@@ -441,13 +475,18 @@ function _validity_checks(m::Minuit)
     internal = bfm.internal
     cov_ok = m.accurate && !internal.made_pos_def && !internal.hesse_failed
     atlimit_ok = isempty(_at_limit_indices(m))
+    atlimit_label = atlimit_ok ?
+        "Best-fit parameters away from limits" :
+        "Parameter(s) close to limit"
     checks = [
         (label = "Valid minimum",       status = m.is_valid ? :ok : :bad),
         (label = "EDM below goal",      status = internal.above_max_edm ? :warn : :ok),
         (label = "Below call limit",    status = internal.reached_call_limit ? :bad : :ok),
         (label = "Covariance accurate", status = cov_ok ? :ok : :warn),
-        (label = "No params at limit",  status = atlimit_ok ? :ok : :warn),
+        (label = atlimit_label,          status = atlimit_ok ? :ok : :warn),
     ]
+    !isempty(_minos_at_limit(m)) &&
+        push!(checks, (label = "MINOS scan reached parameter limit", status = :warn))
     # P6: only surfaced when it fired — a NaN/Inf incumbent fval is the
     # explicit reason the minimum is invalid (handoff F7).
     internal.nonfinite_fval &&
@@ -584,6 +623,48 @@ function _render_corr_warning_text(io::IO, m::Minuit)
     end
 end
 
+# Parameters whose otherwise-valid MINOS scan reached a parameter limit before
+# the requested confidence crossing. Kept separate from `_at_limit_indices`,
+# which describes the best-fit value's proximity to a limit, and from
+# `_minos_failed`, which describes an invalid MINOS computation.
+function _minos_at_limit(m::Minuit)
+    out = Tuple{String,String}[]
+    isempty(m.minos_errors) && return out
+    for i in 1:n_pars(m.params)
+        haskey(m.minos_errors, i) || continue
+        e = m.minos_errors[i]
+        (e.upper_par_limit || e.lower_par_limit) || continue
+        side = e.upper_par_limit && e.lower_par_limit ? "both" :
+               e.upper_par_limit ? "upper" : "lower"
+        push!(out, (m.params.pars[i].name, side))
+    end
+    return out
+end
+
+function _render_minos_limit_warning_text(io::IO, m::Minuit)
+    limited = _minos_at_limit(m)
+    isempty(limited) && return
+    parts = [s == "both" ? string("`", nm, "` (both sides)") :
+             string("`", nm, "` (", s, " side)") for (nm, s) in limited]
+    println(io, "⚠ MINOS scan reached parameter limit for ", join(parts, ", "),
+            " — requested confidence crossing not found on the affected side;",
+            " interval truncated and boundary displacement is not a MINOS error.")
+end
+
+function _render_minos_limit_warning_html(io::IO, m::Minuit)
+    limited = _minos_at_limit(m)
+    isempty(limited) && return
+    parts = [s == "both" ?
+             string(_warn_code_chip(nm), " (both sides)") :
+             string(_warn_code_chip(nm), " (", s, " side)")
+             for (nm, s) in limited]
+    print(io, """<div style="color:#bf8700;margin-top:0.4em">""",
+          "⚠ MINOS scan reached parameter limit for ", join(parts, ", "),
+          " — requested confidence crossing not found on the affected side;",
+          " interval truncated and boundary displacement is not a MINOS error.",
+          "</div>")
+end
+
 # Free parameters whose MINOS ran but did NOT fully validate (at least one
 # side's crossing failed). The MINOS column then shows the converged side
 # with the failed side marked `invalid`, or `—` when neither side
@@ -687,7 +768,8 @@ function _latex_minos_value(value::Real,
     if lo !== nothing; lo_str = estrs[idx]; end
 
     upper_part = if hi_status === :at_limit
-        string("\\mathrm{at\\ upper\\ limit}\\;(\\mathrm{distance}=+",
+        string("\\mathrm{upper\\ scan\\ at\\ limit}\\;",
+               "(\\mathrm{boundary\\ displacement}=+",
                num(_fmt_g(abs(Float64(upper)))), ")")
     elseif hi_status === :crossing
         string("+", hi_str)
@@ -695,7 +777,8 @@ function _latex_minos_value(value::Real,
         "\\mathrm{invalid}"
     end
     lower_part = if lo_status === :at_limit
-        string("\\mathrm{at\\ lower\\ limit}\\;(\\mathrm{distance}=-",
+        string("\\mathrm{lower\\ scan\\ at\\ limit}\\;",
+               "(\\mathrm{boundary\\ displacement}=-",
                num(_fmt_g(abs(Float64(lower)))), ")")
     elseif lo_status === :crossing
         string("-", lo_str)
@@ -735,8 +818,8 @@ Render the fitted parameters of `m` as a publication-ready LaTeX table.
 Defaults to a `booktabs` rule set with `siunitx` `\\num{}` numbers.
 Asymmetric MINOS crossings (when `minos!` has run) are written as
 `\\num{x}^{+hi}_{-lo}`. A side stopped by a parameter bound is labeled
-`at upper limit` or `at lower limit`, and its number is labeled as the
-distance to that limit rather than as an uncertainty. Invalid sides are
+as a scan at the corresponding limit, and its number is labeled as the
+boundary displacement rather than as an uncertainty. Invalid sides are
 labeled `invalid`. Otherwise a symmetric `\\num{x} \\pm \\num{e}` is used.
 Numbers are rounded to the uncertainty (1–2 significant figures on the
 error). Fixed parameters show the value alone, tagged `(fixed)`.
@@ -802,8 +885,8 @@ end
 
 Render a single MINOS result without surrounding math delimiters. Genuine
 ΔFCN crossings use the usual `\\num{value}^{+hi}_{-lo}` notation. At-limit
-sides are explicitly labeled and report their distance to the limit; invalid
-sides are labeled `invalid`.
+sides are explicitly labeled as scan terminations and report their boundary
+displacement; invalid sides are labeled `invalid`.
 """
 function to_latex(e::MinosError; value::Real = e.min_par_value, siunitx::Bool = true)
     num(s) = siunitx ? string("\\num{", s, "}") : s
