@@ -494,6 +494,14 @@ end
 # Pretty-print (iminuit-style box) — Phase 3 parity polish
 # ─────────────────────────────────────────────────────────────────────────────
 
+# The status label consumes 26 of the 35 cell columns, leaving nine for
+# the distance. Preserve the usual formatting unless its exponent needs
+# a more compact scientific notation.
+function _minos_box_distance(x::Real)
+    distance = _fmt_num(abs(x))
+    return textwidth(distance) <= 9 ? distance : @sprintf("%.3g", abs(x))
+end
+
 function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     # iminuit "Minos" box: 71-char width, 3-row status
     println(io, "┌", "─"^71, "┐")
@@ -511,10 +519,20 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
         if upper_status === :at_limit && lower_status === :at_limit
             err_str = " sides = at upper/lower limits"
         else
-            upper_side = upper_status === :at_limit ? "at upper limit" :
-                         _minos_show_side(e, :upper)
-            lower_side = lower_status === :at_limit ? "at lower limit" :
-                         _minos_show_side(e, :lower)
+            upper_side = if upper_status === :at_limit
+                "at upper limit"
+            elseif upper_status === :crossing
+                _minos_show_side(e, :upper)
+            else
+                "invalid"
+            end
+            lower_side = if lower_status === :at_limit
+                "at lower limit"
+            elseif lower_status === :crossing
+                _minos_show_side(e, :lower)
+            else
+                "invalid"
+            end
             err_str = string(" sides = ", upper_side, " / ", lower_side)
         end
     end
@@ -524,7 +542,7 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     up_status = if e.upper_new_min
         "Upper: NEW MIN found"
     elseif e.upper_par_limit
-        "Upper at limit; distance=+$(_fmt_num(abs(e.upper)))"
+        "Upper at limit; distance=+$(_minos_box_distance(e.upper))"
     elseif e.upper_fcn_limit
         "Upper: call-limit hit"
     elseif e.upper_valid
@@ -535,7 +553,7 @@ function Base.show(io::IO, ::MIME"text/plain", e::MinosError)
     lo_status = if e.lower_new_min
         "Lower: NEW MIN found"
     elseif e.lower_par_limit
-        "Lower at limit; distance=−$(_fmt_num(abs(e.lower)))"
+        "Lower at limit; distance=−$(_minos_box_distance(e.lower))"
     elseif e.lower_fcn_limit
         "Lower: call-limit hit"
     elseif e.lower_valid

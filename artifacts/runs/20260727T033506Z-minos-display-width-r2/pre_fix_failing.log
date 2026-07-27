@@ -1,0 +1,74 @@
+both sides invalid: Test Failed at /Users/fkg/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107
+  Expression: all((==)(73), widths)
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:93 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+upper at limit and lower invalid: Test Failed at /Users/fkg/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107
+  Expression: all((==)(73), widths)
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:93 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+large at-limit distance: Test Failed at /Users/fkg/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107
+  Expression: all((==)(73), widths)
+
+Stacktrace:
+ [1] top-level scope
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:9
+ [2] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [3] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:93 [inlined]
+ [4] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [5] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:105 [inlined]
+ [6] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:1777 [inlined]
+ [7] macro expansion
+   @ ~/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:107 [inlined]
+ [8] macro expansion
+   @ /opt/homebrew/Cellar/julia/1.12.6/share/julia/stdlib/v1.12/Test/src/Test.jl:680 [inlined]
+Test Summary:                                              | Pass  Fail  Total  Time
+MINOS at-limit public presentation                         |  118     3    121  7.7s
+  closed-interval semantics                                |    8            8  0.1s
+  single-result text and LaTeX                             |   20           20  1.2s
+  single-result text box keeps its fixed width             |    6     3      9  2.4s
+    both sides invalid                                     |    1     1      2  2.3s
+    upper at limit and lower invalid                       |    1     1      2  0.0s
+    large at-limit distance                                |    1     1      2  0.0s
+  fit-table text, HTML, and LaTeX                          |    6            6  3.6s
+  plot recipes omit non-crossing whiskers                  |   11           11  0.2s
+  serialization preserves boundary flags and compatibility |   67           67  0.2s
+RNG of the outermost testset: Random.Xoshiro(0x4800f747653d01dc, 0xb9ed99c5ba8c8415, 0xfa46da66654c04e4, 0x176dd41128fff236, 0xfd2cd510ae5e4609)
+ERROR: LoadError: Some tests did not pass: 118 passed, 3 failed, 0 errored, 0 broken.
+in expression starting at /Users/fkg/.codex/worktrees/8ba4/JuMinuit/test/test_minos_limit_display.jl:8

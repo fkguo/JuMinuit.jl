@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "run_id": "20260727T033506Z-minos-display-width-r2",
+  "status": "verified",
+  "branch": "codex/minos-limit-display-fix",
+  "baseline_commit": "1c845b27f928aea8fe66d91a41c0ae794336c884",
+  "scope": "MINOS single-result text/plain limit-status width",
+  "outcome": {
+    "pre_fix": {
+      "passed": 118,
+      "failed": 3,
+      "errored": 0
+    },
+    "focused": {
+      "passed": 121,
+      "failed": 0,
+      "errored": 0
+    },
+    "display": {
+      "passed": 151,
+      "failed": 0,
+      "errored": 0
+    },
+    "width_sweep_boxes": 30033,
+    "package": {
+      "passed": 5030,
+      "broken": 1,
+      "failed": 0,
+      "errored": 0
+    },
+    "docs_build": "passed_with_existing_warnings"
+  },
+  "integrity": {
+    "checked": ["M1", "M5", "M6", "M7"],
+    "not_applicable": ["M2", "M3", "M4", "M8"],
+    "narrative": "verification_summary.md"
+  },
+  "evidence": {
+    "pre_fix_failing.log": "9159fd9af7eef553455d3b63caea4f2e4887f6c5605c5af3e1c47a7ef4337b20",
+    "focused.log": "63c830c894b6d42c6bbf4f08851cc3f34ebfafaa9955da7091750d271e9e5b60",
+    "display.log": "5c177b9d89fb671108d9b693b4099ef66417338988c0805bee326cdf941cfe55",
+    "presentation_check.log": "49fa502706c15b592474e7b000a25517f0da0620a175fca483bc69fcfaf4abe7",
+    "width_sweep.log": "6c288cc96d1774d12ad48d87f9e853f478189def41a90239ee1bf47636876ea8",
+    "docs_build.log": "f51102c516d7b172c6460949c76f307da7eb7d7b089cf8674d530bb156deabf0",
+    "pkg_test.log": "23e02335da4b810cd8c78b63a04d8dd7b3b81beff3c2d6d7da74eccb4de404cc"
+  }
+}

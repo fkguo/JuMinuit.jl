@@ -31,6 +31,16 @@ using Test
     )
     crossing = merror()
     upper_invalid = merror(upper = 0.4, upper_valid = false)
+    both_invalid = merror(upper_valid = false, lower_valid = false)
+    upper_limit_lower_invalid = merror(
+        upper = upper_distance,
+        upper_par_limit = true,
+        lower_valid = false,
+    )
+    large_upper_limit = merror(
+        upper = 1.23456789e100,
+        upper_par_limit = true,
+    )
 
     @testset "closed-interval semantics" begin
         @test is_valid(upper_limit)
@@ -77,6 +87,33 @@ using Test
         @test occursin("^{+", normal_tex) && occursin("_{-", normal_tex)
         @test occursin("\\mathrm{invalid}", invalid_tex)
         @test occursin("_{-", invalid_tex)
+    end
+
+    @testset "single-result text box keeps its fixed width" begin
+        function box_widths(e)
+            text = sprint(show, MIME"text/plain"(), e)
+            return textwidth.(split(text, '\n'; keepempty = false))
+        end
+
+        cases = (
+            "both sides invalid" => both_invalid,
+            "upper at limit and lower invalid" => upper_limit_lower_invalid,
+            "large at-limit distance" => large_upper_limit,
+        )
+        for (label, e) in cases
+            @testset "$label" begin
+                widths = box_widths(e)
+                @test length(widths) == 9
+                @test all(==(73), widths)
+            end
+        end
+
+        mixed_plain = lowercase(sprint(
+            show, MIME"text/plain"(), upper_limit_lower_invalid))
+        @test occursin("at upper limit", mixed_plain)
+        @test occursin("invalid", mixed_plain)
+        @test occursin("distance", lowercase(sprint(
+            show, MIME"text/plain"(), large_upper_limit)))
     end
 
     @testset "fit-table text, HTML, and LaTeX" begin
