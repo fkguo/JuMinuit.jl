@@ -189,12 +189,13 @@ pts_joint = mncontour(m, "a", "b")                       # 68 % joint region
 pts_cpp   = mncontour(m, "a", "b"; cl = chisq_cl(1, 2))  # Δχ²=1 curve (C++)
 ```
 
-!!! warning "Label your contours"
-    The two curves differ by √2.30 ≈ 1.5× in linear size. Calling the
-    `Δχ² = 1` curve a "68 % confidence region" overstates its joint
-    coverage (39.3 %); calling the joint-68 % contour's projections "the
-    1σ parameter errors" overstates them by ~1.5×. State which convention
-    a published contour uses.
+> **Warning — Label your contours**
+>
+> The two curves differ by √2.30 ≈ 1.5× in linear size. Calling the
+> `Δχ² = 1` curve a "68 % confidence region" overstates its joint
+> coverage (39.3 %); calling the joint-68 % contour's projections "the
+> 1σ parameter errors" overstates them by ~1.5×. State which convention
+> a published contour uses.
 
 **References.** F. James, *The Interpretation of Errors* (Minuit/Minuit2
 documentation, CERN, 2004), §1.3 — distributed with Minuit2 and
@@ -219,22 +220,23 @@ g = contour_grid(m, "a", "b"; subtract_min = true)
 plot(g)                                       # filled-contour landscape
 ```
 
-!!! warning "A slice is NOT a confidence region"
-    Because the other parameters are *fixed* rather than re-minimized, the
-    `Δχ²` level curves of a grid slice are **conditional** regions —
-    systematically *smaller* than the true profile-likelihood region when
-    `(a, b)` correlate with the remaining free parameters (per axis by
-    ≈ `√(1−R²)`, `R` = multiple correlation with the rest; with only two
-    free parameters slice ≡ profile). For confidence regions use
-    [`mncontour`](@ref).
-
-    Picking the level itself: `Δχ² = up` (i.e. `m.up`) is the curve whose
-    per-axis **projections** are the single-parameter 68.27 % intervals
-    (the C++ MnContours convention — its joint 2-D coverage is only
-    39.3 %); the **joint** 2-D 68 % region needs
-    `Δχ² = delta_chisq(0.68, 2) ≈ 2.28` (the [`mncontour`](@ref)
-    default). See the
-    [Δχ² conventions](@ref delta-chisq-conventions) section above.
+> **Warning — A slice is NOT a confidence region**
+>
+> Because the other parameters are *fixed* rather than re-minimized, the
+> `Δχ²` level curves of a grid slice are **conditional** regions —
+> systematically *smaller* than the true profile-likelihood region when
+> `(a, b)` correlate with the remaining free parameters (per axis by
+> ≈ `√(1−R²)`, `R` = multiple correlation with the rest; with only two
+> free parameters slice ≡ profile). For confidence regions use
+> [`mncontour`](@ref).
+>
+> Picking the level itself: `Δχ² = up` (i.e. `m.up`) is the curve whose
+> per-axis **projections** are the single-parameter 68.27 % intervals
+> (the C++ MnContours convention — its joint 2-D coverage is only
+> 39.3 %); the **joint** 2-D 68 % region needs
+> `Δχ² = delta_chisq(0.68, 2) ≈ 2.28` (the [`mncontour`](@ref)
+> default). See the
+> [Δχ² conventions](@ref delta-chisq-conventions) section above.
 
 ## 1-D profiles
 

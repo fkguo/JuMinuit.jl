@@ -86,11 +86,12 @@ has run, the rich table widens to show separate `Value`, `Hesse` and
 [MINOS errors & contours](minos_contours.md) for the full
 [`MinosError`](@ref) field list and 2-D confidence contours.
 
-!!! note "MINOS needs a covariance"
-    MINOS derives its starting step from the inverse Hessian, so a fit
-    that produced no covariance (e.g. [`simplex`](@ref) or [`scan`](@ref))
-    must be refined with [`hesse!`](@ref)`(m)` first. A normal `migrad!`
-    already leaves a covariance in place.
+> **Note — MINOS needs a covariance**
+>
+> MINOS derives its starting step from the inverse Hessian, so a fit
+> that produced no covariance (e.g. [`simplex`](@ref) or [`scan`](@ref))
+> must be refined with [`hesse!`](@ref)`(m)` first. A normal `migrad!`
+> already leaves a covariance in place.
 
 ## A cost-function fit — `LeastSquares`
 

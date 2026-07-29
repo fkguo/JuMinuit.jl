@@ -91,10 +91,11 @@ set_upper_limit!(m, "mass", 10.0)     # upper bound only  → (-∞, 10]
 remove_limits!(m, "mass")             # drop both bounds
 ```
 
-!!! warning "`set_lower_limit!` / `set_upper_limit!` clear the other side"
-    Matching C++ Minuit2, `set_lower_limit!` sets the lower bound
-    **and clears any upper bound**; `set_upper_limit!` does the
-    reverse. To keep both sides, use the two-sided [`set_limits!`](@ref)`(m, par, lo, hi)`.
+> **Warning — `set_lower_limit!` / `set_upper_limit!` clear the other side**
+>
+> Matching C++ Minuit2, `set_lower_limit!` sets the lower bound
+> **and clears any upper bound**; `set_upper_limit!` does the
+> reverse. To keep both sides, use the two-sided [`set_limits!`](@ref)`(m, par, lo, hi)`.
 
 The same edits are available through the iminuit-style index-assignment
 views, which write straight back into `m`:

@@ -48,13 +48,14 @@ plot(contour_ellipse(m, 1, 2))            # ContoursError → closed 1σ contour
 plot(contour_grid(m, 1, 2))               # ContourGrid → filled FCN-landscape contour
 ```
 
-!!! note "Why not `contour(m, 1, 2)`?"
-    NativeMinuit ≤ 0.4 exported the ellipse approximation as `contour`, which
-    made the bare name ambiguous next to `Plots.contour` / `GR.contour`
-    (`UndefVarError: contour not defined … ambiguity`). Since 0.5.0 the
-    ellipse is [`contour_ellipse`](@ref) and iminuit's grid slice is
-    [`contour_grid`](@ref); the bare `contour` is no longer exported
-    (`NativeMinuit.contour` still works, with a deprecation warning).
+> **Note — Why not `contour(m, 1, 2)`?**
+>
+> NativeMinuit ≤ 0.4 exported the ellipse approximation as `contour`, which
+> made the bare name ambiguous next to `Plots.contour` / `GR.contour`
+> (`UndefVarError: contour not defined … ambiguity`). Since 0.5.0 the
+> ellipse is [`contour_ellipse`](@ref) and iminuit's grid slice is
+> [`contour_grid`](@ref); the bare `contour` is no longer exported
+> (`NativeMinuit.contour` still works, with a deprecation warning).
 
 | Recipe target | Picture |
 |---|---|
@@ -160,13 +161,14 @@ draw_mnprofile(m, 1)              # 1D MINOS profile (re-minimise the rest)
 draw_mnmatrix(m)                  # triangular matrix of all pairwise MINOS contours
 ```
 
-!!! note "0.5.0: the `mn` helpers now draw the *exact* contour"
-    ≤ 0.4 `draw_mncontour` / `draw_mnmatrix` rendered the fast
-    covariance-ellipse approximation despite their names. They now trace
-    the exact [`mncontour`](@ref) boundary (one inner re-minimisation per
-    boundary point — slower, correct), and `draw_contour` shows the
-    iminuit-style [`contour_grid`](@ref) FCN landscape. The cheap ellipse
-    is still available as `plot(contour_ellipse(m, 1, 2))`.
+> **Note — 0.5.0: the `mn` helpers now draw the *exact* contour**
+>
+> ≤ 0.4 `draw_mncontour` / `draw_mnmatrix` rendered the fast
+> covariance-ellipse approximation despite their names. They now trace
+> the exact [`mncontour`](@ref) boundary (one inner re-minimisation per
+> boundary point — slower, correct), and `draw_contour` shows the
+> iminuit-style [`contour_grid`](@ref) FCN landscape. The cheap ellipse
+> is still available as `plot(contour_ellipse(m, 1, 2))`.
 
 | Helper | Builds from | Notes |
 |---|---|---|

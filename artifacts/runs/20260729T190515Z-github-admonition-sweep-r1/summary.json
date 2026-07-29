@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "20260729T190515Z-github-admonition-sweep-r1",
+  "status": "verified",
+  "baseline_commit": "a99c9d3e5542b5f634fbc86b9bac7b416a93fc4b",
+  "scope": "Repository-wide audit and portable rendering repair for Documenter admonitions in public Markdown documentation",
+  "files_changed": [
+    "docs/src/error_analysis.md",
+    "docs/src/guides/gradients.md",
+    "docs/src/guides/migration.md",
+    "docs/src/guides/optim.md",
+    "docs/src/guides/plotting.md",
+    "docs/src/tutorials/bounded.md",
+    "docs/src/tutorials/minos_contours.md",
+    "docs/src/tutorials/quickstart.md"
+  ],
+  "inventory": {
+    "documenter_admonitions_found": 13,
+    "files_affected": 8,
+    "line_start_admonitions_remaining_in_repository_markdown": 0
+  },
+  "verification": {
+    "github_gfm": {
+      "status": "passed",
+      "documents_checked": 8,
+      "portable_note_or_warning_titles_rendered": 14,
+      "converted_in_this_change": 13,
+      "literal_admonitions_rendered": 0
+    },
+    "documenter_build": {
+      "status": "passed",
+      "literal_admonitions_in_generated_html": 0,
+      "portable_note_or_warning_titles_rendered": 14,
+      "unrelated_preexisting_warnings": true
+    },
+    "git_diff_check": "passed"
+  },
+  "scientific_content_changed": false
+}

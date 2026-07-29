@@ -83,10 +83,11 @@ ForwardDiff.gradient(f, x), up)` — see [`CostFunctionWithGradient`](@ref). For
 `n ≳ 12` you can pass `chunk_size = 4` (or so) to trade a little speed for lower
 memory pressure; the default lets ForwardDiff pick.
 
-!!! note "Calling `CostFunctionAD` without ForwardDiff"
-    `CostFunctionAD` is only a stub until `using ForwardDiff` is loaded — calling
-    it beforehand raises an informative error. ForwardDiff is a weak (optional)
-    dependency, so a plain `using NativeMinuit` install stays lightweight.
+> **Note — Calling `CostFunctionAD` without ForwardDiff**
+>
+> `CostFunctionAD` is only a stub until `using ForwardDiff` is loaded — calling
+> it beforehand raises an informative error. ForwardDiff is a weak (optional)
+> dependency, so a plain `using NativeMinuit` install stays lightweight.
 
 ### The genericity requirement
 

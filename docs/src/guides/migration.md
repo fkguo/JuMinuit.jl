@@ -118,13 +118,14 @@ mprof = mnprofile(m, "a")             # MINOS profile (re-minimizes nuisances)
 
 Parameters may be passed by 1-based integer index or by name (`String`).
 
-!!! note "`contour` renames (0.5.0)"
-    iminuit's / IMinuit.jl's grid-scan `contour` is [`contour_grid`](@ref)
-    in NativeMinuit — the bare name `contour` would clash with `Plots.contour`
-    under `using NativeMinuit, Plots`. NativeMinuit ≤ 0.4's own `contour` (a fast
-    error-ellipse approximation, *not* iminuit's grid) is now
-    [`contour_ellipse`](@ref); the unexported deprecated alias
-    `NativeMinuit.contour` still forwards to it.
+> **Note — `contour` renames (0.5.0)**
+>
+> iminuit's / IMinuit.jl's grid-scan `contour` is [`contour_grid`](@ref)
+> in NativeMinuit — the bare name `contour` would clash with `Plots.contour`
+> under `using NativeMinuit, Plots`. NativeMinuit ≤ 0.4's own `contour` (a fast
+> error-ellipse approximation, *not* iminuit's grid) is now
+> [`contour_ellipse`](@ref); the unexported deprecated alias
+> `NativeMinuit.contour` still forwards to it.
 
 ## `chisq` / `Data`: drop-in, same signatures
 
@@ -149,13 +150,14 @@ The `iminuit.cost` kernels `chi2`, `poisson_chi2`, and `multinominal_chi2` are
 also provided as pure-Julia functions with matching signatures, as is
 `func_argnames` for reflecting an FCN's argument names.
 
-!!! note "`Data` vs. the cost-function objects"
-    `chisq` / `Data` remain the quickest way to port IMinuit.jl code. For new
-    work you can also use NativeMinuit's Julia-native cost objects
-    ([`LeastSquares`](@ref), [`UnbinnedNLL`](@ref), …), which carry their own
-    `errordef` and compose with `+` ([`CostSum`](@ref)). A `LeastSquares` fit
-    and the matching `chisq` `model_fit` share one χ² kernel, so they give
-    bit-identical results — see the [cost-functions guide](../cost_functions.md).
+> **Note — `Data` vs. the cost-function objects**
+>
+> `chisq` / `Data` remain the quickest way to port IMinuit.jl code. For new
+> work you can also use NativeMinuit's Julia-native cost objects
+> ([`LeastSquares`](@ref), [`UnbinnedNLL`](@ref), …), which carry their own
+> `errordef` and compose with `+` ([`CostSum`](@ref)). A `LeastSquares` fit
+> and the matching `chisq` `model_fit` share one χ² kernel, so they give
+> bit-identical results — see the [cost-functions guide](../cost_functions.md).
 
 ## `Fit` / `ArrayFit`: aliases of `Minuit`
 

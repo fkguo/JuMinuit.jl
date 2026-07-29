@@ -101,11 +101,12 @@ using Optim
 optim(m; method = :lbfgs, options = Optim.Options(g_tol = 1e-12, iterations = 5_000))
 ```
 
-!!! note "Bounded (Fminbox) fits"
-    For bounded fits `ncall` / `maxcall` / `tol` configure Fminbox's *inner*
-    optimizer (per outer iteration), not the global call budget or the outer stop
-    criterion. For hard control of the outer Fminbox loop pass a full
-    `options = Optim.Options(outer_iterations = …, outer_g_abstol = …)`.
+> **Note — Bounded (Fminbox) fits**
+>
+> For bounded fits `ncall` / `maxcall` / `tol` configure Fminbox's *inner*
+> optimizer (per outer iteration), not the global call budget or the outer stop
+> criterion. For hard control of the outer Fminbox loop pass a full
+> `options = Optim.Options(outer_iterations = …, outer_g_abstol = …)`.
 
 ## How the result maps back
 

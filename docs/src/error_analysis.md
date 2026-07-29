@@ -470,19 +470,20 @@ the same seed) — the Bayesian layer adds new tools, never silently changes the
 chain. Construction **fails loudly** if the best-fit point lies outside the
 prior × limits support, rather than starting a dead chain.
 
-!!! warning "Credible ≠ confidence, and three things to keep honest"
-    - A credible interval/limit is a probability statement about θ **given the
-      prior** — not a frequentist confidence interval, CLs, Feldman–Cousins, or
-      MINOS interval. `upper_limit`/`lower_limit` return a
-      [`CredibleLimit`](@ref NativeMinuit.CredibleLimit), not a `merror`.
-    - `flat_prior` is flat in **external** coordinates — a parameterization
-      choice, **not** an "uninformative"/Jeffreys prior. Re-parameterize and the
-      flat prior changes.
-    - The posterior **temperature follows `errordef`**: the likelihood enters as
-      `exp(-fcn/(2·up))`, so keep `up = 1` (χ² / `-2 log L`) or `up = 0.5`
-      (`-log L`). Inflating `up` to widen a MINOS interval tempers the posterior
-      by the same `√up` — put extra information in the **prior**, not in
-      `errordef`.
+> **Warning — Credible ≠ confidence, and three things to keep honest**
+>
+> - A credible interval/limit is a probability statement about θ **given the
+>   prior** — not a frequentist confidence interval, CLs, Feldman–Cousins, or
+>   MINOS interval. `upper_limit`/`lower_limit` return a
+>   [`CredibleLimit`](@ref NativeMinuit.CredibleLimit), not a `merror`.
+> - `flat_prior` is flat in **external** coordinates — a parameterization
+>   choice, **not** an "uninformative"/Jeffreys prior. Re-parameterize and the
+>   flat prior changes.
+> - The posterior **temperature follows `errordef`**: the likelihood enters as
+>   `exp(-fcn/(2·up))`, so keep `up = 1` (χ² / `-2 log L`) or `up = 0.5`
+>   (`-log L`). Inflating `up` to widen a MINOS interval tempers the posterior
+>   by the same `√up` — put extra information in the **prior**, not in
+>   `errordef`.
 
 **Diagnostics & mixing.** `nchains` defaults to 4, each started **over-dispersed**
 at `overdisperse` × the proposal/HESSE scale from the best fit (default `2`, i.e.
@@ -860,20 +861,22 @@ If the first round finds no deeper basin, it warns and returns a fitted clone of
 insufficient (raise `n_discovery`); for parameter-space search try the
 perturbation form instead.
 
-!!! note "Worked example — IAM ππ"
-    `BenchmarkExamples/IAM_2Pformfactor/find_deeper_minimum_demo.jl`: a cold
-    Strategy-1 MIGRAD from the published LECs lands at **χ² ≈ 379** (a shallow
-    basin, χ²/dof ≈ 4.9); `find_deeper_minimum`'s resampling dispatch drops it to
-    **χ² ≈ 255** (χ²/dof ≈ 3.3) over four adopt-rounds — a **Δχ² ≈ 124** descent in
-    one call, by the same mechanism `error_crosscheck.jl`'s hand-rolled PHASE 1
-    loop uses (it reaches χ² ≈ 235 from a multi-start seed). Error analysis at 379
-    would be meaningless; do it at the deep minimum.
+> **Note — Worked example — IAM ππ**
+>
+> `BenchmarkExamples/IAM_2Pformfactor/find_deeper_minimum_demo.jl`: a cold
+> Strategy-1 MIGRAD from the published LECs lands at **χ² ≈ 379** (a shallow
+> basin, χ²/dof ≈ 4.9); `find_deeper_minimum`'s resampling dispatch drops it to
+> **χ² ≈ 255** (χ²/dof ≈ 3.3) over four adopt-rounds — a **Δχ² ≈ 124** descent in
+> one call, by the same mechanism `error_crosscheck.jl`'s hand-rolled PHASE 1
+> loop uses (it reaches χ² ≈ 235 from a multi-start seed). Error analysis at 379
+> would be meaningless; do it at the deep minimum.
 
-!!! warning "A heuristic, not a global-optimum proof"
-    Basin-hopping finds *a* deeper minimum when its restarts/resamples land in one;
-    it cannot certify the result is global (hence the name — not
-    `find_global_minimum`). Raise `n_restarts`/`perturb`/`n_discovery`/`max_rounds`
-    and cross-check from independent seeds.
+> **Warning — A heuristic, not a global-optimum proof**
+>
+> Basin-hopping finds *a* deeper minimum when its restarts/resamples land in one;
+> it cannot certify the result is global (hence the name — not
+> `find_global_minimum`). Raise `n_restarts`/`perturb`/`n_discovery`/`max_rounds`
+> and cross-check from independent seeds.
 
 ### Clustering backends
 
