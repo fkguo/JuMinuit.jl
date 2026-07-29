@@ -1,0 +1,39 @@
+{
+  "total_claims": 3,
+  "converged": 3,
+  "unconverged": [],
+  "clean_first_pass": 3,
+  "needed_iteration": [],
+  "matrix": [
+    {
+      "claim": "D1_effective_dimension",
+      "converged": true,
+      "independent_confirmations": 2,
+      "total_derivations": 2,
+      "iterate_rounds": 0,
+      "agreed_answer": "Under regular profile-likelihood conditions, the likelihood-ratio statistic for a derived target g converges to chi-square with r degrees of freedom, where r is the local rank of g on identifiable fit directions.",
+      "adjudicated_correct": "The Wilks tangent-space projection and the Gaussian Mahalanobis projection are mathematically equivalent in their common local-quadratic regime. The Gaussian expression rank(Dg C^(1/2)) is the identifiable-direction form of the Wilks codimension.",
+      "outliers": "none"
+    },
+    {
+      "claim": "D2_scalar_vs_joint_two_dimensional",
+      "converged": true,
+      "independent_confirmations": 2,
+      "total_derivations": 2,
+      "iterate_rounds": 0,
+      "agreed_answer": "At 68.27% confidence, a non-degenerate scalar target uses Delta chi-square = 1.00, while a joint target with two locally independent real components uses Delta chi-square = 2.2957489289, approximately 2.30.",
+      "adjudicated_correct": "A separately quoted real or imaginary pole component is scalar and uses 1.00. A joint (Re E_pole, Im E_pole) contour uses 2.30 when the two directions are locally independent. Separate scalar intervals are not a 68.27% joint region.",
+      "outliers": "none"
+    },
+    {
+      "claim": "D3_pointwise_vs_simultaneous",
+      "converged": true,
+      "independent_confirmations": 2,
+      "total_derivations": 2,
+      "iterate_rounds": 0,
+      "agreed_answer": "At each fixed abscissa a curve value is a scalar target and uses the one-dimensional threshold. A ribbon formed from those intervals has pointwise, not simultaneous, coverage; the number of plotted grid points is not the likelihood-ratio degrees of freedom.",
+      "adjudicated_correct": "A simultaneous whole-curve statement requires calibration of a supremum statistic or projection of a joint confidence region for the identifiable curve directions. It cannot be obtained by setting ndof equal to the number of grid points.",
+      "outliers": "none"
+    }
+  ]
+}

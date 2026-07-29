@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "20260729T054838Z-derived-dimension-docs-r1",
+  "status": "verified",
+  "completed_at": "2026-07-29T06:02:36Z",
+  "baseline_commit": "aa8d4a7",
+  "decision_handle": "EW4DR0",
+  "scope": "Document the effective dimension of derived profile-likelihood targets and the corresponding Delta chi-square threshold.",
+  "files_changed": [
+    "docs/src/error_analysis.md",
+    "src/error_sampling.jl",
+    "skills/nativeminuit-usage/SKILL.md"
+  ],
+  "derivation_verification": {
+    "status": "converged",
+    "independent_confirmations": 2,
+    "method_diversity": [
+      "profile likelihood and Wilks tangent-space projection",
+      "Gaussian covariance and Mahalanobis geometry"
+    ],
+    "model_family_diversity": "single_family",
+    "comparator": "independent mathematical-equivalence comparison",
+    "matrix": "derivation_verification_matrix.json",
+    "narrative": "derivation_summary.md"
+  },
+  "verification": {
+    "numerical_thresholds": {
+      "status": "passed",
+      "log": "numerical_thresholds.log",
+      "sha256": "0c0165d08f8a74a398411c10a390ad5aca7c0f20646d8b773947b955131a807f"
+    },
+    "targeted_tests": {
+      "status": "passed",
+      "passed": 193,
+      "total": 193,
+      "log": "test_error_sampling.log",
+      "sha256": "7168204087553553c44315c9d7b447ab62670a05fdb1b579ef8add5aa004a895"
+    },
+    "documentation_build": {
+      "status": "passed_with_preexisting_warnings",
+      "log": "docs_build.log",
+      "sha256": "0d918501e258a6ad38ffdd8b27d398a66e99babdcf2aae954c44d7861247e859"
+    },
+    "rendered_semantics": {
+      "status": "passed",
+      "log": "doc_semantics_check.log",
+      "sha256": "9925b35baf8ad1b780535fe0a6c29b3822b289055a6ce09649cd6b57cb358404"
+    },
+    "diff_check": "passed",
+    "json_validation": "passed"
+  },
+  "integrity_review": "integrity.md"
+}

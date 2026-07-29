@@ -212,6 +212,16 @@ to_latex(m)                                      # LaTeX table of the result (Ju
 `Δχ² ≤ delta_chisq(cl,1)·up` region (all free params vary; limits/fixed
 honoured; `f(θ)=θ[i]` ≡ MINOS; linear-Gaussian limit = `f̂ ± √(Δχ²·cᵀCc)`).
 `ndof=1` regardless of n_params — the quoted statement is ONE number.
+More generally, `ndof` is the number of locally independent real components
+reported jointly (the local rank on identifiable fit directions), not the raw
+number of displayed values. Thus $\operatorname{Re}E_{\mathrm{pole}}$ alone
+uses `ndof=1`; a joint
+$(\operatorname{Re}E_{\mathrm{pole}},\operatorname{Im}E_{\mathrm{pole}})$
+68.27% contour uses `ndof=2` and $\Delta\chi^2\simeq2.30$ when both directions
+are locally independent. Separate real/imaginary intervals each use
+`ndof=1`, but do not form a 68.27% joint region. Standard $\chi^2$ thresholds
+assume regular Wilks conditions; boundaries, non-identifiability, rank
+changes, or branch switches may require pseudo-experiment calibration.
 
 ```julia
 r = extremize(m, θ -> θ[1] + θ[2]*15.0)          # cl=1 (68.3%); cl=2, cl=0.95 ok
@@ -232,8 +242,10 @@ band.nfail == 0 || @warn "inspect band.diagnostics"
   won (`winner_*==0` + `naccepted_*>0` = best fit genuinely extremal;
   `naccepted_*==0` = that side FAILED).
 - Band is **pointwise** (each x its own 68%) and contains the best-fit curve
-  by construction — say "pointwise" in the figure caption.
-- Joint statement instead? `extremize(m, f; delta = delta_chisq(cl, 2))`.
+  by construction — say "pointwise" in the figure caption. The grid length is
+  not `ndof`; a simultaneous whole-curve band needs separate calibration.
+- Joint 2-D statement instead? Trace its support function with
+  `extremize(m, f; delta = delta_chisq(cl, 2))`.
 - Cost ≈ `2 × seeds × ≤3 ladder stages × rounds` MIGRADs (band: × points ×
   passes); budget with `maxfcn`, `rounds`, fewer seeds.
 - **Expensive FCN / `f` (≥ seconds/eval), near-linear ⇒ `mode = :directional`**
@@ -341,8 +353,9 @@ Two families that **agree** on a clean near-Gaussian fit and **diverge** when it
 | **bootstrap** | `bootstrap(model, Data(x,y,σ), start)`, `bootstrap(cost, start)`, or `bootstrap(refit, data)` | you **doubt the error model** (quoted σ); want empirical sampling dist |
 | **jackknife** | `jackknife(model, Data(x,y,σ), start)` (or a `cost` / `refit` form) | quick error **+ explicit bias** estimate |
 
-`get_contours_samples` **gotchas**: (1) `ndof` is the **dimension of the region**, not
-the fit's param count — it defaults to `n_free` (joint region). A 2-D joint 1σ is
+`get_contours_samples` **gotchas**: (1) `ndof` is the **effective dimension of
+the region** (the number of locally independent real directions), not the fit's
+param count — it defaults to `n_free` (joint region). A 2-D joint 1σ is
 `Δχ² = 2.30`, **not** 1.0. `cl` = confidence level (iminuit convention): `cl ≥ 1` ⇒ that
 many σ (`cl=1`→68.27 %, `cl=2`→95.45 %), `0 < cl < 1` ⇒ a probability — so `cl=2` ≠ `cl=0.95`.
 (2) it **samples all free parameters jointly**; `paras` only
@@ -429,7 +442,8 @@ posterior_mean/median/std(post, :mass); posterior_summary(post) # point summarie
 8. `mncontour` = exact CL boundary; `contour_ellipse` = fast ellipse (read `.points`/`.valid`, no `.xs`/`.ys`); `contour_grid` = iminuit grid slice (landscape, NOT a CL region). Bare `contour` is unexported since 0.5.0 (Plots clash).
 9. AD: FCN **generic on eltype** + `using ForwardDiff` + `grad = x->ForwardDiff.gradient(f,x)`.
 10. Threading: `julia -t N` + thread-safe FCN (no shared mutable buffers) + `threaded_gradient=true`.
-11. `get_contours_samples` `ndof` = region dimension (joint by default; Δχ²=2.30 for 2-D 1σ).
+11. `get_contours_samples` `ndof` = effective region dimension (joint by
+    default; Δχ²=2.30 for two locally independent real directions at 1σ).
 12. On multi-basin surfaces: `find_deeper_minimum` first, **then** local errors; bootstrap/jackknife unreliable.
 13. **Extensions** load on demand: `using Plots` (plotting / `draw_*`), `using Optim` (`optim`/`minimize_with`), `using ForwardDiff` (AD / `CostFunctionAD`), `using DataFrames` (`contour_df_samples`, `Data(::DataFrame)`, `DataFrame(bootstrap/jackknife result)`), `using Clustering` (`find_solution_modes(...; method=:dbscan)`).
 14. `Fit` / `ArrayFit` are **aliases of `Minuit`** (no behavioral difference).

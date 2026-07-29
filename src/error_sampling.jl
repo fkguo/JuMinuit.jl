@@ -192,7 +192,7 @@ end
 
 The **Δχ² threshold** `χ²(ndof)`-quantile at confidence level `cl`, i.e.
 the amount by which χ² rises from its minimum at the edge of the `cl`
-confidence region for `ndof` jointly-estimated parameters.
+confidence region for an `ndof`-dimensional target.
 
 # `cl` convention (matches iminuit)
 
@@ -200,21 +200,32 @@ confidence region for `ndof` jointly-estimated parameters.
 - `cl ≥ 1`     — interpret `cl` as **nσ** (Gaussian-equivalent): `1`→68.27 %,
   `2`→95.45 %, `3`→99.73 %.
 
-# ⚠ Joint vs. single-parameter — READ THIS
+# ⚠ Joint vs. scalar — READ THIS
 
-`ndof` is the number of parameters **defining the region**, NOT the total
-number of fit parameters. The two questions below give *different* Δχ²:
+`ndof` is the effective dimension of the reported region: the number of
+**locally independent real components reported jointly** (under the regular
+Wilks conditions, the local rank of the target map on identifiable fit
+directions). It is NOT the total number of fit parameters, nor the raw length
+of an output array or plotting grid. The questions below give *different* Δχ²:
 
-| Question                                              | `ndof` | 1σ Δχ² |
-|:------------------------------------------------------|:------:|:------:|
-| 1-D interval on **one** parameter (MINOS error)       |  `1`   | `1.00` |
-| 2-D **joint** region for **two** parameters           |  `2`   | `2.30` |
-| 3-D **joint** region for **three** parameters         |  `3`   | `3.53` |
+| Question                                                     | `ndof` | 1σ Δχ² |
+|:-------------------------------------------------------------|:------:|:------:|
+| 1-D interval on one parameter or **derived scalar**          |  `1`   | `1.00` |
+| 2-D **joint** region for two independent real components     |  `2`   | `2.30` |
+| 3-D **joint** region for three independent real components   |  `3`   | `3.53` |
 
 A common mistake is to use Δχ²=1 for a 2-D contour: the 68 % **joint**
-2-parameter region is Δχ²=**2.30**, not 1. The Monte-Carlo sampler
+region is Δχ²=**2.30**, not 1. Thus `real(Epole)` quoted alone uses
+`ndof = 1`, whereas a joint `(real(Epole), imag(Epole))` contour uses
+`ndof = 2` when the two directions are locally independent. Two separately
+quoted 1-D intervals still use `ndof = 1` each, but are not a 68 % joint
+region. The Monte-Carlo sampler
 [`get_contours_samples`](@ref) samples all free parameters jointly, so
 its default threshold uses `ndof = n_free`.
+
+These χ² thresholds have nominal/asymptotic coverage under the regular Wilks
+conditions. Boundaries, non-identifiability, rank changes, branch switches, or
+small samples can require calibration with pseudo-experiments.
 
 # Examples
 

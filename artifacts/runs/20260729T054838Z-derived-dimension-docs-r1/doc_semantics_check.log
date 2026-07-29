@@ -1,0 +1,12 @@
+123:!!! note "The dimension belongs to the reported target"
+144:      only 39.35 % joint coverage in the linear-Gaussian limit.
+212:For a genuinely **joint** two-dimensional statement (e.g. tracing the support
+236:simultaneous coverage; the everywhere-at-once coverage is generally lower.
+206:**locally independent real components reported jointly** (under the regular
+219:`ndof = 1`, whereas a joint `(real(Epole), imag(Epole))` contour uses
+228:small samples can require calibration with pseudo-experiments.
+215:More generally, `ndof` is the number of locally independent real components
+246:  not `ndof`; a simultaneous whole-curve band needs separate calibration.
+The dimension belongs to the reported target
+39.35 % joint coverage
+tutorials/minos_contours.html#delta-chisq-conventions

@@ -1,0 +1,5 @@
+Precompiling packages...
+   1168.3 ms  ✓ NativeMinuitDataFramesExt (serial)
+  1 dependency successfully precompiled in 1 seconds
+Test Summary:  | Pass  Total   Time
+error sampling |  193    193  29.8s

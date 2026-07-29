@@ -1,0 +1,6 @@
+Precompiling packages...
+  26594.0 ms  ✓ NativeMinuit
+  1 dependency successfully precompiled in 27 seconds. 9 already precompiled.
+delta_1=1.0000000000000002
+delta_2=2.295748928898635
+coverage_2d_at_delta_1=0.3934693402873665
