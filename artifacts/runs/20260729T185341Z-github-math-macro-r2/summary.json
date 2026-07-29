@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "run_id": "20260729T185341Z-github-math-macro-r2",
+  "status": "verified",
+  "baseline_commit": "fa1ac25",
+  "verified_commit": "d3f86e8",
+  "scope": "Replace GitHub-disallowed operatorname macros and verify the live rendered page.",
+  "files_changed": [
+    "docs/src/error_analysis.md",
+    "skills/nativeminuit-usage/SKILL.md"
+  ],
+  "scientific_content_changed": false,
+  "verification": {
+    "source_macro_scan": {
+      "status": "passed",
+      "operatorname_matches": 0
+    },
+    "github_gfm_parser": {
+      "status": "passed",
+      "note_math_renderers": 9,
+      "note_raw_math": 0,
+      "support_function_math_renderers": 1,
+      "support_function_raw_math": 0,
+      "skill_math_renderers": 4,
+      "skill_raw_math": 0
+    },
+    "github_live_browser": {
+      "status": "passed",
+      "url": "https://github.com/fkguo/NativeMinuit.jl/blob/d3f86e8/docs/src/error_analysis.md",
+      "note_found": true,
+      "list_items": 3,
+      "note_math_renderers": 9,
+      "note_mathml_nodes": 9,
+      "note_macro_errors": 0,
+      "page_macro_errors": 0
+    },
+    "documenter": {
+      "status": "passed_with_preexisting_warnings"
+    },
+    "diff_check": "passed"
+  },
+  "verification_note": "verification.md",
+  "supersedes": "20260729T143258Z-github-markdown-render-r1"
+}
