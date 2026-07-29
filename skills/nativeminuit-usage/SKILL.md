@@ -214,9 +214,9 @@ honoured; `f(θ)=θ[i]` ≡ MINOS; linear-Gaussian limit = `f̂ ± √(Δχ²·c
 `ndof=1` regardless of n_params — the quoted statement is ONE number.
 More generally, `ndof` is the number of locally independent real components
 reported jointly (the local rank on identifiable fit directions), not the raw
-number of displayed values. Thus $\operatorname{Re}E_{\mathrm{pole}}$ alone
+number of displayed values. Thus $\mathrm{Re}(E_{\mathrm{pole}})$ alone
 uses `ndof=1`; a joint
-$(\operatorname{Re}E_{\mathrm{pole}},\operatorname{Im}E_{\mathrm{pole}})$
+$(\mathrm{Re}(E_{\mathrm{pole}}),\mathrm{Im}(E_{\mathrm{pole}}))$
 68.27% contour uses `ndof=2` and $\Delta\chi^2\simeq2.30$ when both directions
 are locally independent. Separate real/imaginary intervals each use
 `ndof=1`, but do not form a 68.27% joint region. Standard $\chi^2$ thresholds

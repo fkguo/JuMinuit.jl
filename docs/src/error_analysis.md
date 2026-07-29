@@ -130,10 +130,10 @@ correlations included). For `f(θ) = θ[i]` it reproduces the MINOS interval.
 > locally independent.
 >
 > - A spectrum value at one fixed energy, a real scattering length, a peak
->   position, or $\operatorname{Re} E_{\mathrm{pole}}$ quoted alone is a
+>   position, or $\mathrm{Re}(E_{\mathrm{pole}})$ quoted alone is a
 >   scalar statement: `ndof = 1`, so a 68.27 % interval uses
 >   $\Delta\chi^2 = 1$.
-> - A pole quoted as the joint point $(\operatorname{Re} E_{\mathrm{pole}}, \operatorname{Im} E_{\mathrm{pole}})$,
+> - A pole quoted as the joint point $(\mathrm{Re}(E_{\mathrm{pole}}), \mathrm{Im}(E_{\mathrm{pole}}))$,
 >   equivalently $(M,\Gamma)$, has `ndof = 2` when the two directions are locally
 >   independent, so its 68.27 % joint contour uses $\Delta\chi^2 \simeq 2.30$.
 > - If the real and imaginary parts are instead quoted as two separate
@@ -208,9 +208,9 @@ always, and `FCN ≤ bound` exactly whenever the local boundary pull-back
 applies (the typical case) — the `fcn_*` diagnostics fields carry the
 values, so feasibility can be checked rather than trusted.
 
-For a genuinely **joint** two-dimensional statement (e.g. tracing the support
-function of $(\operatorname{Re}E_{\mathrm{pole}},
-\operatorname{Im}E_{\mathrm{pole}})$), override the threshold explicitly:
+For a genuinely **joint** two-dimensional statement, such as tracing the
+support function of $(\mathrm{Re}(E_{\mathrm{pole}}), \mathrm{Im}(E_{\mathrm{pole}}))$,
+override the threshold explicitly:
 `extremize(m, f; delta = delta_chisq(cl, 2))`.
 
 **Expensive FCN / `f` (seconds per evaluation).** The default `:full` algorithm

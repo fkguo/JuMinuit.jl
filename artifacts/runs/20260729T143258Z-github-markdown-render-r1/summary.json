@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "run_id": "20260729T143258Z-github-markdown-render-r1",
-  "status": "verified",
+  "status": "superseded_after_live_browser_failure",
+  "superseded_by": "20260729T185341Z-github-math-macro-r2",
   "baseline_commit": "a4c4c04",
   "scope": "Make the derived-target dimension note render correctly in both GitHub GFM and Documenter.",
   "files_changed": [
@@ -10,7 +11,7 @@
   "scientific_content_changed": false,
   "verification": {
     "github_gfm": {
-      "status": "passed",
+      "status": "passed_parser_only",
       "renderer": "GitHub markdown API with mode=gfm",
       "note_found": true,
       "math_renderers": 9,
@@ -18,6 +19,12 @@
       "relative_links": 1,
       "raw_math_outside_renderer": 0,
       "user_mentions": 0
+    },
+    "github_browser_typesetting": {
+      "status": "failed",
+      "disallowed_macros": [
+        "operatorname"
+      ]
     },
     "documenter": {
       "status": "passed_with_preexisting_warnings",
