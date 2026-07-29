@@ -120,35 +120,34 @@ profiled out (Wilks: one constraint ⇒ 1 dof; in the linear-Gaussian limit the
 answer is exactly the projection theorem `f̂ ± √(Δχ²·cᵀCc)`, full parameter
 correlations included). For `f(θ) = θ[i]` it reproduces the MINOS interval.
 
-!!! note "The dimension belongs to the reported target"
-    For a derived target $g(\theta)$, `ndof` is the number of **locally
-    independent real components reported jointly** — more precisely, the local
-    rank of $g$ on the identifiable fit directions. It is not the total number
-    of free fit parameters, nor the length of an output array or plotting grid.
-    The simpler rule "count the reported numbers" assumes those components are
-    locally independent.
-
-    - A spectrum value at one fixed energy, a real scattering length, a peak
-      position, or $\operatorname{Re} E_{\mathrm{pole}}$ quoted alone is a
-      scalar statement: `ndof = 1`, so a 68.27 % interval uses
-      $\Delta\chi^2 = 1$.
-    - A pole quoted as the joint point
-      $(\operatorname{Re} E_{\mathrm{pole}},
-      \operatorname{Im} E_{\mathrm{pole}})$ (equivalently $(M,\Gamma)$) has
-      `ndof = 2` when the two directions are locally independent, so its
-      68.27 % joint contour uses $\Delta\chi^2 \simeq 2.30$.
-    - If the real and imaginary parts are instead quoted as two separate
-      one-dimensional intervals, each uses $\Delta\chi^2 = 1$; the pair of
-      intervals is not a 68.27 % joint region. Conversely, a
-      $\Delta\chi^2 = 1$ contour interpreted as a two-dimensional region has
-      only 39.35 % joint coverage in the linear-Gaussian limit.
-
-    These thresholds have their nominal coverage under the regular Wilks
-    conditions. An active boundary, non-identifiability, a rank change or
-    branch switch in the derived map, or a small sample can require calibration
-    with pseudo-experiments. Profiling honours limits and nuisance parameters,
-    but does not by itself restore Wilks coverage in a non-regular problem. See
-    [the two contour conventions](@ref delta-chisq-conventions).
+> **Note — The dimension belongs to the reported target**
+>
+> For a derived target $g(\theta)$, `ndof` is the number of **locally
+> independent real components reported jointly** — more precisely, the local
+> rank of $g$ on the identifiable fit directions. It is not the total number
+> of free fit parameters, nor the length of an output array or plotting grid.
+> The simpler rule "count the reported numbers" assumes those components are
+> locally independent.
+>
+> - A spectrum value at one fixed energy, a real scattering length, a peak
+>   position, or $\operatorname{Re} E_{\mathrm{pole}}$ quoted alone is a
+>   scalar statement: `ndof = 1`, so a 68.27 % interval uses
+>   $\Delta\chi^2 = 1$.
+> - A pole quoted as the joint point $(\operatorname{Re} E_{\mathrm{pole}}, \operatorname{Im} E_{\mathrm{pole}})$,
+>   equivalently $(M,\Gamma)$, has `ndof = 2` when the two directions are locally
+>   independent, so its 68.27 % joint contour uses $\Delta\chi^2 \simeq 2.30$.
+> - If the real and imaginary parts are instead quoted as two separate
+>   one-dimensional intervals, each uses $\Delta\chi^2 = 1$; the pair of
+>   intervals is not a 68.27 % joint region. Conversely, a
+>   $\Delta\chi^2 = 1$ contour interpreted as a two-dimensional region has
+>   only 39.35 % joint coverage in the linear-Gaussian limit.
+>
+> These thresholds have their nominal coverage under the regular Wilks
+> conditions. An active boundary, non-identifiability, a rank change or branch
+> switch in the derived map, or a small sample can require calibration with
+> pseudo-experiments. Profiling honours limits and nuisance parameters, but
+> does not by itself restore Wilks coverage in a non-regular problem. See
+> [the two contour conventions](tutorials/minos_contours.md).
 
 [`profile_band`](@ref NativeMinuit.profile_band) sweeps the same construction
 along a grid for a curve family `f(x, θ)` (`x` first, `θ` the full parameter
