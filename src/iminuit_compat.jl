@@ -488,7 +488,7 @@ function _scan_retain_best!(m::Minuit, base::Parameters, par::Int,
     found || return m
     new_pars = collect(base.pars)
     new_pars[par] = _build_value_par(new_pars[par], best_x)
-    retained = Parameters(new_pars, m.prec)
+    retained = Parameters(new_pars, _init_params(m))
     m.fmin = _point_function_minimum(m.fcn, retained, best_f)
     return m
 end

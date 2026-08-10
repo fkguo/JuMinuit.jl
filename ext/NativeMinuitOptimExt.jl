@@ -258,7 +258,7 @@ function _writeback!(m::Minuit, params, free_idx::Vector{Int},
                                        lower = p.lower, upper = p.upper,
                                        fixed = p.fixed)
     end
-    params_opt = Parameters(new_pars, m.prec)
+    params_opt = Parameters(new_pars, params)
 
     # Reuse the canonical bounded-MIGRAD construction, seeded at the optimum.
     # `m.cfwg` carries the analytical gradient when `grad=` was supplied; the

@@ -187,8 +187,9 @@ function _point_function_minimum(cf::CostFunction, params::Parameters,
     fmin_int = FunctionMinimum(state, state, cf.up; is_valid = true)
 
     n_total = n_pars(params)
-    ext_values     = Vector{Float64}(undef, n_total)
-    ext_errors_vec = zeros(Float64, n_total)
+    ext_values     = similar(params.prototype, Float64)
+    ext_errors_vec = similar(params.prototype, Float64)
+    fill!(ext_errors_vec, 0.0)
     @inbounds for ext_idx in 1:n_total
         par = params.pars[ext_idx]
         int_idx = params.int_of_ext[ext_idx]

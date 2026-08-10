@@ -540,8 +540,9 @@ function simplex(
     #       extracted by the simplex), just not via a fake inverse
     #       Hessian. Review BLOCKING #1.
     n_total = n_pars(params)
-    ext_values     = Vector{Float64}(undef, n_total)
-    ext_errors_vec = zeros(Float64, n_total)
+    ext_values     = similar(params.prototype, Float64)
+    ext_errors_vec = similar(params.prototype, Float64)
+    fill!(ext_errors_vec, 0.0)
     int_x      = fmin_int.state.parameters.x
     int_dirin  = fmin_int.state.parameters.dirin
     @inbounds for ext_idx in 1:n_total

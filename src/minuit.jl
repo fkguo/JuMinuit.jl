@@ -60,12 +60,11 @@ methods plus iminuit-style property access.
 
 # Arguments
 
-- `fcn` — the user function `f(x::AbstractVector) -> Real`. Optional package
-  extensions may preserve a structured `x0` at this callback boundary.
+- `fcn` — the user function `f(x::AbstractVector) -> Real`.
 - `x0::AbstractVector{<:Real}` — initial parameter values (external). A
-  `ComponentVector` is restored as a zero-copy labeled view for each objective
-  and user-gradient call when ComponentArrays.jl is loaded; the numerical core
-  continues to use flat `Vector{Float64}` workspaces.
+  structured vector container is preserved for objective and user-gradient
+  calls through ordinary `similar` allocation. The numerical core's reduced
+  internal coordinates remain flat `Vector{Float64}` workspaces.
 
 # Keyword arguments
 
@@ -114,28 +113,7 @@ methods plus iminuit-style property access.
 - `m.fmin` — the underlying `BoundedFunctionMinimum` (`nothing`
   before `migrad!`).
 """
-# A fit frontend keeps the user's external parameter representation separate
-# from Minuit's flat numerical coordinate spaces. The adapter is a concrete
-# type parameter of `Minuit`, so restoring structured callback arguments and
-# result views dispatches without an `Any` field or runtime type test.
-abstract type AbstractParameterAdapter end
-
-struct FlatParameterAdapter <: AbstractParameterAdapter end
-
-_parameter_adapter(::AbstractVector) = FlatParameterAdapter()
-_restore_parameters(::FlatParameterAdapter, x::AbstractVector) = x
-_adapt_parameter_view(::FlatParameterAdapter, view::AbstractVector) = view
-
-function _adapt_callbacks(adapter::AbstractParameterAdapter, fcn, grad)
-    restore = x -> _restore_parameters(adapter, x)
-    adapted_fcn = x -> fcn(restore(x))
-    adapted_grad = grad === nothing ? nothing : x -> grad(restore(x))
-    return adapted_fcn, adapted_grad
-end
-
-_adapt_callbacks(::FlatParameterAdapter, fcn, grad) = (fcn, grad)
-
-mutable struct Minuit{A<:AbstractParameterAdapter} <: AbstractFit
+mutable struct Minuit <: AbstractFit
     # Phase F: was concretely `::CostFunction`. Now `::AbstractCostFunction`
     # so users can construct `Minuit(fcn, x0; grad=g, ...)` and have the
     # AD gradient survive the bounded MIGRAD → MINOS / contour chain.
@@ -186,26 +164,20 @@ mutable struct Minuit{A<:AbstractParameterAdapter} <: AbstractFit
     # bare closure with no associated dataset; auto-populated by `model_fit`
     # from `Data.ndata`, and settable directly via `m.ndata = N`.
     ndata::Union{Int,Nothing}
-    # Typed description of the user's external parameter container. The flat
-    # adapter is a no-op; optional package extensions retain structure (such as
-    # ComponentArray axes) here while the numerical core remains vector-based.
-    parameter_adapter::A
     # Memoized `:auto` thread-safety probe result (`nothing` = not yet probed).
     # Computed once on first use by `_use_threads(m)` and reused by every later
     # gradient / MINOS / contour evaluation, so the probe never re-runs.
     _auto_threads::Base.RefValue{Union{Nothing,Bool}}
     # Inner constructor: defaults `_auto_threads` to an unprobed Ref so the
-    # 14-positional-arg construction used by the keyword constructors keeps
+    # 13-positional-arg construction used by the keyword constructors keeps
     # working unchanged (defining any inner ctor suppresses the auto-generated
     # all-field one).
     function Minuit(fcn, params, fmin, minos_errors, prec, cfwg, strategy,
                     tol, print_level, threaded_gradient, verify_threading,
-                    n_passes, ndata,
-                    parameter_adapter::A) where {A<:AbstractParameterAdapter}
-        return new{A}(fcn, params, fmin, minos_errors, prec, cfwg, strategy,
-                      tol, print_level, threaded_gradient, verify_threading,
-                      n_passes, ndata, parameter_adapter,
-                      Ref{Union{Nothing,Bool}}(nothing))
+                    n_passes, ndata)
+        return new(fcn, params, fmin, minos_errors, prec, cfwg, strategy, tol,
+                   print_level, threaded_gradient, verify_threading, n_passes,
+                   ndata, Ref{Union{Nothing,Bool}}(nothing))
     end
 end
 
@@ -291,14 +263,14 @@ function Minuit(
     fcn,
     x0::AbstractVector{<:Real};
     # IMinuit.jl / iminuit-compatible kwarg names (singular)
-    name::Union{Vector{<:AbstractString},Vector{Symbol},Nothing} = nothing,
-    error::Union{Vector{<:Real},Real,Nothing} = nothing,
+    name::Union{AbstractVector{<:AbstractString},AbstractVector{Symbol},Nothing} = nothing,
+    error::Union{AbstractVector{<:Real},Real,Nothing} = nothing,
     # NativeMinuit-native plural forms (kept for backward compat with
     # existing tests; aliased to the singular ones above)
-    names::Union{Vector{<:AbstractString},Nothing} = nothing,
-    errors::Union{Vector{<:Real},Nothing} = nothing,
-    limits::Union{Vector,Nothing} = nothing,
-    fixed::Union{Vector{Bool},Nothing} = nothing,
+    names::Union{AbstractVector{<:AbstractString},Nothing} = nothing,
+    errors::Union{AbstractVector{<:Real},Nothing} = nothing,
+    limits::Union{AbstractVector,Nothing} = nothing,
+    fixed::Union{AbstractVector{Bool},Nothing} = nothing,
     up::Real = 1.0,
     errordef::Union{Real,Nothing} = nothing,  # iminuit alias for `up`
     prec::MachinePrecision = MachinePrecision(),
@@ -355,8 +327,6 @@ function Minuit(
     kwargs...,
 )
     n = length(x0)
-    parameter_adapter = _parameter_adapter(x0)
-    adapted_fcn, adapted_grad = _adapt_callbacks(parameter_adapter, fcn, grad)
 
     # Resolve names: singular > plural > default
     nm = if name !== nothing
@@ -428,22 +398,22 @@ function Minuit(
         end
         limit_tuples[i] = (lo_i, up_i)
     end
-    params = Parameters(nm, Float64.(x0), er_vec;
+    params = Parameters(nm, x0, er_vec;
                          limits = limit_tuples, fixed = fx_vec,
                          prec = prec)
-    cf = CostFunction(adapted_fcn, up_resolved)
+    cf = CostFunction(fcn, up_resolved)
     # Build cached CFwG when grad provided — share the nfcn (and P6
     # n_nonfinite) Refs so call counts are consistent across both views
     # into the user FCN.
-    cfwg = adapted_grad === nothing ? nothing :
-        CostFunctionWithGradient(adapted_fcn, adapted_grad, up_resolved,
-                                 cf.nfcn, Ref(0), cf.n_nonfinite;
+    cfwg = grad === nothing ? nothing :
+        CostFunctionWithGradient(fcn, grad, up_resolved, cf.nfcn, Ref(0),
+                                 cf.n_nonfinite;
                                  check_gradient = check_gradient)
     strat = strategy isa Strategy ? strategy : Strategy(Int(strategy))
     return Minuit(cf, params, nothing, Dict{Int,MinosError}(), prec,
                   cfwg, strat, Float64(tol), Int(print_level),
                   _check_threaded_gradient(threaded_gradient),
-                  Bool(verify_threading), 0, nothing, parameter_adapter)
+                  Bool(verify_threading), 0, nothing)
 end
 
 # IMinuit.jl-style: named-parameter constructor where each parameter
@@ -525,8 +495,9 @@ function Minuit(fcn, m::Minuit; kwargs...)
     # Names/steps/bounds come from the raw config (`m.fmin` already supplies the
     # fitted value/error vectors directly); avoids rebuilding the fit overlay.
     cfg = _init_params(m)
-    x0_flat = m.fmin === nothing ? [p.value for p in cfg.pars] : m.fmin.ext_values
-    x0 = _restore_parameters(getfield(m, :parameter_adapter), x0_flat)
+    x0 = copy(cfg.prototype)
+    x0_source = m.fmin === nothing ? [p.value for p in cfg.pars] : m.fmin.ext_values
+    copyto!(x0, x0_source)
     nm = [p.name for p in cfg.pars]
     er = m.fmin === nothing ? [p.error for p in cfg.pars] : m.fmin.ext_errors
     fx = [is_fixed(p) for p in cfg.pars]
@@ -877,7 +848,7 @@ function _retry_scaled_params(m::Minuit, params_next::Parameters,
                                        lower = p.lower, upper = p.upper,
                                        fixed = p.fixed)
     end
-    return Parameters(new_pars, m.prec)
+    return Parameters(new_pars, params_next)
 end
 
 # True once the (external-coordinate) perturbation has spanned the physical
@@ -1007,7 +978,7 @@ function _build_resume_params(m::Minuit, bfm::BoundedFunctionMinimum;
                                        upper = p_old.upper,
                                        fixed = p_old.fixed)
     end
-    return Parameters(new_pars, m.prec)
+    return Parameters(new_pars, cfg)
 end
 
 _build_resume_params(m::Minuit; kwargs...) = _build_resume_params(m, m.fmin; kwargs...)
@@ -1587,14 +1558,12 @@ function _fit_overlaid_params(cfg::Parameters, bfm::BoundedFunctionMinimum)
         new_pars[i] = MinuitParameter(p.name, bfm.ext_values[i], bfm.ext_errors[i],
                                       p.lower, p.upper, p.fixed)
     end
-    return Parameters(new_pars, cfg.ext_of_int, cfg.int_of_ext,
-                      cfg.name_to_ext, cfg.prec)
+    return Parameters(new_pars, cfg)
 end
 
 function Base.getproperty(m::Minuit, name::Symbol)
     if name === :values
-        view = ParameterView(m, :values)
-        return _adapt_parameter_view(getfield(m, :parameter_adapter), view)
+        return ParameterView(m, :values)
     elseif name === :params
         # iminuit parity (issue #38): reflect the fit when one is cached, so
         # `m.params.pars[i].value/.error` agree with `m.values`/`m.errors`.
@@ -1603,8 +1572,7 @@ function Base.getproperty(m::Minuit, name::Symbol)
         fmin = getfield(m, :fmin)
         return fmin === nothing ? cfg : _fit_overlaid_params(cfg, fmin)
     elseif name === :errors
-        view = ParameterView(m, :errors)
-        return _adapt_parameter_view(getfield(m, :parameter_adapter), view)
+        return ParameterView(m, :errors)
     elseif name === :fval
         return m.fmin === nothing ? NaN : fval(m.fmin)
     elseif name === :edm
@@ -1753,7 +1721,7 @@ end
 # and drop any cached fit. Single atomic commit point — both
 # per-parameter and bulk setters land here.
 function _replace_all_params!(m::Minuit, new_pars::Vector{MinuitParameter})
-    setfield!(m, :params, Parameters(new_pars, m.prec))
+    setfield!(m, :params, Parameters(new_pars, _init_params(m)))
     setfield!(m, :fmin, nothing)
     empty!(m.minos_errors)
     return m

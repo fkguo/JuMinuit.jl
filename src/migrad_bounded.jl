@@ -35,10 +35,10 @@ Result of bounded `migrad(cf, params)`. Wraps the internal
 
 - `internal::FunctionMinimum` — the MIGRAD result in internal coords.
 - `params::Parameters` — the parameter metadata (bounds, fixed flags).
-- `ext_values::Vector{Float64}` — final external parameter values
+- `ext_values::AbstractVector{Float64}` — final external parameter values
   (length = total `n_pars`, including fixed parameters at their
   initial values).
-- `ext_errors::Vector{Float64}` — final external 1σ errors via
+- `ext_errors::AbstractVector{Float64}` — final external 1σ errors via
   Jacobian chain rule (length = `n_pars`; fixed params have 0).
 - `ext_covariance::Union{Nothing,Matrix{Float64}}` — full
   `n_pars × n_pars` external covariance matrix (or `nothing` if
@@ -49,11 +49,14 @@ Result of bounded `migrad(cf, params)`. Wraps the internal
   the user's external `cf` there would leak coordinate frames
   (parallel-review #4 A7/B4 blocking).
 """
-struct BoundedFunctionMinimum
+struct BoundedFunctionMinimum{
+    V<:AbstractVector{Float64},
+    E<:AbstractVector{Float64},
+}
     internal::FunctionMinimum
     params::Parameters
-    ext_values::Vector{Float64}
-    ext_errors::Vector{Float64}
+    ext_values::V
+    ext_errors::E
     ext_covariance::Union{Nothing,Matrix{Float64}}
     # Phase F: was concretely `CostFunction`. Now `AbstractCostFunction`
     # so the AD gradient survives MIGRAD → MINOS / contour transitions
@@ -73,7 +76,7 @@ is_valid(m::BoundedFunctionMinimum) = m.internal.is_valid
 Base.values(m::BoundedFunctionMinimum) = m.ext_values
 
 """
-    ext_errors(m::BoundedFunctionMinimum) -> Vector{Float64}
+    ext_errors(m::BoundedFunctionMinimum) -> AbstractVector{Float64}
 
 External-coordinate 1σ errors via Jacobian chain rule.
 """
@@ -130,7 +133,7 @@ function _wrap_fcn_internal_to_external(cf::CostFunction, params::Parameters)
     # threads touch distinct buffers (no race). Single-threaded Julia →
     # one buffer, zero overhead.
     nbuf = max(1, Threads.maxthreadid())
-    ext_bufs = [Vector{Float64}(undef, n_pars(p_ref)) for _ in 1:nbuf]
+    ext_bufs = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
     # Skip the `collect(Float64, int_vec)` allocation; int_to_ext_vector!
     # accepts any AbstractVector<:Real (parallel-review #4 D6).
     wrapped = let ext_bufs = ext_bufs, p_ref = p_ref, f = f
@@ -165,8 +168,8 @@ function _wrap_fcn_internal_to_external(cf::CostFunctionWithGradient,
     # allocated — only the int→ext transform is buffered here (scope:
     # this perf change is the ext-vector reuse alone).
     nbuf = max(1, Threads.maxthreadid())
-    ext_bufs_f = [Vector{Float64}(undef, n_pars(p_ref)) for _ in 1:nbuf]
-    ext_bufs_g = [Vector{Float64}(undef, n_pars(p_ref)) for _ in 1:nbuf]
+    ext_bufs_f = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
+    ext_bufs_g = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
     wrapped_f = let ext_bufs_f = ext_bufs_f, p_ref = p_ref, f = f
         function (int_vec::AbstractVector{<:Real})
             ext_full = int_to_ext_vector!(ext_bufs_f[Threads.threadid()], p_ref, int_vec)
@@ -235,8 +238,9 @@ function _internal_to_external_results(
     n_active = n_free(params)
     int_x    = fmin_int.state.parameters.x
 
-    ext_values     = Vector{Float64}(undef, n_total)
-    ext_errors_vec = zeros(Float64, n_total)
+    ext_values     = similar(params.prototype, Float64)
+    ext_errors_vec = similar(params.prototype, Float64)
+    fill!(ext_errors_vec, 0.0)
     ext_cov_mat    = nothing
 
     # Build the full external parameter vector (fixed params keep
