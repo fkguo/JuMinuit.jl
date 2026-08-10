@@ -34,6 +34,7 @@ using Test
     include("test_contours.jl")
     include("test_migrad_bounded.jl")
     include("test_minuit.jl")
+    include("test_componentarrays_ext.jl")
     include("test_display.jl")
     include("test_minuit_mutators.jl")
     include("test_param_views.jl")
