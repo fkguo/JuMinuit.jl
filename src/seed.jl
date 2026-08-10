@@ -117,8 +117,9 @@ function seed_state(
 
     # MinimumParameters with explicit step sizes (so the cold-start
     # numerical_gradient can use them via has_step_size).
-    x = collect(Float64, x0)
-    dirin = collect(Float64, errs)
+    x = _float_vector_like(x0)
+    dirin = similar(x, Float64)
+    copyto!(dirin, errs)
     fval = cf(x)
     par = MinimumParameters(x, dirin, fval)
 
@@ -127,10 +128,10 @@ function seed_state(
     # refinement (numerical_gradient! does `copyto!(out, prev)` internally,
     # so out === prev is a safe no-op self-copy followed by in-place refine).
     # Saves 3 vector allocations vs. the two-stage allocating wrapper.
-    grad = FunctionGradient(zeros(Float64, n), zeros(Float64, n),
-                             zeros(Float64, n))
+    grad = FunctionGradient(_zero_vector_like(x), _zero_vector_like(x),
+                            _zero_vector_like(x))
     initial_gradient!(grad, par, dirin, cf.up, prec)
-    x_work = Vector{Float64}(undef, n)
+    x_work = similar(x, Float64)
     numerical_gradient!(grad, x_work, par, grad, cf, strategy, prec)
 
     # M5: user-supplied covariance branch. Mirrors C++
@@ -276,7 +277,7 @@ function warm_restart_state(
                       _validate_and_copy_prior_cov(prior_cov, n)
 
     # 1. Re-evaluate new_cf at the warm position.
-    x_warm = collect(Float64, prev.parameters.x)
+    x_warm = _float_vector_like(prev.parameters.x)
     fval_new = new_cf(x_warm)
 
     # 2. Build new MinimumParameters. Preserve prev's `has_step_size`
@@ -296,9 +297,10 @@ function warm_restart_state(
     # share buffers with us — this is per-probe scratch, ~few cache
     # lines). numerical_gradient! seeds itself from `prev.gradient` via
     # the copyto! at the top of that function, so we just pass prev in.
-    grad_new = FunctionGradient(zeros(Float64, n), zeros(Float64, n),
-                                  zeros(Float64, n))
-    x_work = Vector{Float64}(undef, n)
+    grad_new = FunctionGradient(_zero_vector_like(x_warm),
+                                _zero_vector_like(x_warm),
+                                _zero_vector_like(x_warm))
+    x_work = similar(x_warm, Float64)
     numerical_gradient!(grad_new, x_work, par_new, prev.gradient,
                          new_cf, strategy, prec)
 

@@ -495,8 +495,8 @@ function Minuit(fcn, m::Minuit; kwargs...)
     # Names/steps/bounds come from the raw config (`m.fmin` already supplies the
     # fitted value/error vectors directly); avoids rebuilding the fit overlay.
     cfg = _init_params(m)
-    x0 = copy(cfg.prototype)
-    x0_source = m.fmin === nothing ? [p.value for p in cfg.pars] : m.fmin.ext_values
+    x0 = copy(cfg.values)
+    x0_source = m.fmin === nothing ? cfg.values : m.fmin.ext_values
     copyto!(x0, x0_source)
     nm = [p.name for p in cfg.pars]
     er = m.fmin === nothing ? [p.error for p in cfg.pars] : m.fmin.ext_errors

@@ -6,6 +6,18 @@ using ComponentArrays
     start = ComponentArray(a = 0.0, b = 0.0)
     expected_axes = ComponentArrays.getaxes(start)
 
+    @testset "active vector is the low-level state" begin
+        objective(p) = (p.a - 1.0)^2 + (p.b - 2.0)^2
+        result = @inferred migrad(objective, start, [0.1, 0.1])
+
+        @test result.state.parameters.x isa ComponentVector
+        @test result.state.gradient.grad isa ComponentVector
+        @test ComponentArrays.getaxes(result.state.parameters.x) == expected_axes
+        @test ComponentArrays.getaxes(result.state.gradient.grad) == expected_axes
+        @test values(result).a ≈ 1.0 atol = 1e-4
+        @test values(result).b ≈ 2.0 atol = 1e-4
+    end
+
     @testset "objective receives the original axes" begin
         saw_axes = Ref(false)
         objective(p) = begin
@@ -19,13 +31,15 @@ using ComponentArrays
         # retained directly, while full external workspaces follow x0's
         # ordinary `similar` behavior.
         @test m.fcn.f === objective
-        @test m.params.prototype isa ComponentVector
+        @test m.params.values isa ComponentVector
         @test NativeMinuit.int_to_ext_vector(
             m.params, NativeMinuit.initial_int_values(m.params)) isa ComponentVector
 
         migrad!(m)
         @test saw_axes[]
         @test m.valid
+        @test m.fmin.internal.state.parameters.x isa ComponentVector
+        @test ComponentArrays.getaxes(m.fmin.internal.state.parameters.x) == expected_axes
         @test m.values[1] ≈ 1.0 atol = 1e-4
         @test m.values[2] ≈ 2.0 atol = 1e-4
         @test m.fmin.ext_values isa ComponentVector
@@ -36,16 +50,16 @@ using ComponentArrays
         @test ComponentArrays.getaxes(m.fmin.ext_errors) == expected_axes
 
         # Copy construction keeps the external container through the same
-        # generic prototype path.
+        # generic active-vector path.
         m_copy = Minuit(objective, m)
         migrad!(m_copy)
         @test m_copy.fmin.ext_values isa ComponentVector
         @test ComponentArrays.getaxes(m_copy.fmin.ext_values) == expected_axes
 
         # Parameter mutation rebuilds metadata without discarding the external
-        # container prototype.
+        # active vector container.
         set_value!(m_copy, 1, 0.5)
-        @test m_copy.params.prototype isa ComponentVector
+        @test m_copy.params.values isa ComponentVector
         migrad!(m_copy)
         @test m_copy.valid
 

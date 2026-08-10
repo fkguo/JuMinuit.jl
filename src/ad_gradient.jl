@@ -264,12 +264,13 @@ function analytical_gradient(
     strategy::Strategy = Strategy(0),
     prec::MachinePrecision = MachinePrecision(),
 )
-    n = length(par)
     has_step_size(par) ||
         throw(ArgumentError("analytical_gradient(par, cf) cold-start needs par with step sizes"))
     # Seed g2 + gstep using the same convention as numerical cold-start
     seed = initial_gradient(par, par.dirin, cf)
-    out = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    out = FunctionGradient(_zero_vector_like(par.x),
+                           _zero_vector_like(par.x),
+                           _zero_vector_like(par.x))
     return analytical_gradient!(out, par, cf, seed, prec)
 end
 
@@ -281,8 +282,9 @@ function initial_gradient(par::MinimumParameters,
                            errs::AbstractVector{Float64},
                            cf::CostFunctionWithGradient,
                            prec::MachinePrecision = MachinePrecision())
-    n = length(par)
-    out = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    out = FunctionGradient(_zero_vector_like(par.x),
+                           _zero_vector_like(par.x),
+                           _zero_vector_like(par.x))
     initial_gradient!(out, par, errs, cf.up, prec)
     return out
 end
@@ -371,8 +373,9 @@ function seed_state(
     # high-level `Minuit(fcn, x0; grad=g)` default to `Strategy(1)` —
     # iminuit `Minuit`-class parity — instead of falling back to level 0.
 
-    x = collect(Float64, x0)
-    dirin = collect(Float64, errs)
+    x = _float_vector_like(x0)
+    dirin = similar(x, Float64)
+    copyto!(dirin, errs)
     fval = cf(x)
     par = MinimumParameters(x, dirin, fval)
 
@@ -403,7 +406,7 @@ function seed_state(
         err = MinimumError(Symmetric(_validate_and_copy_prior_cov(prior_cov, n_total), :U), 0.0)
     end
     # In-place EDM avoids the BLAS internal temporary in `dot(g, V, g)`.
-    edm_val = estimate_edm!(Vector{Float64}(undef, n_total), grad, err)
+    edm_val = estimate_edm!(similar(x, Float64), grad, err)
     state = MinimumState(par, err, grad, edm_val, ncalls(cf))
 
     # Unconditional negative_g2 check (Opus blocking #2 from review #1)

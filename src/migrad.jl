@@ -63,40 +63,43 @@ Same contract as `_fix_one_param` / `_fix_multi_params`: the scratch
 struct's buffers are NOT re-entrant. Pass distinct scratches across
 threads if you ever run parallel `_migrad_loop` calls.
 """
-mutable struct MigradScratch
+mutable struct MigradScratch{V<:AbstractVector{Float64}}
     n::Int
-    step::Vector{Float64}
-    ls_work::Vector{Float64}
-    grad_work::Vector{Float64}
-    vg_work::Vector{Float64}
+    step::V
+    ls_work::V
+    grad_work::V
+    vg_work::V
     vUpd_work::Symmetric{Float64,Matrix{Float64}}
-    dx_buf::Vector{Float64}
-    dg_buf::Vector{Float64}
-    x_a::Vector{Float64};  x_b::Vector{Float64}
-    g_a::Vector{Float64};  g_b::Vector{Float64}
-    g2_a::Vector{Float64}; g2_b::Vector{Float64}
-    gs_a::Vector{Float64}; gs_b::Vector{Float64}
+    dx_buf::V
+    dg_buf::V
+    x_a::V;  x_b::V
+    g_a::V;  g_b::V
+    g2_a::V; g2_b::V
+    gs_a::V; gs_b::V
     V_a::Symmetric{Float64,Matrix{Float64}}
     V_b::Symmetric{Float64,Matrix{Float64}}
 end
 
-function MigradScratch(n::Integer)
-    n_ = Int(n)
+MigradScratch(n::Integer) = MigradScratch(Vector{Float64}(undef, Int(n)))
+
+function MigradScratch(active::AbstractVector{Float64})
+    n_ = length(active)
     n_ >= 1 ||
         throw(ArgumentError("MigradScratch n must be ≥ 1, got $n_"))
+    makevec() = similar(active, Float64)
     MigradScratch(
         n_,
-        Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_),
+        makevec(),
+        makevec(),
+        makevec(),
+        makevec(),
         Symmetric(Matrix{Float64}(undef, n_, n_), :U),
-        Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_), Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_), Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_), Vector{Float64}(undef, n_),
-        Vector{Float64}(undef, n_), Vector{Float64}(undef, n_),
+        makevec(),
+        makevec(),
+        makevec(), makevec(),
+        makevec(), makevec(),
+        makevec(), makevec(),
+        makevec(), makevec(),
         Symmetric(Matrix{Float64}(undef, n_, n_), :U),
         Symmetric(Matrix{Float64}(undef, n_, n_), :U),
     )
@@ -112,14 +115,18 @@ across probes of the same inner dimension while still handling
 dimension changes (MINOS n-1 → axis n-1 → ray n-2).
 """
 @inline function _get_scratch!(
-    holder::Base.RefValue{Union{Nothing,MigradScratch}},
+    holder::Base.RefValue{T},
     n::Integer,
-)
+) where {T<:Union{Nothing,MigradScratch}}
     s = holder[]
     if s === nothing || s.n != Int(n)
         holder[] = MigradScratch(n)
     end
-    return holder[]::MigradScratch
+    # The dimension-only pool is intentionally the dense-vector path used by
+    # reduced-coordinate MINOS/contour probes. Keep the concrete return type so
+    # parameterizing `MigradScratch` does not make these hot callers infer an
+    # existential `MigradScratch` and box every buffer access.
+    return holder[]::MigradScratch{Vector{Float64}}
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,8 +182,11 @@ function _verify_thread_safety(cf, seed::MinimumState, strategy::Strategy,
 
     # Seed buffers for `numerical_gradient!` from the seed's existing
     # gradient (so step refinement starts at the same point in both runs).
-    grad_seq = FunctionGradient(zeros(n), zeros(n), zeros(n))
-    grad_par = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    x = seed.parameters.x
+    grad_seq = FunctionGradient(_zero_vector_like(x), _zero_vector_like(x),
+                                _zero_vector_like(x))
+    grad_par = FunctionGradient(_zero_vector_like(x), _zero_vector_like(x),
+                                _zero_vector_like(x))
 
     x_work_seq = similar(seed.parameters.x)
     x_work_par = similar(seed.parameters.x)
@@ -710,12 +720,16 @@ function _migrad_loop(
     # the upper-triangle authoritative semantics. So `undef` everywhere
     # is safe and saves one n² zero-fill per buffer at construction.
     # ─────────────────────────────────────────────────────────────────────
-    if scratch !== nothing && scratch.n != n
-        throw(DimensionMismatch(
+    if scratch !== nothing
+        scratch.n == n || throw(DimensionMismatch(
             "MigradScratch.n=$(scratch.n) ≠ seed dim $n; the driver " *
             "should call `_get_scratch!(holder, n)` before `_migrad_loop`."))
+        typeof(scratch.step) === typeof(seed.parameters.x) || throw(ArgumentError(
+            "MigradScratch container $(typeof(scratch.step)) does not match " *
+            "the active container $(typeof(seed.parameters.x)); construct it " *
+            "from the active vector."))
     end
-    s_eff = scratch === nothing ? MigradScratch(n) : scratch
+    s_eff = scratch === nothing ? MigradScratch(seed.parameters.x) : scratch
     step      = s_eff.step
     ls_work   = s_eff.ls_work
     grad_work = s_eff.grad_work

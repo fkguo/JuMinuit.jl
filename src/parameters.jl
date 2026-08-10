@@ -72,7 +72,7 @@ is_fixed(p::MinuitParameter) = p.fixed
     Parameters
 
 Collection of `MinuitParameter`s plus internal/external index mappings,
-precision context, and an external-coordinate array prototype. Replaces the
+precision context, and the active external-coordinate values. Replaces the
 tightly-coupled C++ pair `MnUserParameters` + `MnUserTransformation`.
 
 # Fields
@@ -84,30 +84,30 @@ tightly-coupled C++ pair `MnUserParameters` + `MnUserTransformation`.
   `0` if the external parameter is fixed. Length = total parameters.
 - `name_to_ext::Dict{String,Int}` — name → external index (1-based).
 - `prec::MachinePrecision` — used for `ext2int` clamping in Sin transform.
-- `prototype::AbstractVector{Float64}` — preserves the concrete container of
-  the initial external values. Full external-coordinate workspaces and results
-  are allocated with `similar(prototype)`; reduced internal coordinates remain
-  ordinary vectors.
+- `values::AbstractVector{Float64}` — active initial external values. This is
+  also the allocation source for coordinate workspaces, so structured vector
+  axes survive through ordinary `similar(values)` operations. `pars[i].value`
+  mirrors this field for compatibility with the public `MinuitParameter` API.
 
 The mappings are computed once at construction; they don't change as
 parameters are fixed/released (would require rebuilding).
 """
-struct Parameters{P<:AbstractVector{Float64}}
+struct Parameters{P<:AbstractVector{Float64},AllFree}
     pars::Vector{MinuitParameter}
     ext_of_int::Vector{Int}
     int_of_ext::Vector{Int}
     name_to_ext::Dict{String,Int}
     prec::MachinePrecision
-    prototype::P
+    values::P
 end
 
 function Parameters(pars::Vector{MinuitParameter},
                      prec::MachinePrecision = MachinePrecision();
-                     prototype::AbstractVector = [p.value for p in pars])
+                     values::AbstractVector = [p.value for p in pars])
     n = length(pars)
-    length(prototype) == n ||
+    length(values) == n ||
         throw(DimensionMismatch(
-            "prototype length $(length(prototype)) != parameter length $n"))
+            "values length $(length(values)) != parameter length $n"))
     ext_of_int = Int[]
     int_of_ext = Vector{Int}(undef, n)
     name_to_ext = Dict{String,Int}()
@@ -125,15 +125,16 @@ function Parameters(pars::Vector{MinuitParameter},
             int_of_ext[ext_idx] = int_idx
         end
     end
-    external = similar(prototype, Float64)
+    external = similar(values, Float64)
     @inbounds for i in 1:n
         external[i] = pars[i].value
     end
-    return Parameters(pars, ext_of_int, int_of_ext, name_to_ext, prec, external)
+    return Parameters{typeof(external),int_idx == n}(
+        pars, ext_of_int, int_of_ext, name_to_ext, prec, external)
 end
 
 Parameters(pars::Vector{MinuitParameter}, source::Parameters) =
-    Parameters(pars, source.prec; prototype = source.prototype)
+    Parameters(pars, source.prec; values = source.values)
 
 """
     Parameters(names, values, errors;
@@ -168,7 +169,7 @@ function Parameters(
                                    Float64(errors[i]);
                                    lower = lo, upper = up, fixed = fx)
     end
-    return Parameters(pars, prec; prototype = values)
+    return Parameters(pars, prec; values = values)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,7 +252,7 @@ function int_to_ext_vector!(ext::AbstractVector{<:Real}, p::Parameters,
     @inbounds for ext_idx in 1:n_pars(p)
         par = p.pars[ext_idx]
         if par.fixed
-            ext[ext_idx] = par.value
+            ext[ext_idx] = p.values[ext_idx]
         else
             int_idx = p.int_of_ext[ext_idx]
             ext[ext_idx] = int_to_ext_value(p, int_idx, int_vec[int_idx])
@@ -272,7 +273,7 @@ Allocates a fresh result; see [`int_to_ext_vector!`](@ref) for the
 in-place, buffer-reusing variant used on the per-FCN-call hot path.
 """
 int_to_ext_vector(p::Parameters, int_vec::AbstractVector{<:Real}) =
-    int_to_ext_vector!(similar(p.prototype, Float64), p, int_vec)
+    int_to_ext_vector!(similar(p.values, Float64), p, int_vec)
 
 """
     ext_to_int_vector(p, ext_vec) -> Vector{Float64}
@@ -302,11 +303,12 @@ Compute the initial internal (unbounded) values of all FREE parameters,
 applying ext2int on the user-supplied initial values.
 """
 function initial_int_values(p::Parameters)
-    int = Vector{Float64}(undef, n_free(p))
+    int = _internal_vector(p)
     @inbounds for int_idx in 1:n_free(p)
         ext_idx = p.ext_of_int[int_idx]
         par = p.pars[ext_idx]
-        int[int_idx] = ext2int(bound_kind(par), par.value, par.lower, par.upper, p.prec)
+        int[int_idx] = ext2int(bound_kind(par), p.values[ext_idx],
+                              par.lower, par.upper, p.prec)
     end
     return int
 end
@@ -335,7 +337,7 @@ the C++ two-sided formula clamps gracefully (parallel-review #2 B4).
 """
 function initial_int_errors(p::Parameters)
     int_vals = initial_int_values(p)
-    errs = Vector{Float64}(undef, n_free(p))
+    errs = _internal_vector(p)
     eps2 = p.prec.eps2
     @inbounds for int_idx in 1:n_free(p)
         ext_idx = p.ext_of_int[int_idx]
@@ -374,3 +376,10 @@ function initial_int_errors(p::Parameters)
     end
     return errs
 end
+
+# Container choice is encoded in `Parameters`' second type parameter. This
+# makes the common all-free path infer a structured active vector, while a
+# fixed-parameter projection has an honestly different dense-vector type.
+_internal_vector(p::Parameters{P,true}) where {P} = similar(p.values, Float64)
+_internal_vector(p::Parameters{P,false}) where {P} =
+    Vector{Float64}(undef, n_free(p))

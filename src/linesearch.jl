@@ -92,7 +92,7 @@ Mirrors `MnLineSearch::operator()` from
 
 # Performance
 
-The inner loop reuses a single `work_x::Vector{Float64}` to assemble
+The inner loop reuses a single `work_x::AbstractVector{Float64}` to assemble
 `par.x + slam·step` for each FCN call. With a Float64-returning user
 FCN, no heap allocation per iteration of the line search itself.
 """
@@ -102,7 +102,7 @@ function line_search(
     step::AbstractVector{Float64},
     gdel::Real,
     prec::MachinePrecision = MachinePrecision();
-    work_x::Union{Nothing,Vector{Float64}} = nothing,
+    work_x::Union{Nothing,AbstractVector{Float64}} = nothing,
 )
     n = length(par)
     length(step) == n ||

@@ -44,15 +44,15 @@ Mirror of `MinimumParameters` from
 
 Holds the current parameter vector, the per-parameter step size vector,
 the function value, and validity/step-size flags. **Immutable wrapper**
-— the `Vector{Float64}` fields are heap-allocated arrays shared by
+— the concrete `AbstractVector{Float64}` fields are arrays shared by
 reference across iterations (cf. ROADMAP §2.2 "MinimumState as an
 immutable wrapper").
 
 # Fields
 
-- `x::Vector{Float64}` — current parameter values (internal coordinates
+- `x::AbstractVector{Float64}` — current parameter values (internal coordinates
   in Phase 1+ with bounds; raw user values in Phase 0).
-- `dirin::Vector{Float64}` — initial parameter step sizes (`x1 − x0`).
+- `dirin::AbstractVector{Float64}` — initial parameter step sizes (`x1 − x0`).
 - `fval::Float64` — function value at `x`.
 - `valid::Bool` — `false` if constructed without parameters (an
   invalid sentinel n-dimensional point); `true` otherwise.
@@ -66,9 +66,9 @@ immutable wrapper").
 - `MinimumParameters(x, fval)` — valid, no step size info.
 - `MinimumParameters(x, dirin, fval)` — fully valid.
 """
-struct MinimumParameters
-    x::Vector{Float64}
-    dirin::Vector{Float64}
+struct MinimumParameters{X<:AbstractVector{Float64},D<:AbstractVector{Float64}}
+    x::X
+    dirin::D
     fval::Float64
     valid::Bool
     has_step_size::Bool
@@ -78,11 +78,30 @@ function MinimumParameters(n::Integer, fval::Real = 0.0)
     MinimumParameters(zeros(Float64, n), zeros(Float64, n), Float64(fval), false, false)
 end
 
-function MinimumParameters(x::Vector{Float64}, fval::Real)
-    MinimumParameters(x, zeros(Float64, length(x)), Float64(fval), true, false)
+# Allocate coordinate workspaces from the active vector itself. Structured
+# AbstractVector implementations (for example ComponentVector) keep their axes
+# through their ordinary `similar` method; ranges and other immutable vectors
+# naturally return a mutable dense vector.
+function _float_vector_like(x::AbstractVector{<:Real})
+    out = similar(x, Float64)
+    copyto!(out, x)
+    return out
 end
 
-function MinimumParameters(x::Vector{Float64}, dirin::Vector{Float64}, fval::Real)
+function _zero_vector_like(x::AbstractVector)
+    out = similar(x, Float64)
+    fill!(out, 0.0)
+    return out
+end
+
+function MinimumParameters(x::AbstractVector{Float64}, fval::Real)
+    dirin = similar(x, Float64)
+    fill!(dirin, 0.0)
+    MinimumParameters(x, dirin, Float64(fval), true, false)
+end
+
+function MinimumParameters(x::AbstractVector{Float64},
+                           dirin::AbstractVector{Float64}, fval::Real)
     length(dirin) == length(x) ||
         throw(DimensionMismatch("dirin length $(length(dirin)) != x length $(length(x))"))
     MinimumParameters(x, dirin, Float64(fval), true, true)
@@ -105,9 +124,9 @@ Mirror of `FunctionGradient` from
 
 # Fields
 
-- `grad::Vector{Float64}` — first derivatives at the current point.
-- `g2::Vector{Float64}` — diagonal second derivatives (per-parameter).
-- `gstep::Vector{Float64}` — step size used for the central-difference
+- `grad::AbstractVector{Float64}` — first derivatives at the current point.
+- `g2::AbstractVector{Float64}` — diagonal second derivatives (per-parameter).
+- `gstep::AbstractVector{Float64}` — step size used for the central-difference
   numerical gradient at each parameter (used by `Numerical2P` to adapt
   step from iteration to iteration).
 - `analytical::Bool` — `true` if `grad` came from a user-supplied
@@ -116,10 +135,14 @@ Mirror of `FunctionGradient` from
 - `valid::Bool` — `false` if this is an invalid sentinel (default
   for the n-dimensional zero constructor).
 """
-struct FunctionGradient
-    grad::Vector{Float64}
-    g2::Vector{Float64}
-    gstep::Vector{Float64}
+struct FunctionGradient{
+    G<:AbstractVector{Float64},
+    G2<:AbstractVector{Float64},
+    S<:AbstractVector{Float64},
+}
+    grad::G
+    g2::G2
+    gstep::S
     analytical::Bool
     valid::Bool
 end
@@ -129,8 +152,9 @@ function FunctionGradient(n::Integer)
     FunctionGradient(z, copy(z), copy(z), false, false)
 end
 
-function FunctionGradient(grad::Vector{Float64}, g2::Vector{Float64},
-                          gstep::Vector{Float64}; analytical::Bool = false)
+function FunctionGradient(grad::AbstractVector{Float64},
+                          g2::AbstractVector{Float64},
+                          gstep::AbstractVector{Float64}; analytical::Bool = false)
     n = length(grad)
     (length(g2) == n && length(gstep) == n) ||
         throw(DimensionMismatch("FunctionGradient field lengths must agree: " *
@@ -267,10 +291,10 @@ costs ~5 pointer copies — never bulk data copies (ROADMAP §2.2).
 - `MinimumState(params, edm, nfcn)` — params, no gradient.
 - `MinimumState(params, err, grad, edm, nfcn)` — full MIGRAD state.
 """
-struct MinimumState
-    parameters::MinimumParameters
+struct MinimumState{P<:MinimumParameters,G<:FunctionGradient}
+    parameters::P
     error::MinimumError
-    gradient::FunctionGradient
+    gradient::G
     edm::Float64
     nfcn::Int
 end

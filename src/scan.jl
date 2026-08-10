@@ -125,7 +125,7 @@ function scan(
     is_fixed(par) &&
         throw(ArgumentError("Cannot scan fixed parameter `$par_idx`"))
 
-    x0 = [p.value for p in params.pars]
+    x0 = copy(params.values)
     errs = [p.error for p in params.pars]
 
     low_f, high_f = Float64(low), Float64(high)
@@ -137,8 +137,8 @@ function scan(
         if has_lower_limit(par) && has_upper_limit(par)
             low_f, high_f = par.lower, par.upper
         else
-            low_f  = par.value - 2.0 * abs(par.error)
-            high_f = par.value + 2.0 * abs(par.error)
+            low_f  = params.values[par_idx] - 2.0 * abs(par.error)
+            high_f = params.values[par_idx] + 2.0 * abs(par.error)
         end
     end
 
@@ -187,14 +187,14 @@ function _point_function_minimum(cf::CostFunction, params::Parameters,
     fmin_int = FunctionMinimum(state, state, cf.up; is_valid = true)
 
     n_total = n_pars(params)
-    ext_values     = similar(params.prototype, Float64)
-    ext_errors_vec = similar(params.prototype, Float64)
+    ext_values     = similar(params.values, Float64)
+    ext_errors_vec = similar(params.values, Float64)
     fill!(ext_errors_vec, 0.0)
     @inbounds for ext_idx in 1:n_total
         par = params.pars[ext_idx]
         int_idx = params.int_of_ext[ext_idx]
         if int_idx == 0
-            ext_values[ext_idx] = par.value
+            ext_values[ext_idx] = params.values[ext_idx]
         else
             ext_values[ext_idx] = int_to_ext_value(params, int_idx,
                                                     int_vals[int_idx])

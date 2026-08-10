@@ -54,9 +54,9 @@ M6 (GAP_AUDIT) — per-iteration history:
   per-iteration snapshots. Mirrors C++
   `BasicFunctionMinimum.h:109,165`.
 """
-struct FunctionMinimum
-    state::MinimumState
-    seed::MinimumState
+struct FunctionMinimum{S<:MinimumState,T<:MinimumState}
+    state::S
+    seed::T
     up::Float64
     is_valid::Bool
     reached_call_limit::Bool

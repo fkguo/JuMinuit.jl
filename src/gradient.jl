@@ -105,7 +105,7 @@ end
     initial_gradient(par, errs, cf, prec=MachinePrecision()) -> FunctionGradient
 
 Allocating convenience: returns a fresh `FunctionGradient` with the
-initial rough estimate. Allocates three `Vector{Float64}` of length `n`.
+initial rough estimate. Allocates three vectors with `similar(par.x)`.
 """
 function initial_gradient(
     par::MinimumParameters,
@@ -113,8 +113,9 @@ function initial_gradient(
     cf::CostFunction,
     prec::MachinePrecision = MachinePrecision(),
 )
-    n = length(par)
-    out = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    out = FunctionGradient(_zero_vector_like(par.x),
+                           _zero_vector_like(par.x),
+                           _zero_vector_like(par.x))
     initial_gradient!(out, par, errs, cf.up, prec)
     return out
 end
@@ -334,8 +335,9 @@ function numerical_gradient(
     strategy::Strategy,
     prec::MachinePrecision = MachinePrecision(),
 )
-    n = length(par)
-    out = FunctionGradient(zeros(n), zeros(n), zeros(n))
+    out = FunctionGradient(_zero_vector_like(par.x),
+                           _zero_vector_like(par.x),
+                           _zero_vector_like(par.x))
     x_work = similar(par.x)
     numerical_gradient!(out, x_work, par, prev, cf, strategy, prec)
     return out

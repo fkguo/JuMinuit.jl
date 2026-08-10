@@ -540,8 +540,8 @@ function simplex(
     #       extracted by the simplex), just not via a fake inverse
     #       Hessian. Review BLOCKING #1.
     n_total = n_pars(params)
-    ext_values     = similar(params.prototype, Float64)
-    ext_errors_vec = similar(params.prototype, Float64)
+    ext_values     = similar(params.values, Float64)
+    ext_errors_vec = similar(params.values, Float64)
     fill!(ext_errors_vec, 0.0)
     int_x      = fmin_int.state.parameters.x
     int_dirin  = fmin_int.state.parameters.dirin
@@ -549,7 +549,7 @@ function simplex(
         par = params.pars[ext_idx]
         int_idx = params.int_of_ext[ext_idx]
         if int_idx == 0
-            ext_values[ext_idx]     = par.value
+            ext_values[ext_idx]     = params.values[ext_idx]
             ext_errors_vec[ext_idx] = 0.0
         else
             ext_values[ext_idx] = int_to_ext_value(params, int_idx,

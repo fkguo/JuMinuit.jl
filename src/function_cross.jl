@@ -57,8 +57,8 @@ Result of `function_cross`. Mirrors C++ `MnCross`
   only; always `nothing` for unbounded `function_cross`, and `nothing`
   for invalid results). Used by [`MinosError`](@ref) M4 snapshot fields.
 """
-struct MnCross
-    state::MinimumState
+struct MnCross{S<:MinimumState}
+    state::S
     aopt::Float64
     nfcn::Int
     valid::Bool
@@ -909,8 +909,10 @@ function function_cross_multi(
     # construct one when the first probe needs it (kept in
     # scratch_holder so the inner-dim==0 degenerate path doesn't
     # allocate at all).
-    warm_state_ref = Ref{Union{Nothing,MinimumState}}(nothing)
-    scratch_holder = Ref{Union{Nothing,MigradScratch}}(scratch)
+    warm_state_ref = Ref{Union{Nothing,typeof(state)}}(nothing)
+    scratch_dense = scratch === nothing ? nothing :
+                    scratch::MigradScratch{Vector{Float64}}
+    scratch_holder = Ref{Union{Nothing,MigradScratch{Vector{Float64}}}}(scratch_dense)
     let pmid_f = pmid_f, pdir_f = pdir_f, npar = npar,
         warm_state_ref = warm_state_ref,
         scratch_holder = scratch_holder, n = n
@@ -1229,8 +1231,10 @@ function function_cross(
     # (codex C++-faithful interpretation) — never the original α=1
     # seed, so subsequent probes don't reset to the linear-tangent
     # prediction once the inner MIGRAD has found the actual valley.
-    warm_state_ref = Ref{Union{Nothing,MinimumState}}(nothing)
-    scratch_holder = Ref{Union{Nothing,MigradScratch}}(scratch)
+    warm_state_ref = Ref{Union{Nothing,typeof(state)}}(nothing)
+    scratch_dense = scratch === nothing ? nothing :
+                    scratch::MigradScratch{Vector{Float64}}
+    scratch_holder = Ref{Union{Nothing,MigradScratch{Vector{Float64}}}}(scratch_dense)
     let x_pivot = x_pivot, step = step,
         warm_state_ref = warm_state_ref,
         scratch_holder = scratch_holder, n = n,

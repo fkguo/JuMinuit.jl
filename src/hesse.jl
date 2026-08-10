@@ -117,7 +117,7 @@ function hesse(
     gst = copy(state.gradient.gstep)
     grd = copy(state.gradient.grad)
     dirin = copy(gst)
-    yy = zeros(Float64, n)
+    yy = _zero_vector_like(x)
 
     # ── AD-gradient numerical-companion refresh ───────────────────
     # Mirrors C++ `MnHesse.cxx:118-126`. When the input gradient is
@@ -177,9 +177,9 @@ function hesse(
         # the same counters so the `maxcalls` budget below (and the P6
         # non-finite tally) remain correct.
         cf_numeric = CostFunction(cf.f, cf.up, cf.nfcn, cf.n_nonfinite)
-        refresh_out = FunctionGradient(zeros(Float64, n),
-                                        zeros(Float64, n),
-                                        zeros(Float64, n))
+        refresh_out = FunctionGradient(_zero_vector_like(x),
+                                       _zero_vector_like(x),
+                                       _zero_vector_like(x))
         x_refresh = similar(x)
         numerical_gradient!(refresh_out, x_refresh, state.parameters,
                              state.gradient, cf_numeric, strategy, prec)
@@ -497,7 +497,7 @@ avoids the paras0+S=2 trap.
 
 See `docs/dev/DAVIDON_CXX_AUDIT.md` for the audit trail.
 """
-function _hesse_diagonal_failure(state::MinimumState, g2::Vector{Float64},
+function _hesse_diagonal_failure(state::MinimumState, g2::AbstractVector{Float64},
                                   prec::MachinePrecision, nfcn::Integer,
                                   status::CovStatus)
     n = length(g2)
@@ -545,7 +545,7 @@ covariance and errors computed at the supplied point.
 
 # Fields
 
-- `x::Vector{Float64}` — the point the Hessian was evaluated at.
+- `x::AbstractVector{Float64}` — the point the Hessian was evaluated at.
 - `covariance::Matrix{Float64}` — the parameter covariance `2·up·V` where
   `V = inv(H)` is the inverse Hessian (matches
   [`covariance`](@ref)`(::FunctionMinimum)`; for χ² fits with `up=1` it is
@@ -559,15 +559,15 @@ covariance and errors computed at the supplied point.
 - `state::MinimumState` — the full internal state, for advanced consumers
   (raw `inv_hessian`, gradient, …).
 """
-struct HesseResult
-    x::Vector{Float64}
+struct HesseResult{X<:AbstractVector{Float64},S<:MinimumState}
+    x::X
     covariance::Matrix{Float64}
     errors::Vector{Float64}
     edm::Float64
     nfcn::Int
     status::CovStatus
     valid::Bool
-    state::MinimumState
+    state::S
 end
 
 function HesseResult(state::MinimumState, up::Real)
@@ -664,14 +664,15 @@ function hesse(
     # the Strategy(2) seed-time Hesse bootstrap — the contract is "errors at
     # the given point". Mirrors C++ MnHesse's user-state overload, which
     # only computes the gradient before handing off to the core Hessian pass.
-    x = collect(Float64, x0)
-    dirin = collect(Float64, errors)
+    x = _float_vector_like(x0)
+    dirin = similar(x, Float64)
+    copyto!(dirin, errors)
     fval = cf(x)
     par = MinimumParameters(x, dirin, fval)
-    grad = FunctionGradient(zeros(Float64, n), zeros(Float64, n),
-                             zeros(Float64, n))
+    grad = FunctionGradient(_zero_vector_like(x), _zero_vector_like(x),
+                            _zero_vector_like(x))
     initial_gradient!(grad, par, dirin, cf.up, prec)
-    x_work = Vector{Float64}(undef, n)
+    x_work = similar(x, Float64)
     numerical_gradient!(grad, x_work, par, grad, cf, strategy, prec)
 
     # Diagonal seed inverse-Hessian (C++ MnSeedGenerator.cxx:69-70). The

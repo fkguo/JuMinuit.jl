@@ -50,11 +50,14 @@ Result of bounded `migrad(cf, params)`. Wraps the internal
   (parallel-review #4 A7/B4 blocking).
 """
 struct BoundedFunctionMinimum{
+    F<:FunctionMinimum,
+    P<:Parameters,
     V<:AbstractVector{Float64},
     E<:AbstractVector{Float64},
+    C<:AbstractCostFunction,
 }
-    internal::FunctionMinimum
-    params::Parameters
+    internal::F
+    params::P
     ext_values::V
     ext_errors::E
     ext_covariance::Union{Nothing,Matrix{Float64}}
@@ -65,7 +68,7 @@ struct BoundedFunctionMinimum{
     # AD-correct; the user-facing wrapper was silently dropping the
     # gradient through the plain `CostFunction` wrap at migrad_bounded.jl
     # construction).
-    internal_cf::AbstractCostFunction
+    internal_cf::C
 end
 
 # Accessors mirroring iminuit-style
@@ -133,7 +136,7 @@ function _wrap_fcn_internal_to_external(cf::CostFunction, params::Parameters)
     # threads touch distinct buffers (no race). Single-threaded Julia →
     # one buffer, zero overhead.
     nbuf = max(1, Threads.maxthreadid())
-    ext_bufs = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
+    ext_bufs = [similar(p_ref.values, Float64) for _ in 1:nbuf]
     # Skip the `collect(Float64, int_vec)` allocation; int_to_ext_vector!
     # accepts any AbstractVector<:Real (parallel-review #4 D6).
     wrapped = let ext_bufs = ext_bufs, p_ref = p_ref, f = f
@@ -168,8 +171,8 @@ function _wrap_fcn_internal_to_external(cf::CostFunctionWithGradient,
     # allocated — only the int→ext transform is buffered here (scope:
     # this perf change is the ext-vector reuse alone).
     nbuf = max(1, Threads.maxthreadid())
-    ext_bufs_f = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
-    ext_bufs_g = [similar(p_ref.prototype, Float64) for _ in 1:nbuf]
+    ext_bufs_f = [similar(p_ref.values, Float64) for _ in 1:nbuf]
+    ext_bufs_g = [similar(p_ref.values, Float64) for _ in 1:nbuf]
     wrapped_f = let ext_bufs_f = ext_bufs_f, p_ref = p_ref, f = f
         function (int_vec::AbstractVector{<:Real})
             ext_full = int_to_ext_vector!(ext_bufs_f[Threads.threadid()], p_ref, int_vec)
@@ -238,8 +241,8 @@ function _internal_to_external_results(
     n_active = n_free(params)
     int_x    = fmin_int.state.parameters.x
 
-    ext_values     = similar(params.prototype, Float64)
-    ext_errors_vec = similar(params.prototype, Float64)
+    ext_values     = similar(params.values, Float64)
+    ext_errors_vec = similar(params.values, Float64)
     fill!(ext_errors_vec, 0.0)
     ext_cov_mat    = nothing
 
@@ -249,7 +252,7 @@ function _internal_to_external_results(
         par = params.pars[ext_idx]
         int_idx = params.int_of_ext[ext_idx]
         if int_idx == 0
-            ext_values[ext_idx] = par.value
+            ext_values[ext_idx] = params.values[ext_idx]
         else
             ext_values[ext_idx] = int_to_ext_value(params, int_idx, int_x[int_idx])
         end
