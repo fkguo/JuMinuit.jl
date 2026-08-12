@@ -13,14 +13,18 @@ and [Semantic Versioning](https://semver.org/).
   every point where NativeMinuit calls back into user code and into the
   reported results: the objective and a user gradient on all of MIGRAD, HESSE,
   MINOS, the contour family, `profile`/`mnprofile`, `scan`, SIMPLEX,
-  `extremize`/`profile_band`, the `Optim` bridge, MCMC and the Bayesian
-  posterior; user priors; the derived-quantity functions in `quantiles` and
-  `quantile_band` and the rows of a `LikelihoodEnsemble`; and
-  `ext_values`/`ext_errors`, `copy(m.values)`, the MINOS crossing snapshots,
-  and `extremize`'s endpoint vectors. There is no ComponentArrays dependency —
-  `x0` simply becomes the allocation template. See the "Named parameter
-  containers" guide. Resolves the loss of component axes at the objective
-  callback boundary.
+  `extremize`/`profile_band`, `find_solution_modes`, `get_contours_samples`,
+  the `Optim` bridge, MCMC, and all three posterior samplers including NUTS;
+  user priors; the model in `bootstrap`/`jackknife` and the curve in
+  `@plt_best`; the derived-quantity functions in `quantiles` and
+  `quantile_band` and the rows of a `LikelihoodEnsemble`; the low-level kernel
+  entry points (`migrad`, `simplex`, and `minos`/`contour_exact` driven
+  directly off a `CostFunction`); and `ext_values`/`ext_errors`,
+  `copy(m.values)`, `args(m)`, the MINOS crossing snapshots, and the endpoint
+  vectors of both `extremize` and `profile_band`. There is no ComponentArrays
+  dependency — `x0` simply becomes the allocation template. See the "Named
+  parameter containers" guide. Resolves the loss of component axes at the
+  objective callback boundary.
 
   The minimizer's *internal* coordinates keep the container only when the
   internal and external spaces coincide (all parameters free and unbounded).

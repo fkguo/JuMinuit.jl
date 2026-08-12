@@ -34,19 +34,26 @@ Your container is used for **every value that crosses back into your code**:
 
 - the objective `f(θ)` and a user-supplied gradient `g(θ)`, on every path —
   MIGRAD, HESSE, MINOS, the contour family, `profile` / `mnprofile`, `scan`,
-  SIMPLEX, `extremize` / `profile_band`, the `Optim` bridge, MCMC and the
-  Bayesian posterior, and the `threaded_gradient = :auto` safety probe;
+  SIMPLEX, `extremize` / `profile_band`, `find_solution_modes`,
+  `get_contours_samples`, the `Optim` bridge, MCMC, all three posterior
+  samplers including NUTS, and the `threaded_gradient = :auto` safety probe;
 - a user prior in `bayesian` / `posterior_sample`;
+- the model in `bootstrap` / `jackknife` and the curve in `@plt_best`;
 - the derived-quantity function in `quantiles` and `quantile_band`, and the
   rows from `ens[i]` / iterating a `LikelihoodEnsemble`;
+- the low-level kernel entry points — `migrad(cf, x0, errs)`,
+  `simplex(cf, x0, errs)`, and `minos` / `contour_exact` driven directly off a
+  `CostFunction`;
 - the reported results: `m.fmin.ext_values`, `m.fmin.ext_errors`,
-  `copy(m.values)`, `copy(m.errors)`, the MINOS crossing snapshots
-  `m.merrors[name].upper_state` / `.lower_state`, and `extremize`'s endpoint
-  vectors `plo` / `phi`.
+  `copy(m.values)`, `copy(m.errors)`, `args(m)`, the MINOS crossing snapshots
+  `m.merrors[name].upper_state` / `.lower_state`, and the endpoint vectors
+  `plo` / `phi` on both `extremize` and `profile_band`.
 
 This holds with bounds, with fixed parameters, and with an analytic gradient.
 
 Your `x0` itself is never mutated — everything is allocated fresh from it.
+Ensemble rows are copies too, so a model that mutates its argument cannot
+corrupt the stored samples.
 
 ## Internal coordinates are labelled honestly
 
