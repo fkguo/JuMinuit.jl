@@ -18,6 +18,7 @@
 
 using ComponentArrays
 using Optim
+using AdvancedHMC, LogDensityProblems, LogDensityProblemsAD, TransformVariables
 
 # Count callbacks that did NOT arrive with the expected axes. Returns
 # (n_bad, n_total) so a test can also assert the path was exercised at all.
@@ -280,6 +281,20 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test bs.n_valid >= 1
         jk = NativeMinuit.jackknife(linmodel, data, start)
         @test jk !== nothing
+    end
+
+    # The NUTS path assembles its full vector inside the AdvancedHMC extension,
+    # separately from the Metropolis/stretch samplers, and pushes ForwardDiff
+    # Duals through it — so the container has to survive a non-Float64 eltype.
+    @testset "NUTS posterior keeps the axes" begin
+        f, bad, tot = _axis_probe(expected_axes)
+        m = Minuit(f, start; errors = errs)
+        migrad!(m)
+        ps = posterior_sample(m; sampler = :nuts, nsteps = 120, burn = 40)
+        @test bad[] == 0
+        @test tot[] > 0
+        @test length(ps.ensemble) > 0
+        @test ps.ensemble.best isa ComponentVector
     end
 
     @testset "profile_band endpoints keep the axes" begin

@@ -49,10 +49,16 @@ end
 # LogDensityProblems target: the posterior in UNCONSTRAINED coordinates, i.e.
 # `log p(θ(y)) + log|det J(y)|`, with `θ(y)` the constrained point. Generic in
 # the number type so ForwardDiff can push Duals through.
-struct PosteriorLogDensity{P,T}
+struct PosteriorLogDensity{P,T,B<:AbstractVector{Float64}}
     prob::P
     t::T
     nfree::Int
+    # `prob.best` hoisted into a CONCRETELY typed field. `PosteriorProblem`
+    # stores it abstractly (so a structured container survives the snapshot),
+    # but it is indexed once per coordinate on every leapfrog step here — the
+    # innermost loop of NUTS. Reading it through the abstract field would cost
+    # a dynamic dispatch per element.
+    best::B
 end
 
 LogDensityProblems.dimension(ℓ::PosteriorLogDensity) = ℓ.nfree
@@ -61,10 +67,13 @@ LogDensityProblems.capabilities(::Type{<:PosteriorLogDensity}) =
 
 # Splice the free coordinates `θ` into a fresh full external vector of element
 # type `R` (a fresh allocation is required anyway — ForwardDiff needs Duals).
-@inline function _full(prob, θ, R, nfree)
-    full = Vector{R}(undef, length(prob.best))
+@inline function _full(prob, best, θ, R, nfree)
+    # `similar(best, R)`, not `Vector{R}`: the assembled vector goes straight to
+    # the user's FCN and prior, so it must keep their coordinate container —
+    # and `R` may be a ForwardDiff Dual, which a structured container handles.
+    full = similar(best, R)
     @inbounds for i in eachindex(full)
-        full[i] = prob.best[i]
+        full[i] = best[i]
     end
     @inbounds for j in 1:nfree
         full[prob.free_idx[j]] = θ[j]
@@ -78,9 +87,10 @@ function LogDensityProblems.logdensity(ℓ::PosteriorLogDensity, y)
     R = eltype(y)
     # SEPARATE buffers for the prior and the FCN, so a prior that mutates its
     # argument cannot shift the FCN point (mirrors `_eval_posterior!`).
-    lp = prob.prior.logdensity(_full(prob, θ, R, ℓ.nfree))
+    best = ℓ.best
+    lp = prob.prior.logdensity(_full(prob, best, θ, R, ℓ.nfree))
     isfinite(lp) || return convert(R, -Inf)
-    return -prob.fcn(_full(prob, θ, R, ℓ.nfree)) / (2 * prob.up) + lp + logj
+    return -prob.fcn(_full(prob, best, θ, R, ℓ.nfree)) / (2 * prob.up) + lp + logj
 end
 
 # Constrained-space (fval, logprior) at a free-coordinate vector — for assembling
@@ -89,8 +99,9 @@ end
 # again, so neither a mutating FCN nor a mutating prior can corrupt the other.
 function _eval_constrained(prob, θfree)
     nfree = length(prob.free_idx)
-    c = Float64(prob.fcn(_full(prob, θfree, Float64, nfree)))
-    lp = Float64(prob.prior.logdensity(_full(prob, θfree, Float64, nfree)))
+    best = prob.best
+    c = Float64(prob.fcn(_full(prob, best, θfree, Float64, nfree)))
+    lp = Float64(prob.prior.logdensity(_full(prob, best, θfree, Float64, nfree)))
     return c, lp
 end
 
@@ -116,7 +127,7 @@ function _nuts_impl(prob::PosteriorProblem; nsteps::Integer,
         "unconstrained (log/logit) transform is singular. Move off the boundary, " *
         "loosen the limit, or use sampler = :stretch (which handles boundaries)."))
 
-    ℓ = PosteriorLogDensity(prob, t, nfree)
+    ℓ = PosteriorLogDensity(prob, t, nfree, prob.best)
     ∂ℓ = LogDensityProblemsAD.ADgradient(:ForwardDiff, ℓ)
     # Probe the gradient once: a non-differentiable FCN throws here, and we
     # convert that into a clear, actionable error rather than a deep stack trace.
