@@ -139,8 +139,17 @@ callback receives named components, not a bare `Array`. Always a copy — a
 mutating user function must not be able to corrupt `e.samples`.
 """
 @inline function _row(e::LikelihoodEnsemble, i::Integer)
-    out = similar(e.best, Float64)
-    @inbounds copyto!(out, view(e.samples, i, :))
+    return _row(e.samples, e.best, i)
+end
+
+# Function-barrier form: `template` is a concrete type here, so a loop that
+# hoists `e.best` out and calls this specializes on the container instead of
+# paying a dynamic dispatch per sample. Callers that evaluate a cheap derived
+# quantity over a few thousand rows go through this one.
+@inline function _row(samples::Matrix{Float64}, template::V,
+                      i::Integer) where {V<:AbstractVector{Float64}}
+    out = similar(template, Float64)
+    @inbounds copyto!(out, view(samples, i, :))
     return out
 end
 
@@ -853,6 +862,18 @@ end
 _warn_dropped(fname::AbstractString, ndrop::Int, ntotal::Int) =
     ndrop > 0 && @warn "$fname: dropped $ndrop of $ntotal non-finite values of the derived quantity"
 
+# Evaluate a scalar derived quantity over every ensemble row. Separated out so
+# the loop specializes on the concrete row-container type (`LikelihoodEnsemble`
+# stores it abstractly), keeping the per-sample cost to the copy plus the user
+# call with no dynamic dispatch.
+function _fill_derived!(vals::Vector{Float64}, samples::Matrix{Float64},
+                        template::V, f, n::Int) where {V<:AbstractVector{Float64}}
+    @inbounds for j in 1:n
+        vals[j] = Float64(f(_row(samples, template, j)))
+    end
+    return vals
+end
+
 """
     quantiles(ens::LikelihoodEnsemble, f; p=(0.16, 0.5, 0.84), warn=true)
         -> Vector{Float64}
@@ -882,12 +903,36 @@ function quantiles(ens::LikelihoodEnsemble, f; p = (0.16, 0.5, 0.84), warn::Bool
     vals = Vector{Float64}(undef, n)
     # `f` gets a fresh COPY of each row (like `ens[i]`/iteration), so a
     # user model that mutates its argument cannot corrupt the ensemble.
-    @inbounds for j in 1:n
-        vals[j] = Float64(f(_row(ens, j)))
-    end
+    # `_fill_derived!` is a function barrier over the row container type.
+    _fill_derived!(vals, ens.samples, ens.best, f, n)
     out, ndrop = _finite_quantiles!(vals, p)
     warn && _warn_dropped("quantiles", ndrop, n)
     return out
+end
+
+# Pointwise form: one user call per (grid point, ensemble member). Same
+# function-barrier rationale as `_fill_derived!`.
+function _fill_derived_at!(vals::Vector{Float64}, samples::Matrix{Float64},
+                           template::V, f, x, n::Int) where {V<:AbstractVector{Float64}}
+    @inbounds for j in 1:n
+        vals[j] = Float64(f(x, _row(samples, template, j)))
+    end
+    return vals
+end
+
+# Curve form of `_fill_derived!` — one user call per ensemble member, each
+# returning the whole curve over `xs`. Same function-barrier rationale.
+function _fill_curves!(Y::Matrix{Float64}, samples::Matrix{Float64},
+                       template::V, f, n::Int, nx::Int) where {V<:AbstractVector{Float64}}
+    @inbounds for j in 1:n
+        y = f(_row(samples, template, j))
+        length(y) == nx ||
+            throw(DimensionMismatch("curve=true: f(θ) returned length $(length(y)), expected length(xs) = $nx"))
+        for i in 1:nx
+            Y[j, i] = Float64(y[i])
+        end
+    end
+    return Y
 end
 
 """
@@ -939,14 +984,7 @@ function quantile_band(ens::LikelihoodEnsemble, f, xs; p = (0.16, 0.84),
         # One f call per ensemble member; f returns the curve over xs.
         # Row COPIES, not views — a mutating `f` must not corrupt the ensemble.
         Y = Matrix{Float64}(undef, n, nx)
-        @inbounds for j in 1:n
-            y = f(_row(ens, j))
-            length(y) == nx ||
-                throw(DimensionMismatch("curve=true: f(θ) returned length $(length(y)), expected length(xs) = $nx"))
-            for i in 1:nx
-                Y[j, i] = Float64(y[i])
-            end
-        end
+        _fill_curves!(Y, ens.samples, ens.best, f, n, nx)
         @inbounds for i in 1:nx
             for j in 1:n
                 vals[j] = Y[j, i]
@@ -964,10 +1002,10 @@ function quantile_band(ens::LikelihoodEnsemble, f, xs; p = (0.16, 0.84),
         # of the same member — caching one row per member and reusing it
         # across `xs` would leak in-place mutations from one grid point into
         # the next.
+        template = ens.best
+        samples = ens.samples
         @inbounds for (i, x) in enumerate(xs)
-            for j in 1:n
-                vals[j] = Float64(f(x, _row(ens, j)))
-            end
+            _fill_derived_at!(vals, samples, template, f, x, n)
             qs, ndrop = _finite_quantiles!(vals, p)
             ndrop_tot += ndrop
             for k in 1:np
