@@ -276,7 +276,14 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         # The per-sample evaluation loop rebuilds each row onto the container.
         # Its parallel branch must agree EXACTLY with the serial one and with a
         # direct evaluation — a wrong row there is a silent wrong χ², not an
-        # error, and it only shows up with more than one thread.
+        # error.
+        #
+        # HONEST LIMIT: with `Threads.nthreads() == 1` the parallel branch
+        # degenerates to a serial loop, so `par == ser` is trivially true and
+        # this check only pins the row-fill logic, not the concurrency. It
+        # discriminates from 2 threads up; the original defect needed 8 to show
+        # 18/61 corrupted rows. Run the suite with `-t auto` to get the real
+        # signal.
         big = hcat(1.0 .+ 0.02 .* range(-1, 1; length = 64),
                    2.0 .+ 0.02 .* range(1, -1; length = 64))
         par = NativeMinuit._eval_fvals(m, big, true)
