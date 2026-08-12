@@ -182,6 +182,45 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test r.phi isa ComponentVector
     end
 
+    @testset "MCMC ensemble hands structured rows to user functions" begin
+        m = Minuit(_struct_obj, start; errors = errs)
+        migrad!(m)
+        ens = mcmc_sample(m; nsteps = 300, burn = 50, thin = 5)
+        @test ens.best isa ComponentVector
+        @test ens[1] isa ComponentVector
+        @test ComponentArrays.getaxes(ens[1]) == expected_axes
+        @test first(ens) isa ComponentVector           # iteration protocol too
+
+        bad = Ref(0); tot = Ref(0)
+        g = θ -> begin
+            tot[] += 1
+            (θ isa ComponentVector && ComponentArrays.getaxes(θ) == expected_axes) ||
+                (bad[] += 1)
+            θ.a + θ.b
+        end
+        q = quantiles(ens, g)
+        @test bad[] == 0
+        @test tot[] == length(ens)
+        @test length(q) == 3
+        @test issorted(q)
+
+        # Rows are copies: a mutating user function must not corrupt the
+        # ensemble (the container rebuild must not become a view).
+        snapshot = copy(ens.samples)
+        quantiles(ens, θ -> (θ .= 0.0; 0.0))
+        @test ens.samples == snapshot
+
+        bad[] = 0; tot[] = 0
+        h = θ -> begin
+            tot[] += 1
+            (θ isa ComponentVector) || (bad[] += 1)
+            [θ.a, 2 * θ.a]
+        end
+        quantile_band(ens, h, [1.0, 2.0]; curve = true)
+        @test bad[] == 0
+        @test tot[] == length(ens)
+    end
+
     @testset "bounded MINOS snapshot keeps the axes" begin
         m = Minuit(_struct_obj, start; errors = errs,
                    limits = [(-5.0, 5.0), nothing])

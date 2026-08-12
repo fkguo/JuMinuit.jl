@@ -54,8 +54,10 @@ row.
   χ²-equivalent displacements are `(fvals .- fbest) ./ up`.
 - `names::Vector{String}` — all parameter names (length `npar`).
 - `free::Vector{Bool}` — which columns were varied by the chain.
-- `best::Vector{Float64}` — the chain's start point (the fit's best
-  values, full external vector).
+- `best::AbstractVector{Float64}` — the chain's start point (the fit's best
+  values, full external vector). Also the template `ens[i]` and the
+  quantile helpers rebuild each row onto, so a fit started from a structured
+  container hands structured rows back to user functions.
 - `fbest::Float64` — the FCN evaluated at `best` when the chain started.
 - `up::Float64` — the fit's `errordef` (1 for χ², 0.5 for `−log L`).
 - `acceptance::Float64` — accepted fraction of the post-burn-in proposals
@@ -89,7 +91,14 @@ struct LikelihoodEnsemble
     fvals::Vector{Float64}
     names::Vector{String}
     free::Vector{Bool}
-    best::Vector{Float64}
+    # The best-fit point, and the TEMPLATE every sample row is rebuilt onto
+    # (`e[i]`, `quantiles`, `quantile_band`) so a user function written against
+    # named components sees the same container it was fitted with. Abstract
+    # rather than parameterized: `LikelihoodEnsemble` is a result object that
+    # is stored, shown and serialized, and a type parameter would propagate
+    # into every container holding one. `load_ensemble` restores a plain
+    # vector — a JSON round-trip cannot carry the container.
+    best::AbstractVector{Float64}
     fbest::Float64
     up::Float64
     acceptance::Float64
@@ -120,11 +129,26 @@ end
 Base.length(e::LikelihoodEnsemble) = size(e.samples, 1)
 Base.firstindex(e::LikelihoodEnsemble) = 1
 Base.lastindex(e::LikelihoodEnsemble) = length(e)
-Base.getindex(e::LikelihoodEnsemble, i::Integer) = e.samples[i, :]
-Base.eltype(::Type{LikelihoodEnsemble}) = Vector{Float64}
+"""
+    _row(e, i) -> AbstractVector{Float64}
+
+Sample row `i` as a fresh full-length EXTERNAL parameter vector, rebuilt onto
+the ensemble's own coordinate container. Every place that hands a row to user
+code goes through here, so a structured fit's `quantiles`/`quantile_band`
+callback receives named components, not a bare `Array`. Always a copy — a
+mutating user function must not be able to corrupt `e.samples`.
+"""
+@inline function _row(e::LikelihoodEnsemble, i::Integer)
+    out = similar(e.best, Float64)
+    @inbounds copyto!(out, view(e.samples, i, :))
+    return out
+end
+
+Base.getindex(e::LikelihoodEnsemble, i::Integer) = _row(e, i)
+Base.eltype(::Type{LikelihoodEnsemble}) = AbstractVector{Float64}
 function Base.iterate(e::LikelihoodEnsemble, i::Int = 1)
     i > length(e) && return nothing
-    return e.samples[i, :], i + 1
+    return _row(e, i), i + 1
 end
 
 function Base.show(io::IO, e::LikelihoodEnsemble)
@@ -853,7 +877,7 @@ function quantiles(ens::LikelihoodEnsemble, f; p = (0.16, 0.5, 0.84), warn::Bool
     # `f` gets a fresh COPY of each row (like `ens[i]`/iteration), so a
     # user model that mutates its argument cannot corrupt the ensemble.
     @inbounds for j in 1:n
-        vals[j] = Float64(f(ens.samples[j, :]))
+        vals[j] = Float64(f(_row(ens, j)))
     end
     out, ndrop = _finite_quantiles!(vals, p)
     warn && _warn_dropped("quantiles", ndrop, n)
@@ -910,7 +934,7 @@ function quantile_band(ens::LikelihoodEnsemble, f, xs; p = (0.16, 0.84),
         # Row COPIES, not views — a mutating `f` must not corrupt the ensemble.
         Y = Matrix{Float64}(undef, n, nx)
         @inbounds for j in 1:n
-            y = f(ens.samples[j, :])
+            y = f(_row(ens, j))
             length(y) == nx ||
                 throw(DimensionMismatch("curve=true: f(θ) returned length $(length(y)), expected length(xs) = $nx"))
             for i in 1:nx
@@ -936,7 +960,7 @@ function quantile_band(ens::LikelihoodEnsemble, f, xs; p = (0.16, 0.84),
         # the next.
         @inbounds for (i, x) in enumerate(xs)
             for j in 1:n
-                vals[j] = Float64(f(x, ens.samples[j, :]))
+                vals[j] = Float64(f(x, _row(ens, j)))
             end
             qs, ndrop = _finite_quantiles!(vals, p)
             ndrop_tot += ndrop
