@@ -149,7 +149,13 @@ end
 @inline function _row(samples::Matrix{Float64}, template::V,
                       i::Integer) where {V<:AbstractVector{Float64}}
     out = similar(template, Float64)
-    @inbounds copyto!(out, view(samples, i, :))
+    # Explicit element assignment, not `copyto!(out, view(samples, i, :))`:
+    # that form was measured to be silently wrong inside `Threads.@threads`
+    # (see `_eval_fvals` in solution_modes.jl). These callers are serial today,
+    # but the cost is the same and it removes the trap if one is ever threaded.
+    @inbounds for k in axes(samples, 2)
+        out[k] = samples[i, k]
+    end
     return out
 end
 
