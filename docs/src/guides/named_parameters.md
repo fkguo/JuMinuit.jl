@@ -7,18 +7,25 @@ itself:
 ```julia
 using ComponentArrays, NativeMinuit
 
-start = ComponentArray(mass = 3.872, width = 0.001, coupling = 0.5)
+# A three-parameter line-plus-offset fit, written against names rather than
+# positions. Runnable as-is.
+xdata = collect(0.0:0.5:5.0)
+ydata = 2.0 .* xdata .+ 1.0 .+ 0.3 .* sin.(3.0 .* xdata)
+σ     = fill(0.3, length(xdata))
+
+start = ComponentArray(slope = 0.0, intercept = 0.0, curvature = 0.0)
 
 function chi2(p)
-    model = breit_wigner.(xdata; m = p.mass, Γ = p.width) .* p.coupling
+    model = p.slope .* xdata .+ p.intercept .+ p.curvature .* xdata.^2
     sum(((model .- ydata) ./ σ).^2)
 end
 
-m = Minuit(chi2, start; error = [1e-3, 1e-4, 0.05])
+m = Minuit(chi2, start; error = [0.1, 0.1, 0.01])
 migrad!(m)
 minos!(m)
 
-m.fmin.ext_values.mass      # fitted mass, by name
+m.fmin.ext_values.slope     # fitted slope, by name
+m.fmin.ext_errors.slope     # its parabolic error
 ```
 
 NativeMinuit has no dependency on ComponentArrays and no extension for it.
