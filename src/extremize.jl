@@ -122,6 +122,18 @@ ExtremizeResult(lo, hi, plo, phi, fbest, bound, delta, cl, up,
                 diagnostics::NamedTuple) =
     ExtremizeResult(lo, hi, plo, phi, fbest, bound, delta, cl, up, :full, diagnostics)
 
+# Same normalization as `ProfileBand` below: `plo`/`phi` were widened to
+# `AbstractVector{Float64}`, and the auto-generated constructor of a parametric
+# struct matches the other fields exactly rather than converting. Keeps
+# positional construction from older code working.
+function ExtremizeResult(lo, hi, plo::AbstractVector, phi::AbstractVector,
+                         fbest, bound, delta, cl, up, mode::Symbol,
+                         diagnostics::D) where {D<:NamedTuple}
+    return ExtremizeResult{D}(Float64(lo), Float64(hi), plo, phi, Float64(fbest),
+                              Float64(bound), Float64(delta), Float64(cl),
+                              Float64(up), mode, diagnostics)
+end
+
 """
     ProfileBand
 
@@ -177,6 +189,27 @@ struct ProfileBand{D<:NamedTuple}
     mode::Symbol
     nfail::Int
     diagnostics::Vector{D}
+end
+
+const _BandEndpoints = Vector{Union{Nothing,AbstractVector{Float64}}}
+
+# The endpoint element type was widened from `Vector{Float64}` to
+# `AbstractVector{Float64}` so a structured coordinate container can be stored.
+# Julia's auto-generated constructor for a parametric struct matches the
+# non-parametric fields EXACTLY and does not convert, so a caller passing the
+# historical `Union{Nothing,Vector{Float64}}[...]` — or a result unpickled from
+# an older version — would hit a MethodError. Normalize here instead.
+_band_endpoints(v::_BandEndpoints) = v
+_band_endpoints(v::AbstractVector) = _BandEndpoints(v)
+
+function ProfileBand(x, lo, hi, plo, phi, fbest, bound, delta, cl, up,
+                     mode::Symbol, nfail::Integer,
+                     diagnostics::Vector{D}) where {D<:NamedTuple}
+    return ProfileBand{D}(Vector{Float64}(x), Vector{Float64}(lo),
+                          Vector{Float64}(hi),
+                          _band_endpoints(plo), _band_endpoints(phi),
+                          Vector{Float64}(fbest), Float64(bound), Float64(delta),
+                          Float64(cl), Float64(up), mode, Int(nfail), diagnostics)
 end
 
 # Backward-compatible positional constructor (pre-0.5.3 ProfileBand had no

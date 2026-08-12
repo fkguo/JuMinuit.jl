@@ -34,7 +34,6 @@ using Test
     include("test_contours.jl")
     include("test_migrad_bounded.jl")
     include("test_minuit.jl")
-    include("test_structured_parameters.jl")
     include("test_display.jl")
     include("test_minuit_mutators.jl")
     include("test_param_views.jl")
@@ -68,4 +67,10 @@ using Test
     else
         @warn "Optim not available — skipping test_optim_bridge.jl"
     end
+    # LAST: this file loads Optim and AdvancedHMC to check that the structured
+    # coordinate container survives those paths too. Loading them earlier would
+    # make the extensions available to tests that assert on their ABSENCE
+    # (`test_iminuit_compat_data.jl` checks that `optim(m)` errors helpfully
+    # when the Optim extension has not been loaded).
+    include("test_structured_parameters.jl")
 end
