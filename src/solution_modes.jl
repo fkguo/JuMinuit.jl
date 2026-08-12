@@ -458,21 +458,40 @@ function _eval_fvals(m::Minuit, Xfull::Matrix{Float64}, parallel::Bool)
     out = Vector{Float64}(undef, N)
     # Rows are rebuilt onto the fit's coordinate container rather than passed
     # as a `SubArray` of the sample matrix, so an objective written against
-    # named components can be evaluated here. One per-thread buffer, same
-    # contract as the threaded gradient: distinct threads touch distinct rows.
+    # named components can be evaluated here.
+    #
+    # The row is filled by EXPLICIT element assignment, not
+    # `copyto!(b, view(Xfull, i, :))`. Measured on this path: the `copyto!`
+    # form is correct serially but silently wrong inside `Threads.@threads`
+    # — buffers came out holding another row's values (18 of 61 rows on an
+    # 8-thread run), independently of whether the buffer was freshly allocated
+    # or drawn from a per-thread pool. That points at a shared temporary inside
+    # the container's `copyto!` rather than at anything here, so this loop
+    # avoids the call rather than relying on it.
+    #
+    # A fresh buffer per iteration (not a `threadid()`-indexed pool) is the
+    # conservative choice on top: nothing can be shared by construction, and
+    # one small vector per sample is negligible beside the user FCN call that
+    # follows it.
+    #
+    # The failure mode is a silent wrong value, so the parallel branch is
+    # pinned against the serial one by an equality test.
     template = _init_params(m).values
-    nbuf = max(1, Threads.maxthreadid())
-    bufs = [similar(template, Float64) for _ in 1:nbuf]
+    npar = size(Xfull, 2)
     if parallel
         Threads.@threads :static for i in 1:N
-            b = bufs[Threads.threadid()]
-            @inbounds copyto!(b, view(Xfull, i, :))
+            b = similar(template, Float64)
+            @inbounds for k in 1:npar
+                b[k] = Xfull[i, k]
+            end
             @inbounds out[i] = Float64(f(b))
         end
     else
-        b = bufs[1]
         @inbounds for i in 1:N
-            copyto!(b, view(Xfull, i, :))
+            b = similar(template, Float64)
+            for k in 1:npar
+                b[k] = Xfull[i, k]
+            end
             out[i] = Float64(f(b))
         end
     end

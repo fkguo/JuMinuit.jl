@@ -273,6 +273,19 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         find_solution_modes(S, m)
         @test bad[] == 0
 
+        # The per-sample evaluation loop rebuilds each row onto the container.
+        # Its parallel branch must agree EXACTLY with the serial one and with a
+        # direct evaluation — a wrong row there is a silent wrong χ², not an
+        # error, and it only shows up with more than one thread.
+        big = hcat(1.0 .+ 0.02 .* range(-1, 1; length = 64),
+                   2.0 .+ 0.02 .* range(1, -1; length = 64))
+        par = NativeMinuit._eval_fvals(m, big, true)
+        ser = NativeMinuit._eval_fvals(m, big, false)
+        direct = [_struct_obj(ComponentArray(a = big[i, 1], b = big[i, 2]))
+                  for i in 1:size(big, 1)]
+        @test par == ser
+        @test ser == direct
+
         # Bootstrap / jackknife re-fit a model that reads named components.
         data = NativeMinuit.Data(collect(1.0:6.0), 2 .* collect(1.0:6.0) .+ 1.0,
                                  fill(0.1, 6))
