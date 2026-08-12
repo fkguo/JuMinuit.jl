@@ -299,7 +299,7 @@ end
 # bias_corrected, variance, std, n_valid) over the valid groups. `g_used` is the
 # number of valid groups (the (g-1)/g scaling uses the count actually summed).
 function _jackknife_stats(samples::Matrix{Float64}, valid::AbstractVector{Bool},
-                          estimate::Vector{Float64})
+                          estimate::AbstractVector{Float64})
     npar = size(samples, 2)
     # Use only converged AND finite groups (a NaN row would poison θ̄/variance).
     finite = Bool[all(isfinite, @view samples[r, :]) for r in 1:size(samples, 1)]

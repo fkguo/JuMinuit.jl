@@ -145,7 +145,13 @@ mutating user function must not be able to corrupt `e.samples`.
 end
 
 Base.getindex(e::LikelihoodEnsemble, i::Integer) = _row(e, i)
-Base.eltype(::Type{LikelihoodEnsemble}) = AbstractVector{Float64}
+# Instance method: the true row type, which `_row` derives from `e.best`. This
+# is `Vector{Float64}` for an ordinary fit and the user's container for a
+# structured one, so `collect(ens)` is concretely typed either way. The
+# type-level fallback keeps its historical answer — without an instance there
+# is no template to report.
+Base.eltype(e::LikelihoodEnsemble) = typeof(e.best)
+Base.eltype(::Type{LikelihoodEnsemble}) = Vector{Float64}
 function Base.iterate(e::LikelihoodEnsemble, i::Int = 1)
     i > length(e) && return nothing
     return _row(e, i), i + 1

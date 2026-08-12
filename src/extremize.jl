@@ -162,8 +162,13 @@ struct ProfileBand{D<:NamedTuple}
     x::Vector{Float64}
     lo::Vector{Float64}
     hi::Vector{Float64}
-    plo::Vector{Union{Nothing,Vector{Float64}}}
-    phi::Vector{Union{Nothing,Vector{Float64}}}
+    # Per-point endpoint PARAMETER vectors (`nothing` where that side had no
+    # accepted fit). Element type left abstract for the same reason as
+    # `ExtremizeResult.plo`/`phi`: a structured coordinate container must reach
+    # the user with its labels. `x`/`lo`/`hi`/`fbest` above and below stay
+    # concrete — those are the abscissa grid and curves of `f` values.
+    plo::Vector{Union{Nothing,AbstractVector{Float64}}}
+    phi::Vector{Union{Nothing,AbstractVector{Float64}}}
     fbest::Vector{Float64}
     bound::Float64
     delta::Float64
@@ -1289,8 +1294,8 @@ function profile_band(m::Minuit, f, xs::AbstractVector{<:Real}; cl::Real = 1,
 
     lo = fill(NaN, n)
     hi = fill(NaN, n)
-    plo = Vector{Union{Nothing,Vector{Float64}}}(nothing, n)
-    phi = Vector{Union{Nothing,Vector{Float64}}}(nothing, n)
+    plo = Vector{Union{Nothing,AbstractVector{Float64}}}(nothing, n)
+    phi = Vector{Union{Nothing,AbstractVector{Float64}}}(nothing, n)
     fcn_lo = fill(NaN, n); fcn_hi = fill(NaN, n)       # FCN at stored endpoints
     acc_lo = zeros(Int, n); acc_hi = zeros(Int, n)     # accepted fits, cumulative
     fits_lo = zeros(Int, n); fits_hi = zeros(Int, n)   # attempted fits, cumulative
@@ -1394,8 +1399,8 @@ function _profile_band_directional(m::Minuit, f, grad_f, xv::Vector{Float64},
     n = length(xv)
     lo = fill(NaN, n)
     hi = fill(NaN, n)
-    plo = Vector{Union{Nothing,Vector{Float64}}}(nothing, n)
-    phi = Vector{Union{Nothing,Vector{Float64}}}(nothing, n)
+    plo = Vector{Union{Nothing,AbstractVector{Float64}}}(nothing, n)
+    phi = Vector{Union{Nothing,AbstractVector{Float64}}}(nothing, n)
     fcn_lo = fill(NaN, n); fcn_hi = fill(NaN, n)
     gcg = fill(NaN, n)
     nfcn = zeros(Int, n); nfev = zeros(Int, n)

@@ -497,7 +497,9 @@ Implementation: closure captures `cf.f`, `i`, `v`. Each call assembles
 a temporary n-vector by splicing. Phase 1 first cut accepts the per-
 call alloc; Phase 1.x can ship a workspace-passing variant.
 """
-function _fix_one_param(cf::CostFunction, i::Integer, v::Float64, n::Integer)
+function _fix_one_param(cf::CostFunction, i::Integer, v::Float64, n::Integer,
+                         template::AbstractVector{Float64} =
+                             Vector{Float64}(undef, Int(n)))
     f = cf.f
     up = cf.up
     i_ = Int(i)
@@ -527,7 +529,7 @@ function _fix_one_param(cf::CostFunction, i::Integer, v::Float64, n::Integer)
     # must guard it (documented in `Minuit(..., threaded_gradient=true)`
     # docstring).
     nbuf = max(1, Threads.maxthreadid())
-    full_bufs = [Vector{Float64}(undef, n_) for _ in 1:nbuf]
+    full_bufs = [similar(template, Float64) for _ in 1:nbuf]
     wrapped = let full_bufs = full_bufs, i_ = i_, n_ = n_, v = v, f = f
         function (y::AbstractVector{<:Real})
             # `` deliberately omitted on the tid index — bounds-check cost (~1 ns) is negligible vs the FCN call (≥100 ns), and the check protects against silent memory corruption if Julia's threadpool model ever expands at runtime. The body of f(full_buf) is still `` where it matters.
@@ -567,7 +569,10 @@ overload: `full_buf` and `out_buf` are closure-captured and shared
 across calls within the wrapper's lifetime. Safe under single-
 threaded MnFunctionCross / MINOS / MnContours.
 """
-function _fix_one_param(cf::CostFunctionWithGradient, i::Integer, v::Float64, n::Integer)
+function _fix_one_param(cf::CostFunctionWithGradient, i::Integer, v::Float64,
+                         n::Integer,
+                         template::AbstractVector{Float64} =
+                             Vector{Float64}(undef, Int(n)))
     f = cf.f
     g = cf.g
     up = cf.up
@@ -582,7 +587,7 @@ function _fix_one_param(cf::CostFunctionWithGradient, i::Integer, v::Float64, n:
     # overload above — single-threaded Julia gets 1 buffer each (zero
     # overhead vs Phase F); multi-threaded gets one per `threadid()`.
     nbuf = max(1, Threads.maxthreadid())
-    full_bufs = [Vector{Float64}(undef, n_) for _ in 1:nbuf]
+    full_bufs = [similar(template, Float64) for _ in 1:nbuf]
     out_bufs  = [Vector{Float64}(undef, n_ - 1) for _ in 1:nbuf]
     f_wrapped = let full_bufs = full_bufs, i_ = i_, n_ = n_, v = v, f = f
         function (y::AbstractVector{<:Real})
@@ -650,6 +655,7 @@ function _fix_multi_params(
     par_idxs::AbstractVector{<:Integer},
     v::AbstractVector{<:Real},
     n::Integer,
+    template::AbstractVector{Float64} = Vector{Float64}(undef, Int(n)),
 )
     length(par_idxs) == length(v) ||
         throw(DimensionMismatch("par_idxs / v length mismatch"))
@@ -669,7 +675,7 @@ function _fix_multi_params(
     n_free = n_ - count(is_fixed)
     # Per-thread buffer pools — Phase G threading support.
     nbuf = max(1, Threads.maxthreadid())
-    full_bufs = [Vector{Float64}(undef, n_) for _ in 1:nbuf]
+    full_bufs = [similar(template, Float64) for _ in 1:nbuf]
     out_bufs  = [Vector{Float64}(undef, n_free) for _ in 1:nbuf]
     f_wrapped = let full_bufs = full_bufs, is_fixed = is_fixed, fixed_value = fixed_value, n_ = n_, f = f
         function (y::AbstractVector{<:Real})
@@ -727,6 +733,7 @@ function _fix_multi_params(
     par_idxs::AbstractVector{<:Integer},
     v::AbstractVector{<:Real},
     n::Integer,
+    template::AbstractVector{Float64} = Vector{Float64}(undef, Int(n)),
 )
     length(par_idxs) == length(v) ||
         throw(DimensionMismatch("par_idxs / v length mismatch"))
@@ -745,7 +752,7 @@ function _fix_multi_params(
     # above. Single-threaded: 1 buffer, zero overhead. Multi-threaded:
     # safe under inner-gradient parallel calls.
     nbuf = max(1, Threads.maxthreadid())
-    full_bufs = [Vector{Float64}(undef, n_) for _ in 1:nbuf]
+    full_bufs = [similar(template, Float64) for _ in 1:nbuf]
     wrapped = let full_bufs = full_bufs, is_fixed = is_fixed, fixed_value = fixed_value, n_ = n_, f = f
         function (y::AbstractVector{<:Real})
             # `` deliberately omitted on the tid index — bounds-check cost (~1 ns) is negligible vs the FCN call (≥100 ns), and the check protects against silent memory corruption if Julia's threadpool model ever expands at runtime. The body of f(full_buf) is still `` where it matters.
@@ -789,7 +796,11 @@ function _migrad_with_multi_fixed(
         # All parameters fixed — no inner MIGRAD needed, just evaluate FCN
         # at the fully-fixed point. This is the typical 2D-contour case
         # (n=2, npar=2).
-        full = Vector{Float64}(undef, n)
+        # Container-preserving, because it is handed to `cf.f` below. The
+        # degenerate state built from it is re-flattened first — the warm-state
+        # slot is typed `DenseMinimumState` and every reduced-coordinate probe
+        # must keep that invariant.
+        full = similar(state.parameters.x, Float64)
         @inbounds for (idx, k) in enumerate(par_idxs)
             full[Int(k)] = Float64(v[idx])
         end
@@ -799,8 +810,11 @@ function _migrad_with_multi_fixed(
             end
         end
         f_val = Float64(cf.f(full))
-        # Build a degenerate FunctionMinimum representing this evaluation
-        fake_par = MinimumParameters(full, f_val)
+        # Build a degenerate FunctionMinimum representing this evaluation.
+        # Flattened: this state is stored in a `DenseMinimumState` warm slot.
+        full_dense = Vector{Float64}(undef, n)
+        @inbounds copyto!(full_dense, full)
+        fake_par = MinimumParameters(full_dense, f_val)
         fake_err = MinimumError(Symmetric(Matrix{Float64}(undef, 0, 0), :U), MnHesseValid)
         fake_grad = FunctionGradient(0)
         fake_state = MinimumState(fake_par, fake_err, fake_grad, 0.0, 1)
@@ -809,7 +823,10 @@ function _migrad_with_multi_fixed(
         return fake_min, 1
     end
 
-    cf_fixed = _fix_multi_params(cf, par_idxs, v, n)
+    # Template = the outer state's own coordinate vector, so the spliced
+    # full-length buffer handed to the user's FCN keeps its container on the
+    # LOW-LEVEL path too (the high-level path wraps `cf` and is unaffected).
+    cf_fixed = _fix_multi_params(cf, par_idxs, v, n, state.parameters.x)
     inner_strategy = Strategy(max(0, strategy.level - 1))
 
     # WARM-START PATH: when `warm_state` is supplied (the previous
@@ -979,7 +996,9 @@ function _migrad_with_fixed(
     other_param_seed::Union{Nothing,AbstractVector{<:Real}} = nothing,
 )
     n = length(state.parameters)
-    cf_fixed = _fix_one_param(cf, i, v, n)
+    # Template = the outer state's coordinate vector — see the matching
+    # comment in `_migrad_with_multi_fixed`.
+    cf_fixed = _fix_one_param(cf, i, v, n, state.parameters.x)
     # Thread strategy (parallel-review #4 A5 — previously silently
     # defaulted to Strategy(0) regardless of outer arg). Inner uses
     # the outer level minus 1 per C++ MnFunctionCross.cxx:106.

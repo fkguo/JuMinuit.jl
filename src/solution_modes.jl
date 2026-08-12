@@ -456,13 +456,24 @@ function _eval_fvals(m::Minuit, Xfull::Matrix{Float64}, parallel::Bool)
     N = size(Xfull, 1)
     f = m.fcn.f
     out = Vector{Float64}(undef, N)
+    # Rows are rebuilt onto the fit's coordinate container rather than passed
+    # as a `SubArray` of the sample matrix, so an objective written against
+    # named components can be evaluated here. One per-thread buffer, same
+    # contract as the threaded gradient: distinct threads touch distinct rows.
+    template = _init_params(m).values
+    nbuf = max(1, Threads.maxthreadid())
+    bufs = [similar(template, Float64) for _ in 1:nbuf]
     if parallel
         Threads.@threads :static for i in 1:N
-            @inbounds out[i] = Float64(f(@view Xfull[i, :]))
+            b = bufs[Threads.threadid()]
+            @inbounds copyto!(b, view(Xfull, i, :))
+            @inbounds out[i] = Float64(f(b))
         end
     else
+        b = bufs[1]
         @inbounds for i in 1:N
-            out[i] = Float64(f(@view Xfull[i, :]))
+            copyto!(b, view(Xfull, i, :))
+            out[i] = Float64(f(b))
         end
     end
     return out

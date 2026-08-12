@@ -35,6 +35,7 @@ makedocs(
         "Guides" => [
             "Cost functions" => "cost_functions.md",
             "Gradients: AD & threading" => "guides/gradients.md",
+            "Named parameter containers" => "guides/named_parameters.md",
             "Alternative minimizers" => "guides/optim.md",
             "Error analysis" => "error_analysis.md",
             "Bayesian analysis" => "bayesian.md",

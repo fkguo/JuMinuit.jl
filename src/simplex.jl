@@ -23,8 +23,12 @@
 # Stores n+1 vertices `(fval, x)` plus tracking indices `jh, jl`
 # (highest / lowest fval). EDM = f(jh) - f(jl); Dirin per-dim is
 # the range of x values across all vertices.
-mutable struct SimplexParameters
-    pts::Vector{Tuple{Float64,Vector{Float64}}}
+mutable struct SimplexParameters{V<:AbstractVector{Float64}}
+    # Parameterized on the vertex vector type: the vertices ARE the points the
+    # user's FCN is evaluated at, so a structured coordinate container has to
+    # survive here for `simplex(f, component_x0, errs)` to reach `f` with named
+    # components. `Vector{Float64}` for an ordinary fit, unchanged.
+    pts::Vector{Tuple{Float64,V}}
     jh::Int      # 1-based index of highest fval
     jl::Int      # 1-based index of lowest fval
 end
@@ -177,7 +181,7 @@ function simplex(
 
     # ── Initial simplex ───────────────────────────────────────────────
     x = collect(Float64, x0)
-    step = Vector{Float64}(undef, n)
+    step = similar(x, Float64)
     @inbounds for i in 1:n
         # C++ SimplexBuilder.cxx:38 — initial edge = 10·Gstep, where Gstep is
         # the seed InitialGradientCalculator value gstep = max(gsmin, 0.1·dirin)
@@ -192,7 +196,7 @@ function simplex(
 
     # Seed (vertex 1) is the initial point.
     f_seed = cf(x)
-    pts = Vector{Tuple{Float64,Vector{Float64}}}(undef, n + 1)
+    pts = Vector{Tuple{Float64,typeof(x)}}(undef, n + 1)
     pts[1] = (f_seed, copy(x))
 
     # C++ `ModularFunctionMinimizer::Minimize` (ModularFunctionMinimizer
@@ -250,10 +254,12 @@ function simplex(
     sp = SimplexParameters(pts, jh, jl)
 
     # ── Iterate ───────────────────────────────────────────────────────
-    pbar = Vector{Float64}(undef, n)
-    pstar = Vector{Float64}(undef, n)
-    pstst = Vector{Float64}(undef, n)
-    prho = Vector{Float64}(undef, n)
+    # Derived from `x` (not freshly allocated) — every one of these is passed
+    # to `cf(...)`, i.e. to the user's objective.
+    pbar = similar(x, Float64)
+    pstar = similar(x, Float64)
+    pstst = similar(x, Float64)
+    prho = similar(x, Float64)
     wg = 1.0 / Float64(n)
     edm_prev = edm(sp)
     n_iter = 0

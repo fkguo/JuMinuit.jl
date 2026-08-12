@@ -221,6 +221,79 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test tot[] == length(ens)
     end
 
+    # ── the low-level kernel APIs, called directly on a cost function ────────
+    # The high-level `Minuit` path wraps the objective, so it is structured-safe
+    # for a different reason than these are. A user driving the kernel directly
+    # (`migrad(f, x0, errs)` then `minos(fm, CostFunction(f), i)`) gets the
+    # container from the splice buffers instead, which is a separate mechanism
+    # and needs its own coverage.
+    @testset "low-level kernel API" begin
+        f, bad, tot = _axis_probe(expected_axes)
+        cf = CostFunction(f)
+
+        fm = migrad(cf, start, errs)
+        @test fm.state.parameters.x isa ComponentVector
+
+        me = minos(fm, cf, 1)
+        @test me.upper > 0
+        ce = contour_exact(fm, cf, 1, 2; npoints = 6)
+        @test length(ce.points) == 6
+        sm = NativeMinuit.simplex(cf, start, errs)
+        @test isfinite(sm.state.parameters.fval)
+
+        @test bad[] == 0
+        @test tot[] > 0
+
+        # Same three, on plain vectors, must give identical numbers.
+        ff, _, _ = _axis_probe(expected_axes)   # unused counters; flat objective below
+        cff = CostFunction(_flat_obj)
+        fmf = migrad(cff, flat_start, errs)
+        @test collect(fm.state.parameters.x) == collect(fmf.state.parameters.x)
+        @test minos(fmf, cff, 1).upper == me.upper
+        @test collect(contour_exact(fmf, cff, 1, 2; npoints = 6).points) ==
+              collect(ce.points)
+        @test NativeMinuit.simplex(cff, flat_start, errs).state.parameters.fval ==
+              sm.state.parameters.fval
+    end
+
+    @testset "sampling and resampling helpers" begin
+        f, bad, tot = _axis_probe(expected_axes)
+        m = Minuit(f, start; errors = errs)
+        migrad!(m)
+
+        @test args(m) isa ComponentVector           # IMinuit.jl-compatible accessor
+
+        get_contours_samples(m; nsamples = 60)
+        @test bad[] == 0
+
+        # find_solution_modes evaluates the raw objective on each sample row.
+        S = [1.0 2.0; 1.01 2.01; 0.99 1.99; 1.005 2.005; 0.995 1.995]
+        bad[] = 0
+        find_solution_modes(S, m)
+        @test bad[] == 0
+
+        # Bootstrap / jackknife re-fit a model that reads named components.
+        data = NativeMinuit.Data(collect(1.0:6.0), 2 .* collect(1.0:6.0) .+ 1.0,
+                                 fill(0.1, 6))
+        linmodel(x, p) = p.a * x + p.b
+        bs = NativeMinuit.bootstrap(linmodel, data, start; nresample = 5)
+        @test bs.n_valid >= 1
+        jk = NativeMinuit.jackknife(linmodel, data, start)
+        @test jk !== nothing
+    end
+
+    @testset "profile_band endpoints keep the axes" begin
+        nested = ComponentArray(slope = 0.0, intercept = 0.0, offset = 0.0)
+        obj(p) = (p.slope - 1.0)^2 + (p.intercept - 2.0)^2 + (p.offset - 3.0)^2
+        m = Minuit(obj, nested; errors = fill(0.1, 3))
+        migrad!(m)
+        band = NativeMinuit.profile_band(m, (x, p) -> p.slope * x + p.intercept,
+                                         [0.5, 1.0])
+        stored = filter(!isnothing, vcat(band.plo, band.phi))
+        @test !isempty(stored)
+        @test all(v -> v isa ComponentVector, stored)
+    end
+
     @testset "bounded MINOS snapshot keeps the axes" begin
         m = Minuit(_struct_obj, start; errors = errs,
                    limits = [(-5.0, 5.0), nothing])

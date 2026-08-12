@@ -5,6 +5,30 @@ and [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Named parameter containers.** A structured `AbstractVector{Float64}` given
+  as `x0` — a `ComponentVector`, an `LVector`, or any array type whose
+  `similar`/`copy`/broadcast preserve its structure — is now carried through to
+  every point where NativeMinuit calls back into user code and into the
+  reported results: the objective and a user gradient on all of MIGRAD, HESSE,
+  MINOS, the contour family, `profile`/`mnprofile`, `scan`, SIMPLEX,
+  `extremize`/`profile_band`, the `Optim` bridge, MCMC and the Bayesian
+  posterior; user priors; the derived-quantity functions in `quantiles` and
+  `quantile_band` and the rows of a `LikelihoodEnsemble`; and
+  `ext_values`/`ext_errors`, `copy(m.values)`, the MINOS crossing snapshots,
+  and `extremize`'s endpoint vectors. There is no ComponentArrays dependency —
+  `x0` simply becomes the allocation template. See the "Named parameter
+  containers" guide. Resolves the loss of component axes at the objective
+  callback boundary.
+
+  The minimizer's *internal* coordinates keep the container only when the
+  internal and external spaces coincide (all parameters free and unbounded).
+  A bound makes the stored number a transformed coordinate and a fixed
+  parameter shortens the vector, so in those cases the internal workspace is a
+  plain vector rather than a mislabelled structured one — read results from
+  `ext_values`/`m.values`, never from the internal state.
+
 ### Fixed
 
 - MINOS results that stop at a parameter bound now retain their kernel values

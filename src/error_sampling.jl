@@ -685,7 +685,10 @@ function get_contours_samples(m::Minuit;
     nfree = length(free_idx)
     nfree >= 1 || throw(ArgumentError("no free parameters to sample"))
 
-    best_full = collect(Float64, m.values)            # full external best fit
+    # `copy`, not `collect`: the proposals below are spliced onto copies of
+    # this vector and handed straight to the user's FCN (or a supplied `χsq`),
+    # so it must carry the fit's coordinate container.
+    best_full = copy(m.values)                        # full external best fit
     best_free = best_full[free_idx]
     fmin = Float64(m.fval)
     isfinite(fmin) ||

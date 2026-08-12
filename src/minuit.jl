@@ -2253,12 +2253,16 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 """
-    args(m::Minuit) -> Vector{Float64}
+    args(m::Minuit) -> AbstractVector{Float64}
 
-IMinuit.jl-compatible convenience: returns the current parameter
-values as a `Vector{Float64}`. Equivalent to `m.values`.
+IMinuit.jl-compatible convenience: returns the current parameter values as a
+plain vector. Equivalent to `m.values`.
+
+When the fit was started from a structured coordinate container the result
+keeps it, so a model written against named components can be called with
+`args(m)` directly (this is what `@plt_best` does).
 """
-args(m::Minuit) = collect(Float64, m.values)
+args(m::Minuit) = copy(m.values)
 
 """
     matrix(m::Minuit; correlation=false, skip_fixed=true) -> Matrix{Float64}
