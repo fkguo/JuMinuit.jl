@@ -632,7 +632,10 @@ function contour_grid(m::Minuit, par1, par2;
     end
     Int(size) >= 2 || throw(ArgumentError("contour_grid: size must be ≥ 2"))
 
-    base = collect(Float64, m.values)   # post-fit values when fitted, else initial
+    # post-fit values when fitted, else initial. `copy` (not `collect`): the
+    # grid loop below calls the raw objective with this vector, so it has to
+    # carry the user's coordinate container — `collect` always flattens.
+    base = copy(m.values)
 
     # Per-axis grid: explicit `grid` > explicit bound pairs > value ± k·σ.
     # Numeric bounds are clipped against the parameter's limits (iminuit

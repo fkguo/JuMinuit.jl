@@ -187,7 +187,8 @@ end
 # always carry their snapshot values and a mutating user FCN cannot leak across
 # steps (the guarantee the old per-call `copy` gave — see `quantiles`). Shared by
 # the Metropolis and the affine-invariant ensemble samplers.
-@inline function _eval_posterior!(pbuf::Vector{Float64}, fbuf::Vector{Float64},
+@inline function _eval_posterior!(pbuf::AbstractVector{Float64},
+                                  fbuf::AbstractVector{Float64},
                                   best_full, free_idx, fval_full, logprior_full, q)
     lp = 0.0
     if logprior_full !== nothing
@@ -235,8 +236,10 @@ function _metropolis_chain(fval_full, logprior_full,
     # nothing is allocated per step. `fval_full` / `logprior_full` receive the
     # FULL external vector; `logprior_full === nothing` is the flat-prior
     # (`mcmc_sample`) fast path. See `_eval_posterior!`.
-    pbuf = Vector{Float64}(undef, ntot)
-    fbuf = Vector{Float64}(undef, ntot)
+    # Derived from `best_full` so a structured coordinate container reaches
+    # the user FCN and prior on every step (they are called with these).
+    pbuf = similar(best_full, Float64)
+    fbuf = similar(best_full, Float64)
     _eval(qfree) = _eval_posterior!(pbuf, fbuf, best_full, free_idx,
                                     fval_full, logprior_full, qfree)
 
@@ -397,8 +400,10 @@ function _ensemble_chain(fval_full, logprior_full,
 ensemble can mix poorly or get stuck in a subspace when walkers ≲ 2·n_free — raise `nwalkers`."
     up_f = Float64(up)
 
-    pbuf = Vector{Float64}(undef, ntot)
-    fbuf = Vector{Float64}(undef, ntot)
+    # Derived from `best_full` so a structured coordinate container reaches
+    # the user FCN and prior on every step (they are called with these).
+    pbuf = similar(best_full, Float64)
+    fbuf = similar(best_full, Float64)
     eval_post(q) = _eval_posterior!(pbuf, fbuf, best_full, free_idx,
                                     fval_full, logprior_full, q)
 
@@ -706,7 +711,7 @@ function mcmc_sample(m::Minuit;
     nfree = length(free_idx)
     nfree >= 1 || throw(ArgumentError("no free parameters to sample"))
 
-    best_full = collect(Float64, m.values)
+    best_full = copy(m.values)   # keeps the user coordinate container
     up = Float64(m.fcn.up)
     (isfinite(up) && up > 0) || throw(ArgumentError("errordef (up) must be finite and > 0, got $up"))
 

@@ -57,7 +57,7 @@ Result of `function_cross`. Mirrors C++ `MnCross`
   only; always `nothing` for unbounded `function_cross`, and `nothing`
   for invalid results). Used by [`MinosError`](@ref) M4 snapshot fields.
 """
-struct MnCross{S<:MinimumState}
+struct MnCross{S<:MinimumState,E<:Union{Nothing,AbstractVector{Float64}}}
     state::S
     aopt::Float64
     nfcn::Int
@@ -72,12 +72,16 @@ struct MnCross{S<:MinimumState}
     # snapshot via `MinosError.{upper,lower}_state`. `nothing` for the
     # unbounded path (caller assembles ext from `state.parameters.x`
     # via `_assemble_crossing_state`) and for invalid results.
-    ext_state::Union{Nothing,Vector{Float64}}
+    #
+    # Typed on the container, not pinned to `Vector{Float64}`: the snapshot is
+    # a copy of the bounded fit's `ext_values`, which keeps the user's
+    # coordinate container (and its axis labels) when they supplied one.
+    ext_state::E
 end
 
 MnCross(state::MinimumState, aopt::Real, nfcn::Integer; valid=true,
          new_min=false, fcn_limit=false, par_limit=false,
-         ext_state::Union{Nothing,Vector{Float64}} = nothing) =
+         ext_state::Union{Nothing,AbstractVector{Float64}} = nothing) =
     MnCross(state, Float64(aopt), Int(nfcn), valid, new_min,
             fcn_limit, par_limit, ext_state)
 
@@ -909,7 +913,12 @@ function function_cross_multi(
     # construct one when the first probe needs it (kept in
     # scratch_holder so the inner-dim==0 degenerate path doesn't
     # allocate at all).
-    warm_state_ref = Ref{Union{Nothing,typeof(state)}}(nothing)
+    # Typed on `DenseMinimumState`, NOT `typeof(state)`: the probes below run
+    # over a reduced coordinate space seeded from a fresh `Vector{Float64}`,
+    # so their states are dense even when the outer fit uses a structured
+    # container. Pinning this slot to the outer type makes the very first
+    # `warm_state_ref[] = inner_min.state` unstorable.
+    warm_state_ref = Ref{Union{Nothing,DenseMinimumState}}(nothing)
     scratch_dense = scratch === nothing ? nothing :
                     scratch::MigradScratch{Vector{Float64}}
     scratch_holder = Ref{Union{Nothing,MigradScratch{Vector{Float64}}}}(scratch_dense)
@@ -1231,7 +1240,9 @@ function function_cross(
     # (codex C++-faithful interpretation) — never the original α=1
     # seed, so subsequent probes don't reset to the linear-tangent
     # prediction once the inner MIGRAD has found the actual valley.
-    warm_state_ref = Ref{Union{Nothing,typeof(state)}}(nothing)
+    # Dense by construction — see the matching comment in
+    # `function_cross_multi` above.
+    warm_state_ref = Ref{Union{Nothing,DenseMinimumState}}(nothing)
     scratch_dense = scratch === nothing ? nothing :
                     scratch::MigradScratch{Vector{Float64}}
     scratch_holder = Ref{Union{Nothing,MigradScratch{Vector{Float64}}}}(scratch_dense)
@@ -1417,7 +1428,9 @@ function function_cross_external(
     # the ext slice in a closure-captured Ref that the probe overwrites
     # on each `inner_bfm.is_valid` call. After `_cross_core` returns
     # valid, `last_ext_state[]` holds the converged ext snapshot.
-    last_ext_state = Ref{Union{Nothing,Vector{Float64}}}(nothing)
+    # Typed on the fit's own external container so a structured snapshot is
+    # storable (and reaches `MinosError.{upper,lower}_state` with its axes).
+    last_ext_state = Ref{Union{Nothing,typeof(bfm.ext_values)}}(nothing)
 
     # Consume-once pre-shift Ref. Mirrors function_cross's
     # `pre_seed_ref` pattern (codex consume-once finding). C++ MnMinos
@@ -1529,7 +1542,11 @@ function function_cross_external(
                                                        fixed = p.fixed))
                 end
             end
-            inner_params = Parameters(inner_pars, prec)
+            # Seed from `params` so the inner bounded MIGRAD keeps the outer
+            # fit's coordinate container: its external workspaces are built
+            # with `similar(values)`, and they are what the user's objective
+            # and gradient are called with.
+            inner_params = Parameters(inner_pars, params)
             inner_bfm = migrad(cf, inner_params;
                                 tol = 0.5 * tlr, maxfcn = Int(budget),
                                 strategy = inner_strategy, prec = prec,

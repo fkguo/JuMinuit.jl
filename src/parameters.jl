@@ -91,8 +91,23 @@ tightly-coupled C++ pair `MnUserParameters` + `MnUserTransformation`.
 
 The mappings are computed once at construction; they don't change as
 parameters are fixed/released (would require rebuilding).
+
+# The `IntIsExt` type parameter
+
+The second type parameter records whether the minimizer's INTERNAL coordinate
+space coincides with the user's EXTERNAL one — true only when every parameter
+is free (same dimension) AND unbounded (identity transform). It gates
+[`_internal_vector`](@ref): when the two spaces coincide, an internal workspace
+is allocated from `values` and a structured container keeps its axes, because
+each slot still denotes the parameter its label names. When they differ — a
+fixed parameter shortens the vector, a bound makes the stored number an
+arcsin/sqrt-transformed coordinate — the internal workspace is a plain
+`Vector{Float64}`. Carrying user axis labels on transformed coordinates would
+attach a physically meaningful name to a number that is not that quantity.
+Structure is still preserved on every external buffer that reaches the user's
+objective, gradient, and results, which is what callers actually observe.
 """
-struct Parameters{P<:AbstractVector{Float64},AllFree}
+struct Parameters{P<:AbstractVector{Float64},IntIsExt}
     pars::Vector{MinuitParameter}
     ext_of_int::Vector{Int}
     int_of_ext::Vector{Int}
@@ -129,7 +144,11 @@ function Parameters(pars::Vector{MinuitParameter},
     @inbounds for i in 1:n
         external[i] = pars[i].value
     end
-    return Parameters{typeof(external),int_idx == n}(
+    # Internal ≡ external only when nothing reshapes or reparameterizes the
+    # coordinates: no fixed parameter (same length) and no bound (identity
+    # transform). See the `IntIsExt` section of the docstring.
+    int_is_ext = int_idx == n && !any(has_limits, pars)
+    return Parameters{typeof(external),int_is_ext}(
         pars, ext_of_int, int_of_ext, name_to_ext, prec, external)
 end
 
@@ -377,9 +396,11 @@ function initial_int_errors(p::Parameters)
     return errs
 end
 
-# Container choice is encoded in `Parameters`' second type parameter. This
-# makes the common all-free path infer a structured active vector, while a
-# fixed-parameter projection has an honestly different dense-vector type.
+# Container choice is encoded in `Parameters`' second type parameter
+# (`IntIsExt`). The all-free, unbounded path infers a structured active vector
+# whose labels still name the parameters they hold; a fixed-parameter
+# projection or a bounded reparameterization gets an honestly different
+# dense-vector type rather than mislabeled transformed coordinates.
 _internal_vector(p::Parameters{P,true}) where {P} = similar(p.values, Float64)
 _internal_vector(p::Parameters{P,false}) where {P} =
     Vector{Float64}(undef, n_free(p))

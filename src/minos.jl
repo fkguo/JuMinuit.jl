@@ -40,8 +40,8 @@ The asymmetric error result for a single parameter. Mirrors C++
   MIGRAD from the better point).
 - `upper_fcn_limit::Bool`, `lower_fcn_limit::Bool` — call budget hit.
 - `nfcn::Int` — total FCN calls across both directions.
-- `upper_state::Union{Nothing,Vector{Float64}}`,
-  `lower_state::Union{Nothing,Vector{Float64}}` — full parameter
+- `upper_state::Union{Nothing,AbstractVector{Float64}}`,
+  `lower_state::Union{Nothing,AbstractVector{Float64}}` — full parameter
   snapshot at the ±σ crossing endpoint. `nothing` when that side
   did not converge cleanly. Mirrors C++ `MinosError::UpperState()` /
   `LowerState()` (`MinosError.h:73-74`). Useful for HEP correlated-
@@ -81,8 +81,14 @@ struct MinosError
     # parameter's crossing value; the bounded path reads
     # `MnCross.ext_state` (captured by `function_cross_external`'s
     # probe-Ref).
-    upper_state::Union{Nothing,Vector{Float64}}
-    lower_state::Union{Nothing,Vector{Float64}}
+    # Left abstract (rather than parameterized) on purpose: `MinosError` is
+    # stored in a `Dict{String,MinosError}` on `Minuit`, so a type parameter
+    # would leak into that container's type. These two fields are result
+    # snapshots read once by the user, never touched in a hot loop, so the
+    # boxed field costs nothing measurable — and keeping them abstract is what
+    # lets a structured external container survive into the reported state.
+    upper_state::Union{Nothing,AbstractVector{Float64}}
+    lower_state::Union{Nothing,AbstractVector{Float64}}
 end
 
 # Backward-compatible constructor (legacy callers that don't pass
@@ -403,7 +409,7 @@ function minos(
     upper_state = up_cross.valid ?
         _assemble_crossing_state(up_cross.state, par_idx_i,
                                   min_par_value + up_cross.aopt * sigma_i,
-                                  n) : nothing
+                                  n, fmin.state.parameters.x) : nothing
     nfcn_total = up_cross.nfcn
 
     if print_level >= 1
@@ -426,7 +432,7 @@ function minos(
     lower_state = lo_cross.valid ?
         _assemble_crossing_state(lo_cross.state, par_idx_i,
                                   min_par_value - lo_cross.aopt * sigma_i,
-                                  n) : nothing
+                                  n, fmin.state.parameters.x) : nothing
     nfcn_total += lo_cross.nfcn
 
     if print_level >= 1
@@ -461,12 +467,18 @@ end
 # (`par_idx`, value `par_val`) at its slot. Mirrors the C++
 # `MinosError::UpperState() / LowerState()` snapshot (MinosError.h:73-74).
 function _assemble_crossing_state(inner_state::MinimumState,
-                                   par_idx::Int, par_val::Float64, n::Int)
+                                   par_idx::Int, par_val::Float64, n::Int,
+                                   template::AbstractVector{Float64} =
+                                       Vector{Float64}(undef, n))
     inner_x = inner_state.parameters.x
     # Defensive: shape mismatch implies the inner_state isn't the (n-1)-dim
     # cross-search state — fall through to `nothing` rather than scramble.
     length(inner_x) == n - 1 || return nothing
-    out = Vector{Float64}(undef, n)
+    # `template` is the outer fit's own coordinate vector, so a structured
+    # container reports the crossing snapshot with its axis labels intact.
+    # The inner state is dense (reduced space) and cannot serve as template.
+    length(template) == n || return nothing
+    out = similar(template, Float64)
     @inbounds for k in 1:(par_idx - 1)
         out[k] = inner_x[k]
     end

@@ -135,9 +135,14 @@ function _scipy_optim(m::Minuit, optimizer = nothing;
     # Start from the CURRENT external values (post-fit if a prior fit exists,
     # else the constructor's initial values) — iminuit's scipy starts from
     # wherever the Minuit currently sits.
-    x0_full = Float64[m.fmin === nothing ? params.pars[i].value : m.fmin.ext_values[i]
-                      for i in 1:ntot]
-    x0_free = x0_full[free_idx]
+    # Built via `similar(params.values)` so a structured coordinate container
+    # survives into the `xfull` buffers the user's objective / gradient below
+    # are called with.
+    x0_full = similar(params.values, Float64)
+    @inbounds for i in 1:ntot
+        x0_full[i] = m.fmin === nothing ? params.pars[i].value : m.fmin.ext_values[i]
+    end
+    x0_free = Float64[x0_full[i] for i in free_idx]
 
     # Objective over the FREE sub-vector; fixed params held at x0_full. Kept
     # generic over `eltype(xfree)` for safety, though in practice it is only ever
@@ -149,7 +154,9 @@ function _scipy_optim(m::Minuit, optimizer = nothing;
     objective = let f = f, x0_full = x0_full, free_idx = free_idx, ntot = ntot
         function (xfree)
             T = eltype(xfree)
-            xfull = Vector{T}(undef, ntot)
+            # `similar(x0_full, T)`, not `Vector{T}`: keeps the user's
+            # container (and generalises over `T` for Optim's AD backends).
+            xfull = similar(x0_full, T)
             @inbounds for i in 1:ntot
                 xfull[i] = T(x0_full[i])
             end
@@ -176,7 +183,9 @@ function _scipy_optim(m::Minuit, optimizer = nothing;
         guser = m.cfwg.g
         let guser = guser, x0_full = x0_full, free_idx = free_idx, ntot = ntot
             function (G, xfree)
-                xfull = Vector{Float64}(undef, ntot)
+                # Container-preserving, same rationale as `objective` above —
+                # `guser` is the user's own external gradient.
+                xfull = similar(x0_full, Float64)
                 @inbounds for i in 1:ntot
                     xfull[i] = x0_full[i]
                 end
@@ -241,8 +250,8 @@ end
 # `migrad(cf, params)` constructs, minus the DFP loop). After this `m.values` /
 # `m.fval` are correct and `hesse(m)` refines `m.covariance` / `m.errors`.
 function _writeback!(m::Minuit, params, free_idx::Vector{Int},
-                      x0_full::Vector{Float64}, x_opt_free, converged::Bool,
-                      nfev::Int)
+                      x0_full::AbstractVector{Float64}, x_opt_free,
+                      converged::Bool, nfev::Int)
     ntot = n_pars(params)
 
     # Parameters at the optimum: free ← x_opt, fixed kept; bounds/fixed/names

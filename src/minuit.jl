@@ -244,7 +244,9 @@ function _use_threads(m::Minuit, mode::Union{Bool,Symbol} = m.threaded_gradient)
     Threads.nthreads() == 1 && return false
     cached = m._auto_threads[]
     if cached === nothing
-        x0 = [p.value for p in _init_params(m).pars]
+        # `copy` (not a comprehension): the probe calls the RAW user FCN, so it
+        # must be handed the user's own coordinate container.
+        x0 = copy(_init_params(m).values)
         # Probe a fresh CostFunction view (own nfcn Ref) so the safety check's
         # FCN evaluations don't pollute the user's call counter.
         cached = is_thread_safe(CostFunction(m.fcn.f, m.fcn.up), x0)
@@ -1469,6 +1471,23 @@ ParameterView(m::Minuit, kind::Symbol) =
 # `Parameters` on every `size`/index call.
 Base.size(v::ParameterView) = (n_pars(_init_params(v.m)),)
 Base.IndexStyle(::Type{<:ParameterView}) = IndexLinear()
+
+# `copy(m.values)` / `copy(m.errors)` must reproduce the user's COORDINATE
+# CONTAINER, not a bare `Array`. Several helpers (`mnprofile`, `contour_grid`,
+# the `threaded_gradient=:auto` probe) re-seed a fit or evaluate the raw
+# objective from such a copy; with the AbstractArray fallback they handed a
+# plain `Vector` to a function written against named components.
+#
+# Only same-length Float64 requests are redirected: an off-size or
+# foreign-eltype `similar` has no meaningful mapping onto the parameter axes,
+# so it falls back to a dense vector. `:fixed`/`:limits` views never reach
+# here — their element types are `Bool`/`Tuple`, not `Float64`.
+function Base.similar(v::ParameterView{kind,Float64}, ::Type{T},
+                      dims::Base.Dims{1}) where {kind,T}
+    cfg = _init_params(v.m)
+    (T === Float64 && dims == (n_pars(cfg),)) || return Vector{T}(undef, dims[1])
+    return similar(cfg.values, Float64)
+end
 
 # ── reads (live; mirror the old getproperty branches exactly) ────────────────
 # `:values`/`:errors` prefer the post-fit external vector when a fit is

@@ -39,8 +39,12 @@ struct PosteriorProblem{F}
     up::Float64
     free_idx::Vector{Int}
     names::Vector{String}
-    best::Vector{Float64}
-    fixed_values::Vector{Float64}
+    # Full-length EXTERNAL parameter vectors. Abstract so the user's coordinate
+    # container survives into `fval_free` / `logprior_free`, which rebuild the
+    # full vector by `copy(fixed_values)` and hand it to the user's FCN and
+    # prior. Snapshot fields, not hot-loop storage.
+    best::AbstractVector{Float64}
+    fixed_values::AbstractVector{Float64}
     lo_free::Vector{Float64}
     hi_free::Vector{Float64}
     errors_free::Vector{Float64}
@@ -192,7 +196,7 @@ function _current_signature(m::Minuit)
     # not the `m.params` fit-overlay; the live best point comes from `m.values`.
     params = _init_params(m)
     names = [p.name for p in params.pars]
-    best = collect(Float64, m.values)
+    best = copy(m.values)   # keeps the user coordinate container
     free = [!is_fixed(p) for p in params.pars]
     lo = [p.lower for p in params.pars]
     hi = [p.upper for p in params.pars]
@@ -240,7 +244,7 @@ function PosteriorProblem(m::Minuit; prior = :flat)
     free_idx = [i for i in 1:ntot if !is_fixed(params.pars[i])]
     nfree = length(free_idx)
     nfree >= 1 || throw(ArgumentError("no free parameters to sample"))
-    best = collect(Float64, m.values)
+    best = copy(m.values)   # keeps the user coordinate container
     up = Float64(m.fcn.up)
     (isfinite(up) && up > 0) || throw(ArgumentError("errordef (up) must be finite and > 0, got $up"))
 

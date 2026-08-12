@@ -320,6 +320,23 @@ function MinimumState(parameters::MinimumParameters, error::MinimumError,
     MinimumState(parameters, error, gradient, Float64(edm), Int(nfcn))
 end
 
+"""
+    DenseMinimumState
+
+The `MinimumState` type produced by every REDUCED-coordinate probe: MINOS and
+contour searches fix one or more parameters and seed the inner MIGRAD from a
+freshly built `Vector{Float64}` (`function_cross.jl`'s `y0`), so the inner
+state is dense regardless of what container the outer fit uses.
+
+Warm-state slots that thread such probes forward must be typed on THIS, not on
+`typeof(outer_state)`: with a structured outer container the two differ, and a
+slot typed from the outer state cannot hold the probe's result at all.
+"""
+const DenseMinimumState = MinimumState{
+    MinimumParameters{Vector{Float64},Vector{Float64}},
+    FunctionGradient{Vector{Float64},Vector{Float64},Vector{Float64}},
+}
+
 # Derived predicates — mirror C++ MinimumState accessors.
 Base.length(s::MinimumState) = length(s.parameters)
 fval(s::MinimumState) = s.parameters.fval

@@ -98,8 +98,13 @@ audit trail.
 struct ExtremizeResult{D<:NamedTuple}
     lo::Float64
     hi::Float64
-    plo::Vector{Float64}
-    phi::Vector{Float64}
+    # The two endpoint PARAMETER vectors. Left abstract so a structured
+    # coordinate container reaches the user with its axis labels — these are
+    # read-once results, not hot-loop storage. (`x`/`fbest` on `ProfileBand`
+    # below stay concrete: those are the abscissa grid and the curve of `f`
+    # values, not parameter vectors.)
+    plo::AbstractVector{Float64}
+    phi::AbstractVector{Float64}
     fbest::Float64
     bound::Float64
     delta::Float64
@@ -200,7 +205,7 @@ end
 
 # FCN value at θ with the throw-guard: a probe outside the FCN's domain
 # counts as infeasible (+Inf); it does not abort the extremization.
-function _fcn_or_inf(fcnraw, θ::Vector{Float64})
+function _fcn_or_inf(fcnraw, θ::AbstractVector{Float64})
     c = try
         fcnraw(θ)
     catch err
@@ -215,7 +220,12 @@ end
 # a Vector of vectors, the rows of a Matrix (e.g. an MCMC ensemble's
 # f-extreme members), or a single vector.
 function _seed_pool(m::Minuit, seeds, fname::String)
-    pool = [collect(Float64, m.values)]
+    # Every pool member is eventually handed to the user's FCN and `f`, so all
+    # of them are normalized onto the fit's own coordinate container. User
+    # seeds arrive as bare numbers (matrix rows, plain vectors) and carry no
+    # container of their own; `template` supplies it.
+    template = copy(m.values)
+    pool = [template]
     seeds === nothing && return pool
     rows = if seeds isa AbstractMatrix
         [collect(Float64, view(seeds, i, :)) for i in axes(seeds, 1)]
@@ -231,7 +241,9 @@ function _seed_pool(m::Minuit, seeds, fname::String)
             "(a full EXTERNAL parameter vector, fixed parameters included)"))
         all(isfinite, s) || throw(ArgumentError(
             "$fname: seed #$k contains non-finite entries"))
-        push!(pool, s)
+        v = similar(template, Float64)
+        copyto!(v, s)
+        push!(pool, v)
     end
     return pool
 end
@@ -241,7 +253,7 @@ end
 # clamped INTO their limits with a tiny relative inset — a start exactly ON
 # a bound has dExt/dInt = 0 under the sin transform, leaving MIGRAD a dead
 # direction at the seed.
-function _usable_seed(m::Minuit, s::Vector{Float64})
+function _usable_seed(m::Minuit, s::AbstractVector{Float64})
     x = copy(s)
     @inbounds for i in eachindex(x)
         p = m.params.pars[i]
@@ -263,7 +275,7 @@ end
 # parameters are pinned by the directional construction, so only free, bounded
 # coordinates can stray — the directional ray ignores limits, so an endpoint may
 # leave the box and is then NOT a member of the constrained Δχ² region.
-function _within_limits(m::Minuit, θ::Vector{Float64})
+function _within_limits(m::Minuit, θ::AbstractVector{Float64})
     pars = _init_params(m).pars        # raw config (limits/fixed); no fit-overlay rebuild
     @inbounds for i in eachindex(θ)
         p = pars[i]
@@ -335,8 +347,8 @@ end
 # back to the anchor's corridor and undo exactly the multi-corridor coverage
 # the seed pool exists to provide (the caller then keeps the raw point,
 # which is still within the acceptance tolerance).
-function _project_to_bound(fcnraw, θstar::Vector{Float64},
-                           anchor::Vector{Float64}, bound::Float64)
+function _project_to_bound(fcnraw, θstar::AbstractVector{Float64},
+                           anchor::AbstractVector{Float64}, bound::Float64)
     d = anchor .- θstar
     at(s) = θstar .+ s .* d
     s_lo, s_hi = 0.0, NaN
@@ -394,8 +406,8 @@ _penalty_ladder(lambda::Float64) =
 # Identical (post-pinning/clamping) starts are fitted only once, so record
 # `seed` indices may skip duplicates.
 function _extremize_dir(m::Minuit, f, sgn::Int, bound::Float64,
-                        pool::Vector{Vector{Float64}}, fhat::Float64,
-                        that::Vector{Float64};
+                        pool::AbstractVector{<:AbstractVector{Float64}}, fhat::Float64,
+                        that::AbstractVector{Float64};
                         lambda::Float64, accept_tol::Float64,
                         strategy, maxfcn, include_best::Bool, rounds::Int,
                         iterate::Int = 5, on_unit = nothing,
@@ -413,7 +425,7 @@ function _extremize_dir(m::Minuit, f, sgn::Int, bound::Float64,
     records = NamedTuple{(:seed, :converged, :accepted, :projected,
                           :fcn, :f_raw, :f, :nfcn, :f_nonfinite),
                          Tuple{Int,Bool,Bool,Bool,Float64,Float64,Float64,Int,Int}}[]
-    seen = Vector{Vector{Float64}}()
+    seen = Vector{eltype(pool)}()
     for (k, raw) in enumerate(pool)
         x = _usable_seed(m, raw)
         any(s -> s == x, seen) && continue
@@ -481,7 +493,7 @@ function _extremize_dir(m::Minuit, f, sgn::Int, bound::Float64,
                             migrad!(mmk; strategy = strategy, maxfcn = maxfcn,
                                     iterate = iterate)
                         end
-                        cur = collect(Float64, mmk.values)
+                        cur = copy(mmk.values)
                         nf += mmk.nfcn
                         mm = mmk
                         unit_mmk = mmk
@@ -633,7 +645,7 @@ end
 # Forward-difference ∇f at θ̂ over the FREE parameters (fixed slots → 0). Only
 # sets the search DIRECTION and linear step; the true-FCN root + true-f at the
 # crossing correct any inaccuracy. n_free extra f-evals (tallied in `nf`).
-function _grad_forward(m::Minuit, f, that::Vector{Float64}, fhat::Float64,
+function _grad_forward(m::Minuit, f, that::AbstractVector{Float64}, fhat::Float64,
                        nf::Base.RefValue{Int})
     n = n_pars(m.params)
     g = zeros(Float64, n)
@@ -676,7 +688,7 @@ end
 # residual `bound − FCN ≤ ftol·up` on the feasible side — α to machine ε is
 # unnecessary (the endpoint `f` is evaluated there anyway). A throwing /
 # non-finite FCN (outside the domain) counts as infeasible (c > bound).
-function _root_on_ray(fcnraw, that::Vector{Float64}, dir::Vector{Float64},
+function _root_on_ray(fcnraw, that::AbstractVector{Float64}, dir::AbstractVector{Float64},
                       bound::Float64, α_lin::Float64, up::Float64,
                       nf::Base.RefValue{Int};
                       ftol::Float64 = 1e-4, maxiter::Int = 40, expand_max::Int = 80)
@@ -741,7 +753,7 @@ end
 # catches it to flag that point. Does NOT warn; `C`/`nf_fcn`/`nf_f` are passed
 # in so a band computes `C` once and tallies costs across points.
 function _directional_interval(m::Minuit, f, grad_f, δ::Float64, up::Float64,
-                               bound::Float64, that::Vector{Float64},
+                               bound::Float64, that::AbstractVector{Float64},
                                fhat::Float64, C, nf_fcn::Base.RefValue{Int},
                                nf_f::Base.RefValue{Int})
     n = n_pars(m.params)
@@ -815,7 +827,7 @@ function _directional_interval(m::Minuit, f, grad_f, δ::Float64, up::Float64,
 end
 
 function _extremize_directional(m::Minuit, f, grad_f, δ::Float64, up::Float64,
-                                bound::Float64, that::Vector{Float64},
+                                bound::Float64, that::AbstractVector{Float64},
                                 fhat::Float64, cl::Real, delta)
     C = m.covariance
     C === nothing && throw(ArgumentError(
@@ -1300,7 +1312,7 @@ function profile_band(m::Minuit, f, xs::AbstractVector{<:Real}; cl::Real = 1,
             # Per-point seed list: warm neighbour + current incumbent + the
             # full pool, duplicates skipped inside _extremize_dir. Seed
             # indices in the records refer to THIS list.
-            slo = Vector{Vector{Float64}}()
+            slo = Vector{eltype(pool)}()
             warm && wlo !== nothing && push!(slo, wlo)
             plo[i] === nothing || push!(slo, plo[i])
             append!(slo, pool)
@@ -1310,7 +1322,7 @@ function profile_band(m::Minuit, f, xs::AbstractVector{<:Real}; cl::Real = 1,
                                  include_best = include_best,
                                  rounds = Int(rounds), iterate = Int(iterate),
                                  on_unit = ou, side = :lower)
-            shi = Vector{Vector{Float64}}()
+            shi = Vector{eltype(pool)}()
             warm && whi !== nothing && push!(shi, whi)
             phi[i] === nothing || push!(shi, phi[i])
             append!(shi, pool)
@@ -1370,7 +1382,7 @@ end
 function _profile_band_directional(m::Minuit, f, grad_f, xv::Vector{Float64},
                                    fbest::Vector{Float64}, δ::Float64,
                                    up::Float64, bound::Float64,
-                                   that::Vector{Float64}, cl_rec::Float64, seeds)
+                                   that::AbstractVector{Float64}, cl_rec::Float64, seeds)
     seeds === nothing ||
         @warn "profile_band(mode=:directional): `seeds` are ignored (the directional " *
               "mode walks the single C·∇f ray per point, not a seed pool)."
