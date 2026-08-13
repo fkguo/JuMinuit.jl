@@ -128,6 +128,76 @@ function MinosError(par_idx::Int, min_par_value::Float64,
                 nothing, nothing)
 end
 
+# Map a `MinosError` computed on the INTERNAL cost function back to the
+# user's EXTERNAL (physical) frame — the same frame as `m.values`. The
+# low-level `minos(fmin, cf, …)` is called at an INTERNAL parameter index
+# and reports crossing offsets in the arcsin/√-transformed coordinate of a
+# bounded parameter, so publishing it unchanged beside external indices /
+# values silently mixes two coordinate systems. No-op for an unbounded
+# parameter in an all-free fit (internal == external).
+#
+# `upper` / `lower` are signed DISTANCES from the minimum, not positions:
+# they are converted by mapping the two crossing ENDPOINTS through int2ext
+# and re-differencing against the external minimum, NOT by scaling with
+# `d(ext)/d(int)` (that is only the σ → 0 linear limit and is wrong by
+# O(σ²) on a bounded parameter).
+#
+# The transform can also REVERSE orientation: for an upper-bounded-only
+# parameter `ext = upper + 1 − √(int² + 1)` DECREASES with the internal
+# coordinate, so the internal +σ crossing is the external LOWER one. When
+# that happens the two sides are swapped — values, per-side flags and
+# state snapshots together — preserving the `upper ≥ 0 ≥ lower` sign
+# convention. (This is the "Jacobian-swap / sign-cross detection" that
+# `minos!` avoids by searching bounded parameters directly in the external
+# frame; the contour drivers cannot, since the boundary search itself runs
+# internally.)
+#
+# Known limitation (deliberately out of scope): the one-sided √ transforms
+# are EVEN in the internal coordinate (ext depends on int²), so int → ext
+# folds at int = 0. A crossing endpoint that wraps past the fold maps back
+# toward the bound, and both endpoints can then land on the same external
+# side of the minimum — no side assignment is meaningful there. That regime
+# requires the minimum itself to sit within ~1σ of the bound, where errors
+# quoted in the transformed frame are not statistically meaningful anyway.
+function _externalize_minos(me::MinosError, params::Parameters)
+    int_idx = me.par_idx
+    ext_idx = params.ext_of_int[int_idx]
+    if bound_kind(params.pars[ext_idx]) == NoBounds
+        # Identity transform — taken without the round-trip so an unbounded
+        # parameter's published errors stay BIT-identical: the endpoint
+        # re-differencing below reproduces `upper` only to within one ULP
+        # (`(min + upper) − min != upper` in floating point).
+        ext_min, d_up, d_lo = me.min_par_value, me.upper, me.lower
+    else
+        ext_min = int_to_ext_value(params, int_idx, me.min_par_value)
+        d_up = int_to_ext_value(params, int_idx, me.min_par_value + me.upper) - ext_min
+        d_lo = int_to_ext_value(params, int_idx, me.min_par_value + me.lower) - ext_min
+    end
+    swap = d_up < d_lo
+    # Crossing snapshots are free-parameter INTERNAL vectors; publish the
+    # full external vector (fixed parameters re-inserted at their values).
+    up_state = me.upper_state === nothing ? nothing :
+               int_to_ext_vector(params, me.upper_state)
+    lo_state = me.lower_state === nothing ? nothing :
+               int_to_ext_vector(params, me.lower_state)
+    return MinosError(
+        ext_idx, ext_min,
+        swap ? d_lo : d_up,
+        swap ? d_up : d_lo,
+        swap ? me.lower_valid : me.upper_valid,
+        swap ? me.upper_valid : me.lower_valid,
+        swap ? me.lower_new_min : me.upper_new_min,
+        swap ? me.upper_new_min : me.lower_new_min,
+        swap ? me.lower_fcn_limit : me.upper_fcn_limit,
+        swap ? me.upper_fcn_limit : me.lower_fcn_limit,
+        swap ? me.lower_par_limit : me.upper_par_limit,
+        swap ? me.upper_par_limit : me.lower_par_limit,
+        me.nfcn,
+        swap ? lo_state : up_state,
+        swap ? up_state : lo_state,
+    )
+end
+
 """
     is_valid(e::MinosError) -> Bool
 

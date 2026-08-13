@@ -28,7 +28,12 @@ boundary-curve contour algorithms). Mirrors C++ `ContoursError`.
 - `points::Vector{Tuple{Float64,Float64}}` — the contour boundary in
   (x, y) external coordinates.
 - `minos_x::MinosError`, `minos_y::MinosError` — the MINOS errors
-  along each axis (used as the basis of the ellipse).
+  along `par_x` / `par_y` (used as the basis of the ellipse), in the
+  **same coordinate frame and index convention as `points`**: their
+  `par_idx` equals `par_x` / `par_y`, and their `min_par_value`,
+  `upper` / `lower` and `upper_state` / `lower_state` are external
+  (full-length, fixed parameters included) whenever the `ContoursError`
+  came from a high-level `(m::Minuit, …)` call.
 - `nfcn::Int` — total FCN calls.
 - `valid::Bool` — true if MINOS succeeded on both axes.
 - `full_points::Vector{Vector{Float64}}` — the **full n-dim parameter
@@ -106,9 +111,18 @@ contour_parameter_sets(ce::ContoursError) = ce.full_points
 # algorithm on the internal cost function (`m.fmin.internal_cf`) at internal
 # indices, so for BOUNDED parameters the raw `ce.points` are arcsin/√ coords,
 # not physical ones (a silent wrong result for plots / region analysis). This
-# externalizes `points` and `full_points` and restores the public external
-# parameter indices. No-op for unbounded parameters (internal == external).
+# externalizes `points`, `full_points` and the two axis `MinosError`s, and
+# restores the public external parameter indices. No-op for unbounded
+# parameters (internal == external).
 # `ce.par_x` / `ce.par_y` carry the INTERNAL indices the low-level call used.
+#
+# `minos_x` / `minos_y` are documented as the errors along `par_x` / `par_y`,
+# so they must land in the SAME frame as `points`: the low-level call built
+# them on the internal cost function, at internal indices and (for a bounded
+# parameter) in transformed-coordinate errors. They are converted here — at
+# the public boundary only — so the ellipse geometry, which consumes the raw
+# internal `mex` / `mey` inside `contour_ellipse`, is untouched. See
+# `_externalize_minos`.
 function _externalize_contour(ce::ContoursError, params::Parameters,
                                ext_x::Integer, ext_y::Integer)
     ix_int, iy_int = ce.par_x, ce.par_y
@@ -116,7 +130,9 @@ function _externalize_contour(ce::ContoursError, params::Parameters,
             int_to_ext_value(params, iy_int, py)) for (px, py) in ce.points]
     full = isempty(ce.full_points) ? ce.full_points :
            [int_to_ext_vector(params, fp) for fp in ce.full_points]
-    return ContoursError(Int(ext_x), Int(ext_y), pts, ce.minos_x, ce.minos_y,
+    return ContoursError(Int(ext_x), Int(ext_y), pts,
+                         _externalize_minos(ce.minos_x, params),
+                         _externalize_minos(ce.minos_y, params),
                          ce.nfcn, ce.valid, full)
 end
 

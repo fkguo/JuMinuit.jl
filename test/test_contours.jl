@@ -80,6 +80,121 @@
         @test c.minos_y isa MinosError
     end
 
+    @testset "minos_x/minos_y are external — bounded + fixed parameter" begin
+        # The high-level `contour_ellipse(m, …)` runs the contour on the
+        # INTERNAL cost function, so its two axis MinosErrors are born with
+        # internal indices and (for a bounded parameter) arcsin-coordinate
+        # errors. They are documented as the errors along `par_x`/`par_y`,
+        # so they must be published in the same external frame as `points`.
+        # Needs BOTH a bound (int ≠ ext values) and a fixed parameter
+        # (int ≠ ext indices) — the other contour tests have neither.
+        #
+        # χ²(p2, p3) = 1 + 3·(p2−2)² − 0.5·(p2−2) + 2·(p3−3)² at p1 = 0,
+        # so the Δχ²=1 half-widths are 1/√3 and 1/√2 and the two axes are
+        # uncorrelated.
+        o3(p) = (p[1]-1)^2 + 3*(p[2]-2)^2 + 2*(p[3]-3)^2 +
+                0.5*(p[1]-1)*(p[2]-2)
+        m = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3),
+                   limits = [nothing, (-9.0, 9.0), nothing])
+        m.fixed[1] = true
+        migrad!(m)
+        ce = contour_ellipse(m, 2, 3; npoints = 12)
+        @test ce.valid
+
+        # Indices: the MinosErrors describe the same parameters as the axes.
+        @test ce.minos_x.par_idx == ce.par_x == 2
+        @test ce.minos_y.par_idx == ce.par_y == 3
+
+        # Values: the external frame, i.e. `m.values` — NOT the internal
+        # arcsin coordinate (≈ 0.233 for par 2, which is what the raw
+        # low-level contour reports).
+        @test ce.minos_x.min_par_value == m.values[2]
+        @test ce.minos_y.min_par_value == m.values[3]
+
+        # Errors: signed DISTANCES, so the endpoints must be converted and
+        # re-differenced. The internal-coordinate error for par 2 is ≈ 0.067
+        # — two orders of magnitude away from the external 1/√3.
+        @test ce.minos_x.upper ≈ 1/sqrt(3) rtol = 0.02
+        @test ce.minos_x.lower ≈ -1/sqrt(3) rtol = 0.02
+        @test ce.minos_y.upper ≈ 1/sqrt(2) rtol = 0.02
+        @test ce.minos_y.lower ≈ -1/sqrt(2) rtol = 0.02
+        # Near-quadratic ⇒ MINOS ≈ HESSE, in the same frame as `m.errors`.
+        @test ce.minos_x.upper ≈ m.errors[2] rtol = 0.02
+        @test ce.minos_y.upper ≈ m.errors[3] rtol = 0.02
+
+        # Crossing snapshots: full external vectors, fixed parameter
+        # carried at its static value, scanned slot == min + error.
+        for (me, idx) in ((ce.minos_x, 2), (ce.minos_y, 3))
+            for (err, st) in ((me.upper, me.upper_state),
+                              (me.lower, me.lower_state))
+                @test st !== nothing
+                @test length(st) == 3
+                @test st[1] == 0.0                    # the fixed parameter
+                @test st[idx] ≈ me.min_par_value + err atol = 1e-10
+                # The defining MINOS condition, evaluated in the USER's
+                # frame with the USER's function: FCN = fval + up.
+                @test o3(st) - m.fval ≈ m.up atol = 5e-3
+            end
+        end
+
+        # The ellipse GEOMETRY is unchanged: `contour_ellipse` still builds
+        # it from the raw internal MinosErrors and the internal covariance,
+        # and only the published axis errors are externalized. Pin that by
+        # mapping the low-level (internal) ellipse point-by-point.
+        ix = m.params.int_of_ext[2]
+        iy = m.params.int_of_ext[3]
+        ce_int = contour_ellipse(m.fmin.internal, m.fmin.internal_cf, ix, iy;
+                                 npoints = 12)
+        @test ce.points == [(NativeMinuit.int_to_ext_value(m.params, ix, px),
+                             NativeMinuit.int_to_ext_value(m.params, iy, py))
+                            for (px, py) in ce_int.points]
+        # …and the raw internal errors really are the other frame.
+        @test ce_int.minos_x.par_idx == ix == 1
+        @test ce_int.minos_x.upper < 0.1        # arcsin coordinate
+    end
+
+    @testset "minos_x/minos_y externalization — transform edge cases" begin
+        o3(p) = (p[1]-1)^2 + 3*(p[2]-2)^2 + 2*(p[3]-3)^2 +
+                0.5*(p[1]-1)*(p[2]-2)
+
+        # An upper-bound-only parameter uses `ext = upper + 1 − √(int²+1)`,
+        # which DECREASES with the internal coordinate: the internal +σ
+        # crossing is the external LOWER one. The two sides (values, flags,
+        # states) must be swapped so `upper ≥ 0 ≥ lower` still holds.
+        mu = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3),
+                    limits = [nothing, (nothing, 9.0), nothing])
+        migrad!(mu)
+        ceu = contour_ellipse(mu, 2, 3; npoints = 8)
+        @test ceu.minos_x.par_idx == 2
+        @test ceu.minos_x.min_par_value == mu.values[2]
+        @test ceu.minos_x.upper >= 0 >= ceu.minos_x.lower
+        @test ceu.minos_x.upper ≈ 1/sqrt(3) rtol = 0.03
+        @test ceu.minos_x.lower ≈ -1/sqrt(3) rtol = 0.03
+        @test o3(ceu.minos_x.upper_state) - mu.fval ≈ mu.up atol = 1e-2
+        @test o3(ceu.minos_x.lower_state) - mu.fval ≈ mu.up atol = 1e-2
+
+        # A lower-bound-only parameter is orientation-PRESERVING.
+        ml = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3),
+                    limits = [nothing, (-9.0, nothing), nothing])
+        migrad!(ml)
+        cel = contour_ellipse(ml, 2, 3; npoints = 8)
+        @test cel.minos_x.upper >= 0 >= cel.minos_x.lower
+        @test cel.minos_x.upper ≈ 1/sqrt(3) rtol = 0.03
+        @test o3(cel.minos_x.upper_state) - ml.fval ≈ ml.up atol = 1e-2
+
+        # All-free unbounded: the identity transform must be a BIT-exact
+        # no-op on the published values (the endpoint re-differencing
+        # reproduces them only to within one ULP, so it is skipped).
+        mf = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3))
+        migrad!(mf)
+        cef = contour_ellipse(mf, 1, 2; npoints = 8)
+        raw = NativeMinuit.minos(mf.fmin.internal, mf.fmin.internal_cf, 1)
+        @test cef.minos_x.min_par_value === raw.min_par_value
+        @test cef.minos_x.upper === raw.upper
+        @test cef.minos_x.lower === raw.lower
+        @test cef.minos_x.upper_state == raw.upper_state
+    end
+
     @testset "0.5.0 rename: deprecated `contour` forwards to contour_ellipse" begin
         # `contour` is deliberately NOT exported (Plots.contour collision) but
         # the qualified deprecated alias must keep old code working, for both

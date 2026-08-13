@@ -35,6 +35,20 @@ and [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The two axis MINOS errors carried by a `ContoursError` are now reported in the
+  same coordinate frame as its contour points. `contour_ellipse(m, …)` builds the
+  contour on the internal cost function and previously passed `minos_x` /
+  `minos_y` through untouched, so a bounded parameter's errors were quoted in the
+  transformed coordinate and, whenever any parameter was fixed, against internal
+  indices — one result silently mixing two coordinate systems. Their `par_idx`
+  now matches `par_x` / `par_y`, `min_par_value` and the `upper` / `lower`
+  distances are physical, and the `upper_state` / `lower_state` snapshots are
+  full-length external vectors with fixed parameters carried at their values.
+  Since the errors are signed distances rather than positions, both crossing
+  endpoints are transformed and re-differenced; for a parameter with only an
+  upper bound the transform reverses orientation, so the two sides exchange on
+  conversion and the $\mathrm{upper} \geq 0 \geq \mathrm{lower}$ convention still
+  holds. The ellipse geometry itself is unchanged.
 - MINOS results that stop at a parameter bound now retain their kernel values
   and validity flags while every public presentation labels the value as a
   distance to the limit rather than a statistical uncertainty. Plot recipes
