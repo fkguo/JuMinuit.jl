@@ -52,6 +52,16 @@ The asymmetric error result for a single parameter. Mirrors C++
 `upper` is positive (one σ to the right), `lower` is negative (one σ
 to the left). For a symmetric well-behaved parabolic minimum,
 `upper ≈ -lower ≈ sqrt(2·up·V[i,i])`.
+
+# Note on coordinate frame
+
+Results reaching the user through `minos!` / `m.merrors` (and the axis
+errors on a `ContoursError`) are in the EXTERNAL frame: `par_idx` is the
+full-list parameter index and the state snapshots are full-length external
+vectors with fixed parameters at their stored values. The low-level
+`minos(fmin, cf, …)` reports in the frame of the cost function it is given
+(free-parameter index, free-length snapshots on an internal `cf`); see
+[`_externalize_minos`](@ref).
 """
 struct MinosError
     par_idx::Int

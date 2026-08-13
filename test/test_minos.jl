@@ -524,4 +524,107 @@
         e2 = m2.minos_errors[1]
         @test e2.upper_fcn_limit || e2.lower_fcn_limit
     end
+
+    # Regression (PR #44 review, follow-up to f7a4f0c): the unbounded branch
+    # of `_minos_error` used to publish the low-level INTERNAL-frame
+    # `MinosError` verbatim. With a fixed parameter in the fit, `par_idx`
+    # was the minimizer's free-parameter index — naming the WRONG parameter —
+    # and `upper_state`/`lower_state` were reduced free-length vectors. The
+    # error VALUES were always correct (identity transform when unbounded).
+    # The bounded branch (`_minos_external_via_function_cross`) was already
+    # external and must stay untouched.
+    @testset "minos! externalizes the unbounded branch" begin
+        o3(p) = (p[1] - 1)^2 + 3 * (p[2] - 2)^2 + 2 * (p[3] - 3)^2 +
+                0.5 * (p[1] - 1) * (p[2] - 2)
+
+        @testset "fixed parameter: external index + full-length snapshots" begin
+            m = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3))
+            m.fixed[1] = true
+            migrad!(m)
+            # `maxcall = 1000` + serial gradient make this call kwarg-identical
+            # to the raw low-level `minos` below, so `===` comparisons hold.
+            minos!(m; maxcall = 1000, threaded_gradient = false)
+
+            # With p[1] fixed at 0 the free block is exactly quadratic,
+            # H = diag(6, 4): σ(x1) = 1/√3, σ(x2) = 1/√2.
+            e1 = m.merrors["x1"]
+            e2 = m.merrors["x2"]
+
+            # The published index is the EXTERNAL one (was internal: 1, 2).
+            @test e1.par_idx == 2
+            @test e2.par_idx == 3
+            @test e1.min_par_value == m.values[2]
+            @test e1.upper ≈ 1 / sqrt(3) rtol = 0.01
+            @test e1.lower ≈ -1 / sqrt(3) rtol = 0.01
+            @test e2.upper ≈ 1 / sqrt(2) rtol = 0.01
+
+            # The published VALUES stay BIT-equal to the internal-frame
+            # result (identity fast path; x1 is internal parameter 1 here) —
+            # only the index and the snapshots change.
+            raw = NativeMinuit.minos(m.fmin.internal, m.fmin.internal_cf, 1;
+                                     pars = m.params)
+            @test e1.min_par_value === raw.min_par_value
+            @test e1.upper === raw.upper
+            @test e1.lower === raw.lower
+            @test raw.par_idx == 1                  # the internal frame…
+            @test length(raw.upper_state) == 2      # …really is the other one
+
+            # Snapshots: full external length (was free-length 2), the fixed
+            # parameter at its stored value, the scanned slot at the crossing,
+            # and the defining condition FCN = fval + up under the USER's
+            # own function.
+            for (e, idx) in ((e1, 2), (e2, 3))
+                for (err, st) in ((e.upper, e.upper_state),
+                                  (e.lower, e.lower_state))
+                    @test st !== nothing
+                    @test length(st) == 3
+                    @test st[1] == 0.0
+                    @test st[idx] ≈ e.min_par_value + err atol = 1e-10
+                    @test o3(st) - m.fval ≈ m.up atol = 5e-3
+                end
+            end
+        end
+
+        @testset "all-free unbounded: bit-identical to the internal result" begin
+            mf = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3))
+            migrad!(mf)
+            minos!(mf, 1; maxcall = 1000, threaded_gradient = false)
+            raw = NativeMinuit.minos(mf.fmin.internal, mf.fmin.internal_cf, 1;
+                                     pars = mf.params)
+            e = mf.minos_errors[1]
+            @test e.par_idx == 1
+            @test e.min_par_value === raw.min_par_value
+            @test e.upper === raw.upper
+            @test e.lower === raw.lower
+            @test length(e.upper_state) == 3
+            @test e.upper_state == raw.upper_state
+            @test e.lower_state == raw.lower_state
+        end
+
+        @testset "bounded scanned parameter (other branch) is unaffected" begin
+            mb = Minuit(o3, [0.0, 0.0, 0.0]; errors = fill(0.1, 3),
+                        limits = [nothing, (-9.0, 9.0), nothing])
+            mb.fixed[1] = true
+            migrad!(mb)
+            minos!(mb, 2)
+            eb = mb.merrors["x1"]
+            @test eb.par_idx == 2                   # already external
+            @test eb.min_par_value ≈ mb.values[2] atol = 1e-10
+            @test eb.upper ≈ 1 / sqrt(3) rtol = 0.02
+            @test eb.lower ≈ -1 / sqrt(3) rtol = 0.02
+            for (err, st) in ((eb.upper, eb.upper_state),
+                              (eb.lower, eb.lower_state))
+                @test st !== nothing
+                @test length(st) == 3               # already full-length
+                @test st[1] == 0.0
+                # The bounded path's snapshot is the LAST inner probe, not
+                # the interpolated crossing (they differ at the cross-search
+                # tolerance scale, ~5e-3·σ observed) — pin the slot loosely;
+                # the defining condition below carries the physics. A frame
+                # mix-up would be off by O(1) (arcsin coord ≈ 0.23 vs 2.66).
+                @test st[2] ≈ eb.min_par_value + err atol = 0.02
+                @test o3(st) - mb.fval ≈ mb.up atol = 5e-3
+            end
+        end
+    end
 end

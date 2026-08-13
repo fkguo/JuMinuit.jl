@@ -49,7 +49,19 @@ and [Semantic Versioning](https://semver.org/).
   upper bound the transform reverses orientation, so the two sides exchange on
   conversion and the $\mathrm{upper} \geq 0 \geq \mathrm{lower}$ convention still
   holds. The ellipse geometry itself is unchanged.
-- MINOS results that stop at a parameter bound now retain their kernel values
+- `minos!` on a fit with a fixed parameter now stores its `MinosError` in the
+  user's external frame. The unbounded search branch previously published the
+  minimizer's internal result verbatim: `par_idx` was the free-parameter index —
+  naming the wrong parameter whenever a fixed parameter preceded the scanned
+  one — and the `upper_state` / `lower_state` snapshots were reduced free-length
+  vectors. The `upper` / `lower` values themselves were always correct (the
+  transform is the identity for an unbounded parameter) and stay bit-identical;
+  `par_idx` now matches the parameter's position in `m.values`, and the
+  snapshots are full-length external vectors with fixed parameters carried at
+  their stored values, so the defining MINOS condition
+  $\mathrm{FCN}(\mathrm{state}) - \mathrm{fval} = \mathrm{up}$ can be checked
+  with the user's own function. Bounded parameters are searched directly in the
+  external frame and are unaffected.
   and validity flags while every public presentation labels the value as a
   distance to the limit rather than a statistical uncertainty. Plot recipes
   omit at-limit and invalid-side whiskers, JSON dictionaries preserve the

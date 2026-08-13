@@ -1103,11 +1103,22 @@ function _minos_error(m::Minuit, par::Int;
         # the pre-shifted internal value stays inside the valid
         # transform range (±π/2 for doubly-bounded). Pass `pars=m.params`
         # so `minos()` has the bound information to do that clamp.
-        return minos(m.fmin.internal, m.fmin.internal_cf,
-                     m.params.int_of_ext[par];
-                     pars = m.params,
-                     threaded_gradient = _tg,
-                     print_level = print_level, fwd...)
+        me = minos(m.fmin.internal, m.fmin.internal_cf,
+                   m.params.int_of_ext[par];
+                   pars = m.params,
+                   threaded_gradient = _tg,
+                   print_level = print_level, fwd...)
+        # The low-level result is INTERNAL-frame: `par_idx` is the free-
+        # parameter index and the crossing snapshots are reduced free-length
+        # vectors, so with a fixed parameter in the fit the published error
+        # would name the wrong parameter and carry a truncated state.
+        # `_externalize_minos` remaps the index through `ext_of_int`, expands
+        # the snapshots to full external vectors, and is a bit-exact identity
+        # on the published values (the scanned parameter is unbounded here).
+        # Uses the raw config — mappings/bounds match `m.params`, and any
+        # parameter mutation drops `m.fmin`, so its fixed values are the
+        # fit's own.
+        return _externalize_minos(me, _init_params(m))
     end
 end
 
