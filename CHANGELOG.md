@@ -62,6 +62,7 @@ and [Semantic Versioning](https://semver.org/).
   $\mathrm{FCN}(\mathrm{state}) - \mathrm{fval} = \mathrm{up}$ can be checked
   with the user's own function. Bounded parameters are searched directly in the
   external frame and are unaffected.
+- MINOS results that stop at a parameter bound now retain their kernel values
   and validity flags while every public presentation labels the value as a
   distance to the limit rather than a statistical uncertainty. Plot recipes
   omit at-limit and invalid-side whiskers, JSON dictionaries preserve the
