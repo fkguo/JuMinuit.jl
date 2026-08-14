@@ -3,7 +3,7 @@
 All notable changes to NativeMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.0] — 2026-08-14
 
 ### Added
 
