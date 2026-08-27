@@ -337,4 +337,92 @@
         @test m.valid
         @test m.values ≈ [1.0, 2.0, 3.0] atol = 1e-4
     end
+
+    @testset "issue #46: mutators preserve the current fitted values" begin
+        # iminuit's setters mutate the current MnUserParameterState, so
+        # fixing / releasing / re-bounding a parameter between fits keeps
+        # every parameter at its fitted value and the next migrad continues
+        # from the fitted point. NativeMinuit mutators commit the fitted
+        # values into the stored config before applying the edit.
+        # Reference (iminuit 2.31.3, same FCN/start/steps/limits):
+        #   after 1st migrad  [0.9933466603775332, 0.0]
+        #   after fixing a    values unchanged
+        #   after 2nd migrad  [same a, 1.9999999997202242]
+        mk() = Minuit(x -> (x[1] - 1.0)^2 + (x[2] - 2.0)^2, [0.0, 0.0];
+                       names = ["a", "b"], errors = [0.1, 0.1],
+                       limits = [(-5.0, 5.0), nothing])
+
+        # ── The reported workflow: fix → fit → fix other → release → fit ──
+        m = mk()
+        fix!(m, 2)
+        migrad!(m)
+        @test m.valid
+        v_fit1 = collect(m.values)
+        @test v_fit1[1] ≈ 1.0 atol = 1e-2
+        @test v_fit1[2] == 0.0
+
+        fix!(m, 1)                     # was: reset a to its INITIAL 0.0
+        @test collect(m.values) == v_fit1   # bitwise — nothing moved
+        @test m.fmin === nothing            # staleness rule unchanged
+        # Deliberate: only VALUES are committed. The steps stay the user's
+        # original ones (retry length scale / resume floor), NOT the fit's
+        # Hesse errors (iminuit carries those too — accepted divergence).
+        @test collect(m.errors) == [0.1, 0.1]
+
+        release!(m, 2)
+        @test collect(m.values) == v_fit1
+
+        migrad!(m)
+        @test m.valid
+        @test m.values[1] == v_fit1[1]      # a frozen AT ITS FITTED value
+        @test m.values[2] ≈ 2.0 atol = 1e-4 # b re-fit from the current point
+        # b's trajectory is seed-identical to iminuit's (a's fixed value
+        # does not enter the minimization): 1.9999999997202242 there.
+        @test m.values[2] ≈ 1.9999999997202242 atol = 1e-9
+
+        # ── set_value! moves ONLY its target; others keep fitted values ──
+        m = mk()
+        migrad!(m)
+        @test m.valid
+        b_fit = m.values[2]
+        set_value!(m, "a", 0.5)
+        @test m.values[1] == 0.5
+        @test m.values[2] == b_fit
+
+        # ── every other mutator preserves the full fitted vector ──
+        for mutate! in (m -> set_error!(m, 1, 0.3),
+                        m -> set_limits!(m, 1, -10.0, 10.0),
+                        m -> remove_limits!(m, 1),
+                        m -> set_upper_limit!(m, 1, 10.0),
+                        m -> set_lower_limit!(m, 1, -10.0),
+                        m -> (m.fixed[2] = true),          # view write
+                        m -> (m.fixed = [true, false]),    # bulk fixed
+                        m -> (m.errors = [0.2, 0.2]),      # bulk errors
+                        m -> (m.limits = [(-9.0, 9.0), nothing]))
+            mm = mk()
+            migrad!(mm)
+            @test mm.valid
+            v_fit = collect(mm.values)
+            mutate!(mm)
+            @test mm.fmin === nothing
+            @test collect(mm.values) == v_fit
+        end
+
+        # ── no fit cached → mutators edit the constructor config as before ──
+        m = mk()
+        fix!(m, 1)
+        @test collect(m.values) == [0.0, 0.0]
+
+        # ── reset(m) undoes fits, not config edits: after a post-fit
+        # mutation the committed values ARE the config (documented; unlike
+        # iminuit's reset(), which restores the constructor state) ──
+        m = mk()
+        fix!(m, 2)
+        migrad!(m)
+        v_fit1 = collect(m.values)
+        fix!(m, 1)
+        reset(m)
+        @test m.fmin === nothing
+        @test collect(m.values) == v_fit1
+    end
 end

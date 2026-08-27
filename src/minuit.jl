@@ -108,8 +108,12 @@ methods plus iminuit-style property access.
 - `m.params` — the `Parameters` (name/bounds/fixed structure). Once a
   fit is cached it reflects the FIT: `m.params.pars[i].value/.error`
   equal `m.values[i]`/`m.errors[i]` (iminuit parity, issue #38);
-  before any fit (or after `reset`/a mutation) it holds the
-  constructor-time initial values and steps.
+  before any fit (or after `reset`) it holds the stored config — the
+  constructor-time initial values and steps, as later edited by the
+  mutators. A mutator called while a fit is cached (`fix!`,
+  `set_value!`, `m.limits[i] = …`) first commits the fitted values
+  into that config, so mutations between fits preserve the current
+  values instead of reverting to the initial ones (issue #46).
 - `m.fmin` — the underlying `BoundedFunctionMinimum` (`nothing`
   before `migrad!`).
 """
@@ -1566,10 +1570,19 @@ Base.setindex!(v::ParameterView, val, name::AbstractString) =
 # too: the PUBLIC `m.params` property returns a fit-overlaid copy when a fit is
 # cached (see `getproperty`).
 #
-# Internal seed / retry / resume / cold-start / mutator code must still read the
+# Internal seed / retry / resume / cold-start code must still read the
 # UNMODIFIED config (e.g. the retry length scale and `reset(m)` semantics depend
 # on the original user step, not the post-fit Hesse error). Those call sites use
 # `_init_params(m)` — the raw field — instead of the `m.params` property.
+#
+# One deliberate exception (issue #46): the user-facing MUTATORS (`fix!`,
+# `set_value!`, `m.limits[i] = …`, the bulk setters, …) edit the CURRENT state,
+# not the constructor state. When a fit is cached they first commit the fitted
+# external VALUES into the stored config (via `_mutation_base_pars`) and then
+# apply the edit — iminuit mutates its current `MnUserParameterState` the same
+# way, so `m.fixed[i] = True` there keeps the fitted values and the next
+# `migrad` continues from them. Only the values are committed; the user's step
+# sizes stay, so the retry length scale and the resume floor keep their meaning.
 # ─────────────────────────────────────────────────────────────────────────────
 
 "`_init_params(m)` — the raw constructor-time `Parameters` (never fit-overlaid)."
@@ -1729,6 +1742,14 @@ end
 # `m.values=...` / `m.errors=...` / `m.fixed=...` / `m.limits=...`
 # setters route through these mutators so behavior cannot drift.
 #
+# All mutators edit the CURRENT state (issue #46): when a fit is cached, the
+# fitted external values of every parameter are first committed into the
+# stored config (`_mutation_base_pars`), so e.g. `fix!` after `migrad!`
+# freezes the parameter at its FITTED value and the next fit continues from
+# the fitted point — the iminuit behavior (its setters mutate the current
+# `MnUserParameterState`). Step sizes are NOT committed; see
+# `_mutation_base_pars` for why.
+#
 # Returns `m` for chaining: `m |> migrad! |> (m -> fix!(m,"alpha")) |> migrad!`.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1757,13 +1778,41 @@ function _replace_all_params!(m::Minuit, new_pars::Vector{MinuitParameter})
     return m
 end
 
-# Per-parameter pivot: clone the current vector, swap one entry, commit.
-# Clones the raw config (NOT the fit-overlaid `m.params`): a mutation must keep
-# the other parameters at their constructor-time config so `reset(m)` still
-# returns to the initial values and the user step sizes survive the edit.
-function _replace_one_param!(m::Minuit, i::Int, new_p::MinuitParameter)
+# Base parameter vector a mutator edits (issue #46). Without a cached fit it
+# is a fresh copy of the raw config. With one, each parameter's VALUE is
+# replaced by the fit's external value first — a mutation between fits edits
+# the CURRENT state, so `fix!`/`release!`/`set_limits!`… preserve the fitted
+# values of every parameter and the next `migrad!` continues from them
+# (iminuit parity: its setters mutate the current `MnUserParameterState`).
+# Only the values are committed. The step sizes (and bounds, names, fixed
+# flags) stay at the stored config — deliberately unlike iminuit's state
+# carry, which also carries the post-fit Hesse errors: the user's original
+# step is the pass-invariant retry length scale and the `_build_resume_params`
+# floor (review BLOCKING #1 — near a sin/sqrt bound the Int2extError formula
+# can collapse far below the natural scale), and `set_error!` must keep
+# meaning "the user's step". Committed values come from `fmin.ext_values`
+# whether or not the fit validated — same rule as the `m.values` view.
+function _mutation_base_pars(m::Minuit)
     new_pars = collect(_init_params(m).pars)
-    new_pars[i] = new_p
+    fmin = getfield(m, :fmin)
+    if fmin !== nothing
+        @inbounds for i in eachindex(new_pars)
+            p = new_pars[i]
+            new_pars[i] = MinuitParameter(p.name, fmin.ext_values[i], p.error;
+                                           lower = p.lower, upper = p.upper,
+                                           fixed = p.fixed)
+        end
+    end
+    return new_pars
+end
+
+# Per-parameter pivot: clone the current state (fitted values committed, see
+# `_mutation_base_pars`), rebuild entry `i` from its CURRENT parameter via
+# `build`, commit. The builder receives the current par so e.g. `fix!` after
+# `migrad!` freezes the parameter AT ITS FITTED VALUE, not the initial one.
+function _replace_one_param!(build, m::Minuit, i::Int)
+    new_pars = _mutation_base_pars(m)
+    new_pars[i] = build(new_pars[i])
     return _replace_all_params!(m, new_pars)
 end
 
@@ -1819,6 +1868,11 @@ Mark parameter `par` as fixed (excluded from optimization). Mirrors
 C++ `MnUserParameters::Fix(i)` / `Fix(name)`. Drops `m.fmin` and
 clears `m.minos_errors`. Returns `m` for chaining.
 
+If a fit is cached, the CURRENT (fitted) values of all parameters are
+kept — `par` is frozen at its fitted value, not reset to its initial
+one, and the next `migrad!` continues from the fitted point (iminuit
+parity, issue #46).
+
 `par` is either the 1-based external index or the parameter name.
 Already-fixed parameters are still re-fixed (no-op on the fixed flag,
 but cache is still invalidated for consistency).
@@ -1832,8 +1886,7 @@ fix!(m::Minuit, par::AbstractString) =
     fix!(m, ext_index(m.params, String(par)))
 function fix!(m::Minuit, i::Integer)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_fixed_par(_init_params(m).pars[i], true))
+    return _replace_one_param!(p -> _build_fixed_par(p, true), m, Int(i))
 end
 
 """
@@ -1842,6 +1895,10 @@ end
 Clear parameter `par`'s fixed flag (re-include in optimization).
 Mirrors C++ `MnUserParameters::Release(i)` / `Release(name)`. Drops
 `m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+
+If a fit is cached, the current (fitted) values of all parameters are
+kept, so the released parameter re-enters the fit from where the last
+fit left it (iminuit parity, issue #46).
 
 Pairs with [`fix!`](@ref) for fix-fit-release-fit profile-likelihood
 scans:
@@ -1854,16 +1911,19 @@ release!(m::Minuit, par::AbstractString) =
     release!(m, ext_index(m.params, String(par)))
 function release!(m::Minuit, i::Integer)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_fixed_par(_init_params(m).pars[i], false))
+    return _replace_one_param!(p -> _build_fixed_par(p, false), m, Int(i))
 end
 
 """
     set_value!(m::Minuit, par::Union{Integer,AbstractString}, v::Real) -> Minuit
 
-Set parameter `par`'s initial value to `v`. Mirrors C++
-`MnUserParameters::SetValue(i, v)` / `SetValue(name, v)`. Drops
-`m.fmin` and clears `m.minos_errors`. Returns `m` for chaining.
+Set parameter `par`'s current value to `v` (the starting value of the
+next fit). Mirrors C++ `MnUserParameters::SetValue(i, v)` /
+`SetValue(name, v)`. Drops `m.fmin` and clears `m.minos_errors`.
+Returns `m` for chaining.
+
+If a fit is cached, the OTHER parameters keep their fitted values
+(iminuit parity, issue #46) — only `par` moves to `v`.
 
 `v` must be finite (NaN / ±Inf throw `ArgumentError`) — matches the
 iminuit Python wrapper's `setattr` guard. The int↔ext transform clamps
@@ -1874,8 +1934,7 @@ set_value!(m::Minuit, par::AbstractString, v::Real) =
     set_value!(m, ext_index(m.params, String(par)), v)
 function set_value!(m::Minuit, i::Integer, v::Real)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_value_par(_init_params(m).pars[i], v))
+    return _replace_one_param!(p -> _build_value_par(p, v), m, Int(i))
 end
 
 """
@@ -1893,8 +1952,7 @@ set_error!(m::Minuit, par::AbstractString, e::Real) =
     set_error!(m, ext_index(m.params, String(par)), e)
 function set_error!(m::Minuit, i::Integer, e::Real)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_error_par(_init_params(m).pars[i], e))
+    return _replace_one_param!(p -> _build_error_par(p, e), m, Int(i))
 end
 
 """
@@ -1914,8 +1972,7 @@ set_limits!(m::Minuit, par::AbstractString, lo, up) =
     set_limits!(m, ext_index(m.params, String(par)), lo, up)
 function set_limits!(m::Minuit, i::Integer, lo, up)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_limits_par(_init_params(m).pars[i], lo, up))
+    return _replace_one_param!(p -> _build_limits_par(p, lo, up), m, Int(i))
 end
 
 """
@@ -1931,8 +1988,8 @@ remove_limits!(m::Minuit, par::AbstractString) =
     remove_limits!(m, ext_index(m.params, String(par)))
 function remove_limits!(m::Minuit, i::Integer)
     _check_par_index(m, i)
-    return _replace_one_param!(m, Int(i),
-        _build_limits_par(_init_params(m).pars[i], nothing, nothing))
+    return _replace_one_param!(p -> _build_limits_par(p, nothing, nothing),
+                                m, Int(i))
 end
 
 """
@@ -1958,8 +2015,8 @@ function set_upper_limit!(m::Minuit, i::Integer, hi::Real)
     isfinite(Float64(hi)) ||
         throw(ArgumentError("set_upper_limit!: upper bound must be finite, got $hi"))
     # C++ SetUpperLimit clears the lower bound (fLoLimValid=false).
-    return _replace_one_param!(m, Int(i),
-        _build_limits_par(_init_params(m).pars[i], nothing, hi))
+    return _replace_one_param!(p -> _build_limits_par(p, nothing, hi),
+                                m, Int(i))
 end
 
 """
@@ -1985,8 +2042,8 @@ function set_lower_limit!(m::Minuit, i::Integer, lo::Real)
     isfinite(Float64(lo)) ||
         throw(ArgumentError("set_lower_limit!: lower bound must be finite, got $lo"))
     # C++ SetLowerLimit clears the upper bound (fUpLimValid=false).
-    return _replace_one_param!(m, Int(i),
-        _build_limits_par(_init_params(m).pars[i], lo, nothing))
+    return _replace_one_param!(p -> _build_limits_par(p, lo, nothing),
+                                m, Int(i))
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2003,9 +2060,9 @@ function _bulk_set_values!(m::Minuit, vals::AbstractVector)
     n = n_pars(_init_params(m))
     length(vals) == n ||
         throw(DimensionMismatch("expected $n values, got $(length(vals))"))
-    new_pars = Vector{MinuitParameter}(undef, n)
+    new_pars = _mutation_base_pars(m)
     @inbounds for i in 1:n
-        new_pars[i] = _build_value_par(_init_params(m).pars[i], vals[i])
+        new_pars[i] = _build_value_par(new_pars[i], vals[i])
     end
     _replace_all_params!(m, new_pars)
     return nothing
@@ -2015,9 +2072,9 @@ function _bulk_set_errors!(m::Minuit, errs::AbstractVector)
     n = n_pars(_init_params(m))
     length(errs) == n ||
         throw(DimensionMismatch("expected $n values, got $(length(errs))"))
-    new_pars = Vector{MinuitParameter}(undef, n)
+    new_pars = _mutation_base_pars(m)
     @inbounds for i in 1:n
-        new_pars[i] = _build_error_par(_init_params(m).pars[i], errs[i])
+        new_pars[i] = _build_error_par(new_pars[i], errs[i])
     end
     _replace_all_params!(m, new_pars)
     return nothing
@@ -2027,9 +2084,9 @@ function _bulk_set_fixed!(m::Minuit, fx::AbstractVector)
     n = n_pars(_init_params(m))
     length(fx) == n ||
         throw(DimensionMismatch("expected $n fixed flags, got $(length(fx))"))
-    new_pars = Vector{MinuitParameter}(undef, n)
+    new_pars = _mutation_base_pars(m)
     @inbounds for i in 1:n
-        new_pars[i] = _build_fixed_par(_init_params(m).pars[i], Bool(fx[i]))
+        new_pars[i] = _build_fixed_par(new_pars[i], Bool(fx[i]))
     end
     _replace_all_params!(m, new_pars)
     return nothing
@@ -2039,14 +2096,14 @@ function _bulk_set_limits!(m::Minuit, lim::AbstractVector)
     n = n_pars(_init_params(m))
     length(lim) == n ||
         throw(DimensionMismatch("expected $n limit tuples, got $(length(lim))"))
-    new_pars = Vector{MinuitParameter}(undef, n)
+    new_pars = _mutation_base_pars(m)
     @inbounds for i in 1:n
         l = lim[i]
         new_pars[i] = if l === nothing
-            _build_limits_par(_init_params(m).pars[i], nothing, nothing)
+            _build_limits_par(new_pars[i], nothing, nothing)
         else
             lo_raw, up_raw = l
-            _build_limits_par(_init_params(m).pars[i], lo_raw, up_raw)
+            _build_limits_par(new_pars[i], lo_raw, up_raw)
         end
     end
     _replace_all_params!(m, new_pars)
@@ -2312,9 +2369,16 @@ end
     reset(m::Minuit) -> Minuit
 
 IMinuit.jl-compatible: drop any cached MIGRAD/MINOS results so the
-next `migrad(m)` starts fresh from `m.params`'s initial values.
+next `migrad(m)` starts fresh from the stored config values.
 Extends `Base.reset` (which has unrelated methods for IO streams),
 so dispatch picks the right one by argument type.
+
+`reset` undoes FITS, not config edits: the stored config holds the
+constructor-time initial values only until a mutator edits it —
+`set_value!` overwrites one value, and any mutator called while a fit
+was cached has committed the then-fitted values (issue #46). Unlike
+iminuit's `reset()`, which restores the pristine constructor state,
+`reset(m)` returns to the config as last edited.
 """
 function Base.reset(m::Minuit)
     m.fmin = nothing
