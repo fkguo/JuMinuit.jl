@@ -485,4 +485,39 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test mi.valid
         @test mi.values[1] ≈ 1.0 atol = 1e-4
     end
+
+    # ── canonical errors vector carries the values container's axes ──────────
+    # Issue #45 splits `Parameters` into metadata + two canonical number
+    # vectors. `errors` is allocated as `similar(values, Float64)`, so a
+    # structured donor must stamp its concrete container type AND axes onto
+    # BOTH canonical vectors — not just `values`.
+    @testset "canonical errors vector carries the values axes" begin
+        # Record path: the `values=` keyword donates only the container/axes;
+        # the numbers come from the records.
+        recs = [MinuitParameter("a", 0.7, 0.2),
+                MinuitParameter("b", -1.3, 0.4)]
+        P = Parameters(recs; values = start)
+        v = getfield(P, :values)
+        e = getfield(P, :errors)
+        @test typeof(e) == typeof(v)
+        @test v isa ComponentVector
+        @test e isa ComponentVector
+        @test ComponentArrays.getaxes(v) == expected_axes
+        @test ComponentArrays.getaxes(e) == ComponentArrays.getaxes(v)
+        # The numbers are the records', not the donor's.
+        @test collect(v) == [0.7, -1.3]
+        @test collect(e) == [0.2, 0.4]
+
+        # After a fit, the fit-overlaid `m.params` property must keep the
+        # config's container family on both canonical vectors.
+        m = Minuit(_struct_obj, start; errors = errs)
+        migrad!(m)
+        ov = m.params
+        @test ov.values isa ComponentVector
+        @test ov.errors isa ComponentVector
+        @test ComponentArrays.getaxes(ov.values) == expected_axes
+        @test ComponentArrays.getaxes(ov.errors) == expected_axes
+        @test collect(ov.values) == collect(m.values)
+        @test collect(ov.errors) == collect(m.errors)
+    end
 end

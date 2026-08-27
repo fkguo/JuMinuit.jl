@@ -214,4 +214,64 @@
         # Old Taylor at v ≈ 1.4289 would give 0.1/cos(1.4289)·2 ≈ 0.71 — wildly off.
         @test 0.2 < int_errs[1] < 0.3
     end
+
+    @testset "per-FCN hot-path pins: zero allocation + inference (issue #45 §6.2)" begin
+        # Two configurations spanning both `IntIsExt` variants of Parameters:
+        #   P_mixed — bounded + fixed     → internal ≠ external (IntIsExt = false)
+        #   P_free  — all free, unbounded → internal ≡ external (IntIsExt = true)
+        P_mixed = Parameters([
+            MinuitParameter("free", 1.0, 0.1),                            # int 1
+            MinuitParameter("fix",  9.0, 0.1; fixed = true),              # fixed
+            MinuitParameter("both", 0.5, 0.1; lower = -2.0, upper = 3.0), # int 2
+        ])
+        P_free = Parameters([
+            MinuitParameter("a", 1.0, 0.1),
+            MinuitParameter("b", -2.0, 0.2),
+            MinuitParameter("c", 0.3, 0.05),
+        ])
+        @test P_mixed isa Parameters{Vector{Float64},false}
+        @test P_free isa Parameters{Vector{Float64},true}
+
+        # Function barriers (as in the in-place testset above): @allocated at
+        # testset scope reads non-const globals and reports spurious boxing;
+        # passing everything as arguments measures only the call itself.
+        _alloc_i2e!(b, p, v) = @allocated NativeMinuit.int_to_ext_vector!(b, p, v)
+        function _dint2ext_sweep(p, v)
+            s = 0.0
+            for int_idx in 1:n_free(p)
+                s += dint2ext_value(p, int_idx, v[int_idx])
+            end
+            return s
+        end
+        _alloc_dint2ext(p, v) = @allocated _dint2ext_sweep(p, v)
+        _alloc_values(p) = @allocated p.values
+        _alloc_metadata(p) = @allocated p.metadata
+
+        for P in (P_mixed, P_free)
+            buf = Vector{Float64}(undef, n_pars(P))
+            iv = fill(0.25, n_free(P))
+
+            # (a) in-place int→ext transform allocates nothing after warm-up
+            _alloc_i2e!(buf, P, iv)                    # compile
+            @test _alloc_i2e!(buf, P, iv) == 0
+
+            # (b) gradient chain-rule sweep over all free parameters
+            _alloc_dint2ext(P, iv)                     # compile
+            @test _alloc_dint2ext(P, iv) == 0
+
+            # (c) getproperty reads of the canonical stores return the
+            # stored containers without allocating (the getproperty hook
+            # must constant-fold, not box)
+            _alloc_values(P)                           # compile
+            _alloc_metadata(P)                         # compile
+            @test _alloc_values(P) == 0
+            @test _alloc_metadata(P) == 0
+
+            # Inference pins for both IntIsExt variants: the hot-path
+            # transform and the internal-workspace allocator must have
+            # concrete inferred return types
+            @test @inferred(NativeMinuit.int_to_ext_vector!(buf, P, iv)) === buf
+            @test @inferred(NativeMinuit._internal_vector(P)) isa Vector{Float64}
+        end
+    end
 end

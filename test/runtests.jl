@@ -37,6 +37,8 @@ using Test
     include("test_display.jl")
     include("test_minuit_mutators.jl")
     include("test_param_views.jl")
+    include("test_issue45_view.jl")
+    include("test_issue45_isolation.jl")
     include("test_minuit_retry.jl")
     include("test_ad_gradient.jl")
     include("test_serialize.jl")

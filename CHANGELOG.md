@@ -5,6 +5,48 @@ and [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **`Parameters` now stores per-parameter metadata and the numbers
+  separately** (issue #45) — an internal storage redesign; the supported
+  API is unchanged (all exported names, constructor signatures, mutators,
+  `Minuit` properties, and the documented `m.params.pars[i].value/.error`
+  idiom). Errors previously lived inside the per-parameter records; they
+  are now a canonical vector of their own with structured axes, and the
+  records are split into immutable metadata plus values. Three observable
+  consequences for code reaching below the supported surface:
+
+  1. The `Parameters` field layout changes: the `pars` field is removed and
+     `metadata` + `errors` fields are added. Code constructing `Parameters`
+     positionally via the inner constructor, or calling
+     `getfield(p, :pars)`, breaks. No supported *outer*-constructor
+     signature changes; the inner constructor necessarily changes with the
+     field layout.
+  2. `p.pars` becomes a derived read-only `AbstractVector{MinuitParameter}`
+     view rather than a `Vector{MinuitParameter}`. **All** in-place mutation
+     of the view now errors loudly: `setindex!` (and `sort!` with
+     `by=`/`lt=`, which routes through it) raises a guiding
+     `ArgumentError`; bare `sort!` raises a `MethodError` on
+     `isless(::MinuitParameter, …)`; `push!`/`resize!`/`empty!`/`append!`
+     raise `MethodError` (exception types verified on Julia 1.12.6 against
+     the shipped implementation and pinned by the test suite). These
+     operations were never supported — previously they silently
+     desynchronized the object. Consecutive `p.pars[i]` reads remain
+     `===`-equal (immutable records; no identity change).
+  3. A `Vector{MinuitParameter}` passed into a `Parameters` constructor is
+     decomposed on construction, so mutating the caller's vector afterwards
+     no longer has any aliased effect (previously it desynchronized the
+     object; now it is inert — strictly safer, but observable).
+
+  Not breaking: all exported names, all outer-constructor signatures, all
+  mutators, all properties of `Minuit`, and the documented
+  `m.params.pars[i].value` / `.error` idiom. Non-breaking improvements
+  riding along: the post-fit `m.params` overlay is now a few shallow copies
+  instead of a full semantic rebuild, and remains fully isolated (it shares
+  no mutable container with `m`); `propertynames(::Parameters)` is curated;
+  and the per-FCN kernels read storage via `getfield`-based hoisted locals,
+  verified allocation-free.
+
 ### Fixed
 
 - **Mutators no longer discard fitted values** (issue #46). `fix!(m, i)` after
