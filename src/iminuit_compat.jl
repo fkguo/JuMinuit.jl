@@ -560,17 +560,18 @@ function mncontour(m::Minuit, par1, par2;
     σ_scale = sqrt(delta_chisq(_cl, 2))
     # Resolve indices then dispatch into `contour_exact` (real MnContours
     # algorithm) rather than the Phase-1 ellipse approximation.
-    ix = par1 isa Integer ? Int(par1) : ext_index(m.params, String(par1))
-    iy = par2 isa Integer ? Int(par2) : ext_index(m.params, String(par2))
-    ix_int = m.params.int_of_ext[ix]
-    iy_int = m.params.int_of_ext[iy]
+    ps = m.params
+    ix = par1 isa Integer ? Int(par1) : ext_index(ps, String(par1))
+    iy = par2 isa Integer ? Int(par2) : ext_index(ps, String(par2))
+    ix_int = ps.int_of_ext[ix]
+    iy_int = ps.int_of_ext[iy]
     ce = contour_exact(m.fmin.internal, m.fmin.internal_cf,
                         ix_int, iy_int; npoints = npts,
                         threaded_gradient = _tg, sigma = σ_scale, kwargs...)
     # contour_exact works in internal (sin/√) coords; return physical
     # (external) coords matching `m.values` (no-op for unbounded params).
-    return [(int_to_ext_value(m.params, ix_int, px),
-             int_to_ext_value(m.params, iy_int, py)) for (px, py) in ce.points]
+    return [(int_to_ext_value(ps, ix_int, px),
+             int_to_ext_value(ps, iy_int, py)) for (px, py) in ce.points]
 end
 
 """

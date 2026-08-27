@@ -1495,8 +1495,15 @@ function function_cross_external(
     # MIGRAD-converged information and can land the inner search in a
     # different basin for hard FCNs), build Parameters with par_idx
     # FIXED at the trial value, run bounded migrad on the inner problem.
+    # §3.3 named hoist (issue #45, stage C2): read the `params.pars`
+    # property once, outside the probe closure, instead of twice per
+    # probe call. `all_pars` is the derived read-only records view over
+    # `params`, which is never mutated during the cross (each probe
+    # builds a fresh `inner_params`), so every element read through the
+    # hoisted view is identical to a fresh `params.pars` read.
     let par_idx = Int(par_idx), step_ext = step_ext,
         ext_min = ext_min, par = par, params = params,
+        all_pars = params.pars,
         aulim = aulim, limset = limset,
         last_ext_state = last_ext_state,
         ext_values = bfm.ext_values,
@@ -1536,8 +1543,8 @@ function function_cross_external(
             pre_shift = pre_seed_ext_ref[]
             pre_seed_ext_ref[] = nothing
             inner_pars = MinuitParameter[]
-            sizehint!(inner_pars, length(params.pars))
-            for (i, p) in enumerate(params.pars)
+            sizehint!(inner_pars, length(all_pars))
+            for (i, p) in enumerate(all_pars)
                 converged_v = if i == par_idx
                     ext_values[i]   # scanned slot — overridden below
                 elseif prev_ext !== nothing

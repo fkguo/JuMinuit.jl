@@ -2463,8 +2463,15 @@ _fmt_cell(x::Real) = _fmt_cell(Float64(x))
 
 # Per-parameter row tuple for the table. Shared by text/plain and HTML
 # renderers (Phase 3 C1 (b) + (c)).
-function _param_row_data(m::Minuit, i::Int)
-    p = m.params.pars[i]
+#
+# Design §3.3 (named hoists): each read of the `m.params` property post-fit
+# rebuilds a fresh fit-overlaid `Parameters` (two vector copies + shallow
+# par copies). The renderers' per-parameter loops therefore hoist a single
+# `ps = m.params` and pass it in; the 2-arg convenience method keeps the
+# original call signature for one-off callers.
+_param_row_data(m::Minuit, i::Int) = _param_row_data(m, m.params, i)
+function _param_row_data(m::Minuit, ps::Parameters, i::Int)
+    p = ps.pars[i]
     fixed = is_fixed(p)
     value = m.values[i]
     hesse_err = fixed ? nothing : m.errors[i]
@@ -2539,7 +2546,10 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
     # the iminuit-style comparison view — separate Value, Hesse and MINOS
     # columns — so the asymmetric MINOS error sits next to its Hesse
     # counterpart and a non-converged MINOS shows as "—".
-    rows = [_param_row_data(m, i) for i in 1:n_pars(m.params)]
+    # §3.3 named hoist: one fit-overlaid `Parameters` build for the whole
+    # table + warning loop, instead of one per parameter.
+    ps = m.params
+    rows = [_param_row_data(m, ps, i) for i in 1:n_pars(ps)]
     has_minos = !isempty(m.minos_errors)
     if has_minos
         headers = ["#", "Name", "Value", "Hesse", "MINOS", "Limit −", "Limit +", "Fixed"]
@@ -2587,7 +2597,7 @@ function Base.show(io::IO, ::MIME"text/plain", m::Minuit)
     al = _at_limit_indices(m)
     if !isempty(al)
         for i in al
-            p = m.params.pars[i]
+            p = ps.pars[i]
             print(io, "⚠ Best-fit value for parameter `", p.name,
                   "` is close to or at its ")
             v = m.values[i]
@@ -2671,8 +2681,11 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
               h, "</th>")
     end
     print(io, "</tr></thead><tbody>")
-    for i in 1:n_pars(m.params)
-        r = _param_row_data(m, i)
+    # §3.3 named hoist: one fit-overlaid `Parameters` build for the whole
+    # table + warning loop, instead of one per parameter.
+    ps = m.params
+    for i in 1:n_pars(ps)
+        r = _param_row_data(m, ps, i)
         # Parameter `r.name` is user-controlled → escape it. The Value /
         # Hesse / MINOS cells are plain numbers, a "± e" string, or the
         # asymmetric `<sup>/<sub>` markup from the MINOS formatters — that
@@ -2702,7 +2715,7 @@ function Base.show(io::IO, ::MIME"text/html", m::Minuit)
     if !isempty(al)
         print(io, """<div style="color:#bf8700;margin-top:0.5em">""")
         for i in al
-            p = m.params.pars[i]
+            p = ps.pars[i]
             v = m.values[i]
             # has_limits(p) is true for one-sided too (it's
             # `has_lower_limit || has_upper_limit`), so the
