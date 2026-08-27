@@ -73,6 +73,11 @@ fix!(m, "mass"); migrad!(m)           # fit with mass held
 release!(m, "mass"); migrad!(m)       # free it again and refit
 ```
 
+Mutators called between fits edit the *current* state (as in iminuit):
+fixing a parameter after `migrad!` freezes it at its **fitted** value, the
+other parameters keep theirs, and the next fit continues from the fitted
+point rather than restarting from the constructor's initial values.
+
 ## Editing bounds and fixes after construction
 
 Every constructor option has a per-parameter mutator (each accepts an

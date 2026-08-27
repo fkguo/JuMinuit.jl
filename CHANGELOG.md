@@ -3,6 +3,28 @@
 All notable changes to NativeMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Mutators no longer discard fitted values** (issue #46). `fix!(m, i)` after
+  a fit used to reset *every* parameter to its constructor-time initial value —
+  the fitted values were lost, so fix–fit–release–fit workflows (profile
+  fixing, coordinate-descent style fits) silently restarted from the initial
+  point. All mutators (`fix!`, `release!`, `set_value!`, `set_error!`,
+  `set_limits!`, `remove_limits!`, `set_upper_limit!`, `set_lower_limit!`, the
+  view writes `m.fixed[i] = …`, and the bulk setters) now edit the *current*
+  state: when a fit is cached, the fitted external values of all parameters
+  are first committed into the stored config, so `fix!` freezes a parameter at
+  its fitted value, the other parameters keep theirs, and the next `migrad!`
+  continues from the fitted point — matching iminuit, whose setters mutate the
+  current `MnUserParameterState`. Only the values are committed: step sizes
+  stay at the user's original settings (they remain the retry length scale and
+  the resume-floor reference), deliberately unlike iminuit's state carry,
+  which also carries the post-fit Hesse errors. Consequently `reset(m)` after
+  a post-fit mutation returns to the committed (fitted) values, not the
+  constructor values — `reset` undoes fits, not config edits.
+
 ## [0.7.0] — 2026-08-14
 
 ### Added
