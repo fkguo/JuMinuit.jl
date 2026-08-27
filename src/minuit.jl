@@ -684,7 +684,11 @@ function migrad!(m::Minuit;
     # length scale for both the fixed-point tolerance and the growth ceiling.
     # Use the raw config (NOT the fit-overlaid `m.params`): on a re-`migrad!`
     # the overlay would yield the prior fit's Hesse errors, drifting the scale.
-    base_errs = [p.error for p in _init_params(m).pars]
+    # Function barrier (issue #45): `m.params` is an abstractly-typed field,
+    # so an inline comprehension over it dispatches dynamically per element;
+    # `_config_step_vector` specializes once on the concrete `Parameters`
+    # and reads the canonical `errors` store directly.
+    base_errs = _config_step_vector(_init_params(m))
     visited = Tuple{Vector{Float64},Float64}[(copy(bfm.ext_values), fval(bfm))]
     for _pass in 2:Int(iterate)
         (is_valid(bfm.internal) || bfm.internal.reached_call_limit) && break
@@ -955,13 +959,27 @@ end
 # at the top of `migrad!` and in `simplex(m::Minuit)`.
 function _build_resume_params(m::Minuit, bfm::BoundedFunctionMinimum;
                                floor_errors::Bool = true)
-    # Raw config: `p_old.error` is the user's ORIGINAL step (the `floor_errors`
-    # floor), which must not pick up the fit-overlaid Hesse error.
-    cfg = _init_params(m)
-    new_pars = Vector{MinuitParameter}(undef, n_pars(cfg))
-    @inbounds for i in 1:n_pars(cfg)
-        p_old = cfg.pars[i]
-        e_fit = bfm.ext_errors[i]
+    # Raw config: the config step is the user's ORIGINAL step (the
+    # `floor_errors` floor), which must not pick up the fit-overlaid Hesse
+    # error. Function barrier (issue #45): `m.params` and `m.fmin` are
+    # abstractly-typed fields, so the loop lives in `_resume_params`, which
+    # specializes on the concrete `Parameters` and result-vector types and
+    # reads the canonical metadata/errors stores directly.
+    return _resume_params(_init_params(m), bfm.ext_values, bfm.ext_errors,
+                          floor_errors)
+end
+
+function _resume_params(cfg::Parameters, fit_values::AbstractVector{Float64},
+                        fit_errors::AbstractVector{Float64},
+                        floor_errors::Bool)
+    md = getfield(cfg, :metadata)
+    cfg_errs = getfield(cfg, :errors)
+    n = length(md)
+    new_pars = Vector{MinuitParameter}(undef, n)
+    @inbounds for i in 1:n
+        p_old = md[i]
+        old_err = cfg_errs[i]
+        e_fit = fit_errors[i]
         # `floor_errors = true` (migrad! retry loop): never resume with a
         # step smaller than the user's original — the historical retry
         # heuristic. `floor_errors = false` (repeat `simplex(m)`): carry
@@ -973,12 +991,12 @@ function _build_resume_params(m::Minuit, bfm::BoundedFunctionMinimum;
         # (0/negative/non-finite, e.g. after an all-NaN run) fall back
         # to the prior step so the resume stays usable.
         new_err = if floor_errors
-            max(e_fit, p_old.error)
+            max(e_fit, old_err)
         else
-            (isfinite(e_fit) && e_fit > 0) ? e_fit : p_old.error
+            (isfinite(e_fit) && e_fit > 0) ? e_fit : old_err
         end
         new_pars[i] = MinuitParameter(p_old.name,
-                                       bfm.ext_values[i],
+                                       fit_values[i],
                                        new_err;
                                        lower = p_old.lower,
                                        upper = p_old.upper,
@@ -1804,15 +1822,22 @@ end
 # meaning "the user's step". Committed values come from `fmin.ext_values`
 # whether or not the fit validated — same rule as the `m.values` view.
 function _mutation_base_pars(m::Minuit)
-    new_pars = collect(_init_params(m).pars)
+    # Function barrier (issue #45): `m.params`/`m.fmin` are abstractly-typed
+    # fields; the record materialization specializes on the concrete
+    # `Parameters` (and committed-values vector) inside `_mutation_records`.
     fmin = getfield(m, :fmin)
-    if fmin !== nothing
-        @inbounds for i in eachindex(new_pars)
-            p = new_pars[i]
-            new_pars[i] = MinuitParameter(p.name, fmin.ext_values[i], p.error;
-                                           lower = p.lower, upper = p.upper,
-                                           fixed = p.fixed)
-        end
+    return _mutation_records(_init_params(m),
+                             fmin === nothing ? nothing : fmin.ext_values)
+end
+
+function _mutation_records(cfg::Parameters, committed_values)
+    new_pars = collect(cfg.pars)
+    committed_values === nothing && return new_pars
+    @inbounds for i in eachindex(new_pars)
+        p = new_pars[i]
+        new_pars[i] = MinuitParameter(p.name, committed_values[i], p.error;
+                                       lower = p.lower, upper = p.upper,
+                                       fixed = p.fixed)
     end
     return new_pars
 end

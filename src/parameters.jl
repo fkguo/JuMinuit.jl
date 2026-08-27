@@ -270,6 +270,20 @@ Base.length(p::Parameters) = n_pars(p)
 is_fixed(p::Parameters, ext_idx::Integer) =
     getfield(p, :metadata)[ext_idx].fixed
 
+# Function-barrier accessor for callers holding an abstractly-typed
+# `Parameters` (e.g. the `Minuit.params` field): specializes once on the
+# concrete container type and copies the canonical step-size store into a
+# plain `Vector{Float64}`. Explicit element loop — `collect(Float64, x)`
+# would preserve a structured container, which is not wanted here.
+function _config_step_vector(p::Parameters)
+    errs = getfield(p, :errors)
+    out = Vector{Float64}(undef, length(errs))
+    @inbounds for i in eachindex(out)
+        out[i] = errs[i]
+    end
+    return out
+end
+
 "`ext_index(p, name)` — external index for parameter named `name` (1-based)."
 ext_index(p::Parameters, name::AbstractString) =
     get(p.name_to_ext, String(name)) do
