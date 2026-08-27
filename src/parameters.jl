@@ -65,29 +65,79 @@ bound_kind(p::MinuitParameter) = bound_kind(p.lower, p.upper)
 is_fixed(p::MinuitParameter) = p.fixed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Parameters — vector of MinuitParameter + int↔ext index maps + name lookup
+# ParameterMetadata — per-parameter configuration without the numbers
+# (issue #45). Internal type: not exported, not public API until a 1.0
+# surface review.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    ParameterMetadata
+
+Per-parameter configuration that is NOT numerical coordinate state:
+display name, bounds, fixed flag. Carries no value/error fields by
+design (issue #45): the canonical numbers live exactly once, in
+`Parameters.values` / `Parameters.errors`. Note `fixed` makes this
+configuration, not pure presentation data — the index maps and the
+`IntIsExt` type parameter of `Parameters` are derived from it at
+construction. Internal type (not exported).
+"""
+struct ParameterMetadata
+    name::String
+    lower::Float64   # NaN = unbounded below (same sentinel as MinuitParameter)
+    upper::Float64   # NaN = unbounded above
+    fixed::Bool
+end
+
+has_lower_limit(md::ParameterMetadata) = !isnan(md.lower)
+has_upper_limit(md::ParameterMetadata) = !isnan(md.upper)
+has_limits(md::ParameterMetadata) = has_lower_limit(md) || has_upper_limit(md)
+bound_kind(md::ParameterMetadata) = bound_kind(md.lower, md.upper)
+is_fixed(md::ParameterMetadata) = md.fixed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters — metadata records + int↔ext index maps + canonical value/error
+# vectors + name lookup
 # ─────────────────────────────────────────────────────────────────────────────
 
 """
     Parameters
 
-Collection of `MinuitParameter`s plus internal/external index mappings,
-precision context, and the active external-coordinate values. Replaces the
-tightly-coupled C++ pair `MnUserParameters` + `MnUserTransformation`.
+Per-parameter metadata plus internal/external index mappings, precision
+context, and the canonical external-coordinate value and step-size vectors.
+Replaces the tightly-coupled C++ pair `MnUserParameters` +
+`MnUserTransformation`.
+
+The numbers live exactly **once** (issue #45): `values` and `errors` are the
+canonical, single storage of every parameter's external value and initial
+step size. No record mirror exists that could desynchronize from them.
+`p.pars` remains available as a **derived compatibility view** that lazily
+materializes `MinuitParameter` records from `metadata`/`values`/`errors` on
+access (see `ParameterRecords`); it is read-only.
+
+All fields are **read-only** by contract: mutate through the `Minuit` API
+(`set_value!`/`set_error!`/`set_limits!`/`fix!`/`release!`, or
+`m.values`/`m.errors`/`m.limits`/`m.fixed`), which rebuilds the `Parameters`
+consistently. Writing to the fields (or to containers reachable from them)
+directly is unsupported.
 
 # Fields
 
-- `pars::Vector{MinuitParameter}` — full parameter list (variable + fixed).
+- `metadata::Vector{ParameterMetadata}` — per-parameter name, bounds, fixed
+  flag (variable + fixed parameters; no numbers). Internal.
 - `ext_of_int::Vector{Int}` — `ext_of_int[i_internal] = external_index`.
   Length = number of free parameters.
 - `int_of_ext::Vector{Int}` — `int_of_ext[i_external] = internal_index`, or
   `0` if the external parameter is fixed. Length = total parameters.
 - `name_to_ext::Dict{String,Int}` — name → external index (1-based).
 - `prec::MachinePrecision` — used for `ext2int` clamping in Sin transform.
-- `values::AbstractVector{Float64}` — active initial external values. This is
+- `values::AbstractVector{Float64}` — canonical external values. This is
   also the allocation source for coordinate workspaces, so structured vector
-  axes survive through ordinary `similar(values)` operations. `pars[i].value`
-  mirrors this field for compatibility with the public `MinuitParameter` API.
+  axes survive through ordinary `similar(values)` operations. The `values=`
+  keyword of the record constructor donates only the **container/axes**; the
+  numbers always come from the records.
+- `errors::AbstractVector{Float64}` — canonical initial step sizes ("errors"
+  in iminuit/Minuit2 nomenclature). Allocated as `similar(values, Float64)`,
+  so it carries the same structured axes as `values`.
 
 The mappings are computed once at construction; they don't change as
 parameters are fixed/released (would require rebuilding).
@@ -108,12 +158,13 @@ Structure is still preserved on every external buffer that reaches the user's
 objective, gradient, and results, which is what callers actually observe.
 """
 struct Parameters{P<:AbstractVector{Float64},IntIsExt}
-    pars::Vector{MinuitParameter}
+    metadata::Vector{ParameterMetadata}
     ext_of_int::Vector{Int}
     int_of_ext::Vector{Int}
     name_to_ext::Dict{String,Int}
     prec::MachinePrecision
     values::P
+    errors::P
 end
 
 function Parameters(pars::Vector{MinuitParameter},
@@ -140,16 +191,30 @@ function Parameters(pars::Vector{MinuitParameter},
             int_of_ext[ext_idx] = int_idx
         end
     end
+    # Decompose the records: metadata (name/bounds/fixed) goes into its own
+    # vector; the numbers for BOTH canonical vectors come from the records —
+    # `values[i] := pars[i].value`, `errors[i] := pars[i].error`. The `values=`
+    # keyword donates only the container/axes. This is load-bearing for
+    # `_build_resume_params`: resume-step records must win over any donor's
+    # stored errors.
+    metadata = Vector{ParameterMetadata}(undef, n)
     external = similar(values, Float64)
+    errors_vec = similar(external, Float64)
     @inbounds for i in 1:n
-        external[i] = pars[i].value
+        p = pars[i]
+        metadata[i] = ParameterMetadata(p.name, p.lower, p.upper, p.fixed)
+        external[i] = p.value
+        errors_vec[i] = p.error
     end
     # Internal ≡ external only when nothing reshapes or reparameterizes the
     # coordinates: no fixed parameter (same length) and no bound (identity
     # transform). See the `IntIsExt` section of the docstring.
     int_is_ext = int_idx == n && !any(has_limits, pars)
+    # Type parameters bound from the ACTUAL allocation: `similar(x, Float64)
+    # isa typeof(x)` is not part of the AbstractVector contract.
     return Parameters{typeof(external),int_is_ext}(
-        pars, ext_of_int, int_of_ext, name_to_ext, prec, external)
+        metadata, ext_of_int, int_of_ext, name_to_ext, prec, external,
+        errors_vec)
 end
 
 Parameters(pars::Vector{MinuitParameter}, source::Parameters) =
@@ -196,13 +261,14 @@ end
 # ─────────────────────────────────────────────────────────────────────────────
 
 "`n_pars(p)` — total external parameter count (variable + fixed)."
-n_pars(p::Parameters) = length(p.pars)
+n_pars(p::Parameters) = length(getfield(p, :metadata))
 
 "`n_free(p)` — variable (non-fixed) parameter count."
-n_free(p::Parameters) = length(p.ext_of_int)
+n_free(p::Parameters) = length(getfield(p, :ext_of_int))
 
 Base.length(p::Parameters) = n_pars(p)
-is_fixed(p::Parameters, ext_idx::Integer) = p.pars[ext_idx].fixed
+is_fixed(p::Parameters, ext_idx::Integer) =
+    getfield(p, :metadata)[ext_idx].fixed
 
 "`ext_index(p, name)` — external index for parameter named `name` (1-based)."
 ext_index(p::Parameters, name::AbstractString) =
@@ -222,9 +288,9 @@ Convert one internal-parameter value to external. Mirrors
 `reference/Minuit2_cpp/src/MnUserTransformation.cxx:99-118`.
 """
 function int_to_ext_value(p::Parameters, int_idx::Integer, int_val::Real)
-    ext_idx = p.ext_of_int[int_idx]
-    par = p.pars[ext_idx]
-    return int2ext(bound_kind(par), Float64(int_val), par.lower, par.upper)
+    ext_idx = getfield(p, :ext_of_int)[int_idx]
+    md = getfield(p, :metadata)[ext_idx]
+    return int2ext(bound_kind(md), Float64(int_val), md.lower, md.upper)
 end
 
 """
@@ -236,8 +302,9 @@ Convert one external value to internal. The `ext_idx` is the
 `reference/Minuit2_cpp/src/MnUserTransformation.cxx:122-140`.
 """
 function ext_to_int_value(p::Parameters, ext_idx::Integer, ext_val::Real)
-    par = p.pars[ext_idx]
-    return ext2int(bound_kind(par), Float64(ext_val), par.lower, par.upper, p.prec)
+    md = getfield(p, :metadata)[ext_idx]
+    return ext2int(bound_kind(md), Float64(ext_val), md.lower, md.upper,
+                   getfield(p, :prec))
 end
 
 """
@@ -247,9 +314,9 @@ end
 chain rule and covariance transformation.
 """
 function dint2ext_value(p::Parameters, int_idx::Integer, int_val::Real)
-    ext_idx = p.ext_of_int[int_idx]
-    par = p.pars[ext_idx]
-    return dint2ext(bound_kind(par), Float64(int_val), par.lower, par.upper)
+    ext_idx = getfield(p, :ext_of_int)[int_idx]
+    md = getfield(p, :metadata)[ext_idx]
+    return dint2ext(bound_kind(md), Float64(int_val), md.lower, md.upper)
 end
 
 """
@@ -268,12 +335,15 @@ function int_to_ext_vector!(ext::AbstractVector{<:Real}, p::Parameters,
         throw(DimensionMismatch("int_vec length $(length(int_vec)) != n_free $(n_free(p))"))
     length(ext) == n_pars(p) ||
         throw(DimensionMismatch("ext length $(length(ext)) != n_pars $(n_pars(p))"))
+    metadata = getfield(p, :metadata)
+    values = getfield(p, :values)
+    int_of_ext = getfield(p, :int_of_ext)
     @inbounds for ext_idx in 1:n_pars(p)
-        par = p.pars[ext_idx]
-        if par.fixed
-            ext[ext_idx] = p.values[ext_idx]
+        md = metadata[ext_idx]
+        if md.fixed
+            ext[ext_idx] = values[ext_idx]
         else
-            int_idx = p.int_of_ext[ext_idx]
+            int_idx = int_of_ext[ext_idx]
             ext[ext_idx] = int_to_ext_value(p, int_idx, int_vec[int_idx])
         end
     end
@@ -292,7 +362,7 @@ Allocates a fresh result; see [`int_to_ext_vector!`](@ref) for the
 in-place, buffer-reusing variant used on the per-FCN-call hot path.
 """
 int_to_ext_vector(p::Parameters, int_vec::AbstractVector{<:Real}) =
-    int_to_ext_vector!(similar(p.values, Float64), p, int_vec)
+    int_to_ext_vector!(similar(getfield(p, :values), Float64), p, int_vec)
 
 """
     ext_to_int_vector(p, ext_vec) -> Vector{Float64}
@@ -304,8 +374,9 @@ function ext_to_int_vector(p::Parameters, ext_vec::AbstractVector{<:Real})
     length(ext_vec) == n_pars(p) ||
         throw(DimensionMismatch("ext_vec length $(length(ext_vec)) != n_pars $(n_pars(p))"))
     int = Vector{Float64}(undef, n_free(p))
+    ext_of_int = getfield(p, :ext_of_int)
     @inbounds for int_idx in 1:n_free(p)
-        ext_idx = p.ext_of_int[int_idx]
+        ext_idx = ext_of_int[int_idx]
         int[int_idx] = ext_to_int_value(p, ext_idx, ext_vec[ext_idx])
     end
     return int
@@ -323,11 +394,15 @@ applying ext2int on the user-supplied initial values.
 """
 function initial_int_values(p::Parameters)
     int = _internal_vector(p)
+    metadata = getfield(p, :metadata)
+    values = getfield(p, :values)
+    ext_of_int = getfield(p, :ext_of_int)
+    prec = getfield(p, :prec)
     @inbounds for int_idx in 1:n_free(p)
-        ext_idx = p.ext_of_int[int_idx]
-        par = p.pars[ext_idx]
-        int[int_idx] = ext2int(bound_kind(par), p.values[ext_idx],
-                              par.lower, par.upper, p.prec)
+        ext_idx = ext_of_int[int_idx]
+        md = metadata[ext_idx]
+        int[int_idx] = ext2int(bound_kind(md), values[ext_idx],
+                              md.lower, md.upper, prec)
     end
     return int
 end
@@ -357,36 +432,40 @@ the C++ two-sided formula clamps gracefully (parallel-review #2 B4).
 function initial_int_errors(p::Parameters)
     int_vals = initial_int_values(p)
     errs = _internal_vector(p)
-    eps2 = p.prec.eps2
+    metadata = getfield(p, :metadata)
+    ext_errors = getfield(p, :errors)
+    ext_of_int = getfield(p, :ext_of_int)
+    prec = getfield(p, :prec)
+    eps2 = prec.eps2
     @inbounds for int_idx in 1:n_free(p)
-        ext_idx = p.ext_of_int[int_idx]
-        par = p.pars[ext_idx]
-        if !has_limits(par)
-            errs[int_idx] = par.error
+        ext_idx = ext_of_int[int_idx]
+        md = metadata[ext_idx]
+        if !has_limits(md)
+            errs[int_idx] = ext_errors[ext_idx]
         else
-            kind = bound_kind(par.lower, par.upper)
+            kind = bound_kind(md.lower, md.upper)
             var = int_vals[int_idx]
-            sav = int2ext(kind, var, par.lower, par.upper)
-            werr = par.error
+            sav = int2ext(kind, var, md.lower, md.upper)
+            werr = ext_errors[ext_idx]
 
             # Forward perturbation, clamped at the upper bound if present
             sav_plus = sav + werr
             if kind == BothBounds || kind == UpperOnly
-                if sav_plus > par.upper
-                    sav_plus = par.upper
+                if sav_plus > md.upper
+                    sav_plus = md.upper
                 end
             end
-            var_plus = ext2int(kind, sav_plus, par.lower, par.upper, p.prec)
+            var_plus = ext2int(kind, sav_plus, md.lower, md.upper, prec)
             vplu = var_plus - var
 
             # Backward perturbation, clamped at the lower bound if present
             sav_minus = sav - werr
             if kind == BothBounds || kind == LowerOnly
-                if sav_minus < par.lower
-                    sav_minus = par.lower
+                if sav_minus < md.lower
+                    sav_minus = md.lower
                 end
             end
-            var_minus = ext2int(kind, sav_minus, par.lower, par.upper, p.prec)
+            var_minus = ext2int(kind, sav_minus, md.lower, md.upper, prec)
             vmin = var_minus - var
 
             gsmin = 8.0 * eps2 * (abs(var) + eps2)
@@ -401,6 +480,67 @@ end
 # whose labels still name the parameters they hold; a fixed-parameter
 # projection or a bounded reparameterization gets an honestly different
 # dense-vector type rather than mislabeled transformed coordinates.
-_internal_vector(p::Parameters{P,true}) where {P} = similar(p.values, Float64)
+_internal_vector(p::Parameters{P,true}) where {P} =
+    similar(getfield(p, :values), Float64)
 _internal_vector(p::Parameters{P,false}) where {P} =
     Vector{Float64}(undef, n_free(p))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compatibility view: `p.pars` — lazily materialized MinuitParameter records
+# (issue #45). The canonical numbers live in `values`/`errors`; the view
+# derives each record on access, so it can never desynchronize. Internal
+# type: not exported.
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    ParameterRecords
+
+Read-only `AbstractVector{MinuitParameter}` view over a `Parameters`,
+returned by `p.pars`. Each `getindex` materializes a `MinuitParameter`
+from the canonical `metadata`/`values`/`errors` stores, so
+`p.pars[i] isa MinuitParameter` holds and the record is always in sync
+with the stored numbers (it is derived, not stored). `setindex!` throws:
+mutate through the `Minuit` API instead. Internal type (not exported).
+"""
+struct ParameterRecords{P<:Parameters} <: AbstractVector{MinuitParameter}
+    p::P
+end
+
+Base.size(v::ParameterRecords) = (length(getfield(getfield(v, :p), :metadata)),)
+Base.IndexStyle(::Type{<:ParameterRecords}) = IndexLinear()
+
+Base.@propagate_inbounds function Base.getindex(v::ParameterRecords, i::Int)
+    @boundscheck checkbounds(v, i)
+    p = getfield(v, :p)
+    md = getfield(p, :metadata)[i]
+    # Direct 6-positional-arg inner constructor: the fields are already
+    # validated Float64s; the validating keyword constructor is not needed.
+    return MinuitParameter(md.name, getfield(p, :values)[i],
+                           getfield(p, :errors)[i],
+                           md.lower, md.upper, md.fixed)
+end
+
+# Concrete signature (not a varargs catch-all): stays out of Aqua's
+# method-ambiguity checks and gives every write path — including generic
+# code like `sort!` that routes through `setindex!` — the guiding error.
+function Base.setindex!(v::ParameterRecords, val, i::Int)
+    throw(ArgumentError(
+        "p.pars is a derived read-only view; mutate through set_value!/" *
+        "set_error!/set_limits!/fix!/release! (or m.values/m.errors/" *
+        "m.limits/m.fixed)"))
+end
+
+# `@inline` is load-bearing: the `s === :pars` branch must constant-fold
+# away for literal-symbol field reads on the per-FCN hot path, and the
+# heuristic inliner must not be trusted with that (an allocation gate does
+# not detect added call overhead).
+Base.@inline function Base.getproperty(p::Parameters, s::Symbol)
+    s === :pars ? ParameterRecords(p) : getfield(p, s)
+end
+
+# Advertised property surface = the supported read surface; internal fields
+# remain reachable but are only listed under `private = true`
+# (completeness/debugging).
+Base.propertynames(p::Parameters, private::Bool = false) =
+    private ? (:pars, fieldnames(Parameters)...) :
+              (:pars, :values, :errors, :prec)

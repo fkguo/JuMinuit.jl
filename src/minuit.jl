@@ -1508,12 +1508,17 @@ end
 # `:values`/`:errors` prefer the post-fit external vector when a fit is
 # cached, else the stored initial value/step.
 _view_get(::Val{:values}, m::Minuit, i::Int) =
-    m.fmin === nothing ? _init_params(m).pars[i].value : m.fmin.ext_values[i]
+    m.fmin === nothing ? getfield(_init_params(m), :values)[i] :
+                         m.fmin.ext_values[i]
 _view_get(::Val{:errors}, m::Minuit, i::Int) =
-    m.fmin === nothing ? _init_params(m).pars[i].error : m.fmin.ext_errors[i]
-_view_get(::Val{:fixed}, m::Minuit, i::Int) = is_fixed(_init_params(m).pars[i])
-_view_get(::Val{:limits}, m::Minuit, i::Int) =
-    (_init_params(m).pars[i].lower, _init_params(m).pars[i].upper)
+    m.fmin === nothing ? getfield(_init_params(m), :errors)[i] :
+                         m.fmin.ext_errors[i]
+_view_get(::Val{:fixed}, m::Minuit, i::Int) =
+    getfield(_init_params(m), :metadata)[i].fixed
+function _view_get(::Val{:limits}, m::Minuit, i::Int)
+    md = getfield(_init_params(m), :metadata)[i]
+    return (md.lower, md.upper)
+end
 
 @inline function Base.getindex(v::ParameterView{kind}, i::Int) where {kind}
     @boundscheck checkbounds(v, i)
@@ -1589,19 +1594,25 @@ Base.setindex!(v::ParameterView, val, name::AbstractString) =
 _init_params(m::Minuit) = getfield(m, :params)
 
 # Same structure as `cfg` (names, bounds, fixed flags, int↔ext maps, precision)
-# but each parameter's value/error replaced by the converged external
-# value/error from `bfm`. Guarantees `m.params.pars[i].value == m.values[i]`
-# and `m.params.pars[i].error == m.errors[i]`. Only `pars` is rebuilt; the
-# index maps and precision are reused (they are unchanged by a fit).
-function _fit_overlaid_params(cfg::Parameters, bfm::BoundedFunctionMinimum)
-    n = length(cfg.pars)
-    new_pars = Vector{MinuitParameter}(undef, n)
-    @inbounds for i in 1:n
-        p = cfg.pars[i]
-        new_pars[i] = MinuitParameter(p.name, bfm.ext_values[i], bfm.ext_errors[i],
-                                      p.lower, p.upper, p.fixed)
-    end
-    return Parameters(new_pars, cfg)
+# but the canonical value/error vectors replaced by the converged external
+# vectors from `bfm`. Guarantees `m.params.pars[i].value == m.values[i]` and
+# `m.params.pars[i].error == m.errors[i]`. Every mutable container is copied
+# (shallowly — the records are immutable), so the overlay shares NO mutable
+# container with `cfg` or `m.fmin`: mutating anything reachable from the
+# returned object never affects `m` (isolation invariant). This is cheaper
+# than the old record rebuild: no per-parameter record construction, no
+# duplicate-name check, no Dict re-insertion (`copy(::Dict)` duplicates the
+# tables without re-hashing). `IE` is inherited from the config: any
+# structure-changing mutation drops `m.fmin` first, so an overlay is only
+# ever built for the config it belongs to. Type parameter bound from the
+# actual allocation (`similar` need not return `typeof(cfg.values)`).
+function _fit_overlaid_params(cfg::Parameters{<:Any,IE},
+                              bfm::BoundedFunctionMinimum) where {IE}
+    vals = similar(cfg.values, Float64); copyto!(vals, bfm.ext_values)
+    errs = similar(cfg.values, Float64); copyto!(errs, bfm.ext_errors)
+    return Parameters{typeof(vals),IE}(
+        copy(cfg.metadata), copy(cfg.ext_of_int), copy(cfg.int_of_ext),
+        copy(cfg.name_to_ext), cfg.prec, vals, errs)
 end
 
 function Base.getproperty(m::Minuit, name::Symbol)
