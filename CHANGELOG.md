@@ -49,6 +49,26 @@ and [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`migrad!` runtime no longer depends on precompile-image build luck.** On
+  Julia 1.12, freshly built package images of byte-identical source ran the
+  same warm fit either fast or ~4× slower (e.g. 13 μs vs 51 μs for a warm
+  4-parameter quadratic fit), deterministically per image. Root cause: the
+  driver received `_migrad_into!`'s result typed as a 2-member union of deep
+  existential types (the cf-vs-cfwg branch), and codegen guarded every use of
+  it with a runtime `jl_isa` against one union member — a ~7 μs descent into
+  the subtyping machinery (`forall_exists_subtype`) when that member is the
+  matching one, ~0.8 μs when it is the mismatching one. Which member comes
+  first in the cached union is not deterministic across precompile runs
+  (`Union` member order is canonical only for concrete members; `UnionAll`
+  members keep construction order), so byte-identical builds landed on either
+  cost. `migrad!` now calls `_migrad_into!` through a type-erasing barrier
+  (`_erased_call`) and touches each pass's minimum only through small
+  argument-specialized helpers, so the union never reaches the driver's
+  codegen and every per-pass operation is an ordinary cached dispatch. Warm
+  fit time is now ~11 μs on the reference benchmark — faster than the
+  previous *lucky* images — with build-to-build spread under 2%, and one
+  fewer transient allocation per fit.
+
 - **Mutators no longer discard fitted values** (issue #46). `fix!(m, i)` after
   a fit used to reset *every* parameter to its constructor-time initial value —
   the fitted values were lost, so fix–fit–release–fit workflows (profile

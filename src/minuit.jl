@@ -630,7 +630,21 @@ function migrad!(m::Minuit;
     # the prior ext_values forward as the new starting point. m.params
     # untouched (review BLOCKING #2 from the original `migrad!` review).
     params_to_use = m.fmin === nothing ? _init_params(m) : _build_resume_params(m)
-    bfm = _migrad_into!(m, params_to_use;
+    # Calling `_migrad_into!` through the `_erased_call` barrier (here and in
+    # the retry loop) is load-bearing for performance: `_migrad_into!`'s
+    # inferred return type is a 2-member union of deep existential types (the
+    # cf-vs-cfwg branch), and letting that union reach this body's codegen
+    # turns every use of `bfm` below — and even the call's own result
+    # handling — into a union-split guarded by a runtime descent into
+    # subtyping (`jl_isa` against a nested `where`-type, ~7 μs PER USE) whose
+    # cost depends on the union's member order — which is not deterministic
+    # across precompile runs (observed 4× fit-time swings between
+    # byte-identical builds on Julia 1.12). The erased call returns a plain
+    # boxed value inferred as `Any`, so each use below is a plain dynamic
+    # call resolved through the method-table cache (~ns), via the
+    # `_retry_*`/`_publish_fmin!` helpers which re-specialize on the concrete
+    # minimum type by ordinary dispatch.
+    bfm = _erased_call(_migrad_into!, m, params_to_use;
                          strategy = strategy, tol = tol, maxfcn = maxfcn,
                          threaded_gradient = _tg,
                          verify_threading = _vt,
@@ -679,7 +693,7 @@ function migrad!(m::Minuit;
     # single end-of-run warning (each pass's count is measured by its
     # own inner `_migrad_loop`; `_migrad_into!` suppresses the per-pass
     # warning via `warn_nonfinite = false`).
-    nf_total = bfm.internal.n_nonfinite_calls
+    nf_total = _nonfinite_calls(bfm)
     # The user's per-parameter step on m.params is the stable, pass-invariant
     # length scale for both the fixed-point tolerance and the growth ceiling.
     # Use the raw config (NOT the fit-overlaid `m.params`): on a re-`migrad!`
@@ -689,9 +703,9 @@ function migrad!(m::Minuit;
     # `_config_step_vector` specializes once on the concrete `Parameters`
     # and reads the canonical `errors` store directly.
     base_errs = _config_step_vector(_init_params(m))
-    visited = Tuple{Vector{Float64},Float64}[(copy(bfm.ext_values), fval(bfm))]
+    visited = Tuple{Vector{Float64},Float64}[_visited_entry(bfm)]
     for _pass in 2:Int(iterate)
-        (is_valid(bfm.internal) || bfm.internal.reached_call_limit) && break
+        _retry_stop_early(bfm) && break
 
         params_next = _build_resume_params(m, bfm)
         prior_cov = nothing
@@ -714,7 +728,7 @@ function migrad!(m::Minuit;
             params_next = _build_resume_params(m, sx)
         end
 
-        bfm = _migrad_into!(m, params_next;
+        bfm = _erased_call(_migrad_into!, m, params_next;
                              strategy = pass_strategy, tol = tol,
                              maxfcn = maxfcn,
                              threaded_gradient = _tg,
@@ -722,26 +736,52 @@ function migrad!(m::Minuit;
                              print_level = print_level,
                              prior_cov = prior_cov)
         npass += 1
-        nf_total += bfm.internal.n_nonfinite_calls
+        nf_total += _nonfinite_calls(bfm)
         best_bfm = _retry_select_better(bfm, best_bfm)
 
         # Cycle detection: re-convergence to an already-catalogued basin.
         _retry_is_fixed_point(bfm, visited, base_errs) && break
-        push!(visited, (copy(bfm.ext_values), fval(bfm)))
+        push!(visited, _visited_entry(bfm))
 
         # Opt-in path: stop once the perturbation spans every free parameter's
         # physical range (no larger meaningful hop remains).
         use_simplex && _retry_perturb_saturated(m, factor, base_errs) && break
     end
 
-    m.fmin = best_bfm
+    _publish_fmin!(m, best_bfm)
     m.n_passes = npass
     # P6: warn ONCE at the end of the whole migrad! run (handoff F7) —
     # iminuit warns per NaN return via MnPrint (suppressed at default
     # print level); NativeMinuit reports the aggregate with the verdict.
-    _warn_nonfinite_fcn(best_bfm.internal, nf_total)
+    _warn_nonfinite_fcn(best_bfm, nf_total)
     return m
 end
+
+# ── Retry-loop accessors behind the `_erased_call` barrier ───────────────────
+# `migrad!` deliberately handles each pass's BoundedFunctionMinimum as an
+# opaque (type-erased) value — see the barrier comment at its first
+# `_migrad_into!` call. These helpers take the minimum as an argument, so each
+# call re-specializes on the concrete minimum type through ordinary dispatch
+# and the field accesses inside compile statically; the driver itself never
+# needs the 2-member existential union that made its per-use type checks both
+# expensive and build-order-dependent.
+#
+# `_erased_call(f, args...; kw...)` invokes `f` with the function object
+# hidden behind an inference barrier: the call site compiles as plain dynamic
+# dispatch returning a boxed value inferred as `Any`, so the callee's inferred
+# return-type union never appears in the caller's IR (a `::SuperType`
+# assertion could not achieve this — asserting to a supertype never widens
+# inference's precision, and a barrier on the RESULT still lets codegen tag
+# the union before the barrier consumes it).
+_erased_call(f, args...; kw...) = Base.inferencebarrier(f)(args...; kw...)
+_nonfinite_calls(bfm::BoundedFunctionMinimum) = bfm.internal.n_nonfinite_calls::Int
+_visited_entry(bfm::BoundedFunctionMinimum) =
+    (convert(Vector{Float64}, copy(bfm.ext_values)), fval(bfm))::Tuple{Vector{Float64},Float64}
+_retry_stop_early(bfm::BoundedFunctionMinimum) =
+    (is_valid(bfm.internal) || bfm.internal.reached_call_limit)::Bool
+_publish_fmin!(m::Minuit, bfm::BoundedFunctionMinimum) = (m.fmin = bfm; nothing)
+_warn_nonfinite_fcn(bfm::BoundedFunctionMinimum, nf_total::Integer) =
+    _warn_nonfinite_fcn(bfm.internal, nf_total)
 
 # Dispatch the underlying `migrad(cf|cfwg, params; ...)` call. Used by
 # `migrad!` for both pass 1 and every retry pass, sharing the cfwg-vs-cf
