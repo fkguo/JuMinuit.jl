@@ -550,7 +550,8 @@ covariance and errors computed at the supplied point.
   `V = inv(H)` is the inverse Hessian (matches
   [`covariance`](@ref)`(::FunctionMinimum)`; for χ² fits with `up=1` it is
   `2·V`).
-- `errors::Vector{Float64}` — 1σ errors `sqrt(diag(covariance))`.
+- `errors::AbstractVector{Float64}` — 1σ errors `sqrt(diag(covariance))`,
+  allocated from `x` so coordinate structure and axes are preserved.
 - `edm::Float64` — expected distance to minimum at the point.
 - `nfcn::Int` — FCN calls consumed (seed gradient + Hessian passes).
 - `status::CovStatus` — covariance status (see [`CovStatus`](@ref)).
@@ -559,10 +560,14 @@ covariance and errors computed at the supplied point.
 - `state::MinimumState` — the full internal state, for advanced consumers
   (raw `inv_hessian`, gradient, …).
 """
-struct HesseResult{X<:AbstractVector{Float64},S<:MinimumState}
+struct HesseResult{
+    X<:AbstractVector{Float64},
+    S<:MinimumState,
+    E<:AbstractVector{Float64},
+}
     x::X
     covariance::Matrix{Float64}
-    errors::Vector{Float64}
+    errors::E
     edm::Float64
     nfcn::Int
     status::CovStatus
@@ -570,10 +575,30 @@ struct HesseResult{X<:AbstractVector{Float64},S<:MinimumState}
     state::S
 end
 
+# Preserve the explicit two-parameter constructor exposed by the original
+# `HesseResult{X,S}` definition. `E` is inferred from `errors`.
+function HesseResult{X,S}(
+    x::X,
+    covariance::Matrix{Float64},
+    errors::E,
+    edm::Float64,
+    nfcn::Int,
+    status::CovStatus,
+    valid::Bool,
+    state::S,
+) where {
+    X<:AbstractVector{Float64},
+    S<:MinimumState,
+    E<:AbstractVector{Float64},
+}
+    return HesseResult(x, covariance, errors, edm, nfcn, status, valid, state)
+end
+
 function HesseResult(state::MinimumState, up::Real)
     V = state.error.inv_hessian          # Symmetric{:U} inverse Hessian
     n = size(V, 1)
     factor = 2.0 * Float64(up)
+    x = copy(state.parameters.x)
     cov = Matrix{Float64}(undef, n, n)
     # Read symmetrically through the Symmetric view (not `parent`) so the
     # lower triangle is mirrored, then scale by 2·up — same convention as
@@ -582,11 +607,11 @@ function HesseResult(state::MinimumState, up::Real)
     @inbounds for j in 1:n, i in 1:n
         cov[i, j] = factor * V[i, j]
     end
-    errs = Vector{Float64}(undef, n)
+    errs = similar(x, Float64)
     @inbounds for i in 1:n
         errs[i] = sqrt(max(cov[i, i], 0.0))
     end
-    return HesseResult(copy(state.parameters.x), cov, errs, state.edm,
+    return HesseResult(x, cov, errs, state.edm,
                        state.nfcn, state.error.status, is_valid(state.error),
                        state)
 end

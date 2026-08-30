@@ -61,6 +61,30 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test result.state.nfcn == flat.state.nfcn
     end
 
+    @testset "standalone HESSE errors keep coordinate axes" begin
+        result = @inferred hesse(_struct_obj, start, errs)
+
+        @test result.x isa ComponentVector
+        @test result.errors isa ComponentVector
+        @test typeof(result.errors) == typeof(result.x)
+        @test result isa HesseResult{typeof(result.x),typeof(result.state)}
+        reconstructed = HesseResult{typeof(result.x),typeof(result.state)}(
+            result.x,
+            result.covariance,
+            result.errors,
+            result.edm,
+            result.nfcn,
+            result.status,
+            result.valid,
+            result.state,
+        )
+        @test reconstructed.errors === result.errors
+        @test ComponentArrays.getaxes(result.x) == expected_axes
+        @test ComponentArrays.getaxes(result.errors) == expected_axes
+        @test collect(result.errors) ≈
+              sqrt.([result.covariance[i, i] for i in axes(result.covariance, 1)])
+    end
+
     @testset "the caller's x0 is never mutated" begin
         x0 = ComponentArray(a = 0.3, b = 0.4)
         snapshot = copy(getdata(x0))
