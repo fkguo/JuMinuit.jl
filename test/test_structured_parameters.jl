@@ -68,21 +68,63 @@ _struct_obj(p) = (p.a - 1.0)^2 + 3 * (p.b - 2.0)^2 + 0.5 * (p.a - 1.0) * (p.b - 
         @test result.errors isa ComponentVector
         @test typeof(result.errors) == typeof(result.x)
         @test result isa HesseResult{typeof(result.x),typeof(result.state)}
-        reconstructed = HesseResult{typeof(result.x),typeof(result.state)}(
-            result.x,
-            result.covariance,
-            result.errors,
-            result.edm,
-            result.nfcn,
-            result.status,
-            result.valid,
-            result.state,
-        )
-        @test reconstructed.errors === result.errors
         @test ComponentArrays.getaxes(result.x) == expected_axes
         @test ComponentArrays.getaxes(result.errors) == expected_axes
+        # Internal consistency of the returned fields (errors belong to
+        # THIS covariance) …
         @test collect(result.errors) ≈
               sqrt.([result.covariance[i, i] for i in axes(result.covariance, 1)])
+        # … and numeric parity with the identical flat run: the container
+        # must not change a single bit of the numbers, and the flat run
+        # must keep its dense container (the other half of the contract).
+        flat = hesse(_flat_obj, flat_start, errs)
+        @test flat.x isa Vector{Float64}
+        @test flat.errors isa Vector{Float64}
+        @test collect(result.x) == collect(flat.x)
+        @test collect(result.errors) == collect(flat.errors)
+        @test result.covariance == flat.covariance
+        @test result.nfcn == flat.nfcn
+    end
+
+    @testset "standalone HESSE failure path keeps the container" begin
+        # A flat objective has zero curvature everywhere: the diagonal
+        # pass cannot grow the sag and HESSE fails. The failure result
+        # flows through the same `HesseResult(state, up)` constructor, so
+        # it must carry the caller's coordinate container too.
+        result = hesse(p -> 0.0, start, errs)
+        @test !result.valid
+        @test result.status == MnHesseFailed
+        @test result.errors isa ComponentVector
+        @test typeof(result.errors) == typeof(result.x)
+        @test ComponentArrays.getaxes(result.errors) == expected_axes
+    end
+
+    @testset "HesseResult{X,S} compatibility constructor" begin
+        result = hesse(_struct_obj, start, errs)
+        X, S = typeof(result.x), typeof(result.state)
+        # Exact-type passthrough: `E` is inferred from `errors`.
+        reconstructed = HesseResult{X,S}(
+            result.x, result.covariance, result.errors,
+            result.edm, result.nfcn, result.status, result.valid,
+            result.state)
+        @test reconstructed.errors === result.errors
+        # Pre-#48 calling pattern: dense errors alongside a structured x
+        # (the field was `Vector{Float64}` regardless of `X`).
+        dense = HesseResult{X,S}(
+            result.x, result.covariance, collect(result.errors),
+            result.edm, result.nfcn, result.status, result.valid,
+            result.state)
+        @test dense.errors isa Vector{Float64}
+        @test dense isa HesseResult{X,S}
+        # The default constructor's convert-to-field-type semantics are
+        # preserved (an `Int` edm / `Int32` nfcn converted, as they were
+        # before the error-container type parameter existed).
+        converted = HesseResult{X,S}(
+            result.x, result.covariance, result.errors,
+            0, Int32(result.nfcn), result.status, result.valid,
+            result.state)
+        @test converted.edm === 0.0
+        @test converted.nfcn === result.nfcn
     end
 
     @testset "the caller's x0 is never mutated" begin

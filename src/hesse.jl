@@ -576,22 +576,14 @@ struct HesseResult{
 end
 
 # Preserve the explicit two-parameter constructor exposed by the original
-# `HesseResult{X,S}` definition. `E` is inferred from `errors`.
+# `HesseResult{X,S}` definition. `E` is inferred from `errors`; delegating
+# to the fully-parametrized constructor keeps the default constructor's
+# convert-to-field-type semantics for every other argument (e.g. an `Int`
+# `edm`), which a strictly-typed signature would silently drop.
 function HesseResult{X,S}(
-    x::X,
-    covariance::Matrix{Float64},
-    errors::E,
-    edm::Float64,
-    nfcn::Int,
-    status::CovStatus,
-    valid::Bool,
-    state::S,
-) where {
-    X<:AbstractVector{Float64},
-    S<:MinimumState,
-    E<:AbstractVector{Float64},
-}
-    return HesseResult(x, covariance, errors, edm, nfcn, status, valid, state)
+    x, covariance, errors::E, edm, nfcn, status, valid, state,
+) where {X<:AbstractVector{Float64},S<:MinimumState,E<:AbstractVector{Float64}}
+    return HesseResult{X,S,E}(x, covariance, errors, edm, nfcn, status, valid, state)
 end
 
 function HesseResult(state::MinimumState, up::Real)

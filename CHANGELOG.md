@@ -3,6 +3,23 @@
 All notable changes to NativeMinuit.jl. Follows [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Standalone `hesse(f, x0, errors)` preserves structured parameter
+  containers in `HesseResult.errors`** (PR #48, @mmikhasenko). The `errors`
+  field is now allocated from `x` via `similar(x, Float64)`, so a
+  `ComponentVector` input yields `h.x` and `h.errors` with the same names
+  and axes — consistent with `m.errors` and `FunctionMinimum.ext_errors`.
+  Plain vectors, views, and ranges keep returning a dense
+  `Vector{Float64}`. `HesseResult` gains a third (error-container) type
+  parameter; explicit `HesseResult{X,S}(...)` construction keeps working
+  through a compatibility constructor that retains the default
+  constructor's convert-to-field-type argument semantics. The
+  `Minuit`/`FunctionMinimum` covariance and error paths (MINOS, contours,
+  resampling, MCMC) are unchanged.
+
 ## [0.7.1] — 2026-08-28
 
 ### Changed
