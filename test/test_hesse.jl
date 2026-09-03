@@ -158,6 +158,10 @@
         x0 = [0.0, 0.0, 0.0]
         r = hesse(f, x0, [0.5, 0.5, 0.5])
         @test r isa HesseResult
+        # Plain-vector input keeps the dense containers (`errors` is
+        # allocated from `x`, so this pins both halves of the contract).
+        @test r.x isa Vector{Float64}
+        @test r.errors isa Vector{Float64}
         @test r.valid
         @test r.status == MnHesseValid
         # Covariance ≈ diag(1/aᵢ); off-diagonal ≈ 0 (separable FCN).
